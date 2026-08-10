@@ -9,6 +9,20 @@ RepNix orchestrates existing tools. It does not replace TypeScript, ESLint, Oxli
 - Node.js 20 or newer
 - npm, pnpm, Yarn, or Bun
 
+## Install
+
+Install RepNix in a repository:
+
+```bash
+npm install --save-dev repnix
+```
+
+Or run a read-only audit without adding it first:
+
+```bash
+npx repnix audit
+```
+
 ## Usage
 
 ```bash
