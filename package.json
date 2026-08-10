@@ -2,9 +2,17 @@
   "name": "repnix",
   "version": "0.1.0",
   "description": "Local-first repository health orchestration for JavaScript and TypeScript projects",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zakaihamilton/repnix.git"
+  },
+  "homepage": "https://github.com/zakaihamilton/repnix#readme",
+  "bugs": {
+    "url": "https://github.com/zakaihamilton/repnix/issues"
+  },
   "type": "module",
   "bin": {
-    "repnix": "./dist/cli.js"
+    "repnix": "dist/cli.js"
   },
   "files": [
     "dist",
@@ -14,6 +22,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json && node scripts/make-executable.mjs",
     "lint": "eslint .",
+    "prepack": "npm run build",
+    "prepublishOnly": "npm run lint && npm run typecheck && npm run test:run",
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
@@ -21,6 +31,9 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "packageManager": "pnpm@10.15.0",
   "keywords": [
