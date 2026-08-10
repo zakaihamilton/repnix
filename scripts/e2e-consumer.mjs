@@ -6,6 +6,7 @@ import { clearTimeout, setTimeout } from "node:timers";
 import {
   assert,
   packProject,
+  projectRoot,
   removeTemporary,
   run,
   snapshotFiles,
@@ -26,19 +27,15 @@ const installArgs = {
   bun: ["add", "-d"],
 };
 
-function shellQuote(value) {
-  return `'${value.replaceAll("'", `'\\''`)}'`;
-}
-
 async function runInteractiveSetup(bin, expectNoChanges = false) {
-  const useExpect = process.platform === "darwin";
+  const useExpect = process.platform === "darwin" && process.env.REPNIX_E2E_PTY !== "python";
   const expectProgram = expectNoChanges
     ? `set timeout 600\nlog_user 1\nspawn $env(REPNIX_E2E_BIN) setup\nexpect eof\ncatch wait result\nexit [lindex $result 3]`
     : `set timeout 600\nlog_user 1\nspawn $env(REPNIX_E2E_BIN) setup\nexpect "Select baseline providers"\nsend "\\r"\nexpect "Apply changes?"\nsend "\\033\\[D\\r"\nexpect eof\ncatch wait result\nexit [lindex $result 3]`;
-  const interactiveCommand = useExpect ? "expect" : "script";
+  const interactiveCommand = useExpect ? "expect" : "python3";
   const interactiveArgs = useExpect
     ? ["-c", expectProgram]
-    : ["-q", "-e", "-c", `${shellQuote(bin)} setup`, "/dev/null"];
+    : [path.join(projectRoot, "scripts", "drive-setup.py"), bin, expectNoChanges ? "--no-changes" : "--apply"];
   const output = await new Promise((resolve, reject) => {
     const child = spawn(interactiveCommand, interactiveArgs, {
       cwd: consumer,
@@ -46,22 +43,12 @@ async function runInteractiveSetup(bin, expectNoChanges = false) {
       stdio: ["pipe", "pipe", "pipe"],
     });
     let combined = "";
-    let acceptedProviders = false;
-    let confirmedApply = false;
     const timer = setTimeout(() => {
       child.kill("SIGTERM");
       reject(new Error(`Interactive setup timed out.\n${combined}`));
     }, 600_000);
     const consume = (chunk) => {
       combined += chunk.toString();
-      if (!useExpect && !acceptedProviders && combined.includes("Select baseline providers")) {
-        acceptedProviders = true;
-        setTimeout(() => child.stdin.write("\r"), 150);
-      }
-      if (!useExpect && !expectNoChanges && !confirmedApply && combined.includes("Apply changes?")) {
-        confirmedApply = true;
-        setTimeout(() => child.stdin.write("\u001b[D\r"), 150);
-      }
     };
     child.stdout.on("data", consume);
     child.stderr.on("data", consume);

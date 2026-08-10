@@ -114,7 +114,7 @@ pnpm build
 pnpm test:package
 ```
 
-On macOS or Linux, the npm consumer acceptance test can also be run locally. It uses the system `script` utility to drive the TTY-only setup flow and accesses the package registry only inside the disposable setup project.
+On macOS or Linux, the npm consumer acceptance test can also be run locally. It drives the TTY-only setup flow through a disposable pseudo-terminal and accesses the package registry only inside the disposable setup project.
 
 ```bash
 pnpm test:e2e
