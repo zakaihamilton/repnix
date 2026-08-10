@@ -6,7 +6,7 @@ import { installDevCommand } from "../package-manager/package-manager.js";
 import { planCiChange } from "./ci-plan.js";
 import { fileChange, readOptional } from "./file-plan.js";
 
-export type SetupProviderId = "knip" | "jscpd";
+export type SetupProviderId = "knip" | "jscpd" | "dependency-cruiser";
 
 const JSCPD_IGNORES = [
   "**/node_modules/**",
@@ -60,6 +60,9 @@ export async function buildInstallPlan(
   if (selected.includes("jscpd")) {
     desiredScripts["health:duplication"] = `jscpd ${context.sourceRoots.map(quoteScriptArg).join(" ")}`;
   }
+  if (selected.includes("dependency-cruiser")) {
+    desiredScripts["health:architecture"] = `depcruise --output-type json --config -- ${context.sourceRoots.map(quoteScriptArg).join(" ")}`;
+  }
   for (const [name, command] of Object.entries(desiredScripts)) {
     const existing = context.scripts[name];
     if (existing && existing !== command) {
@@ -98,6 +101,23 @@ export async function buildInstallPlan(
     } else {
       const after = `${JSON.stringify({ ignore: JSCPD_IGNORES }, null, 2)}\n`;
       const change = fileChange(".jscpd.json", null, after, "Create minimal jscpd exclusions");
+      if (change) plan.files.push(change);
+    }
+  }
+
+  if (selected.includes("dependency-cruiser")) {
+    const existingConfig = [
+      ".dependency-cruiser.json",
+      ".dependency-cruiser.js",
+      ".dependency-cruiser.cjs",
+      ".dependency-cruiser.mjs",
+      ".dependency-cruiser.ts",
+    ].find((file) => context.files.has(file));
+    if (existingConfig) {
+      plan.warnings.push(`${existingConfig} was preserved; its existing architecture rules will be used.`);
+    } else {
+      const config = `module.exports = {\n  forbidden: [\n    {\n      name: "no-circular",\n      comment: "Prevent dependency cycles.",\n      severity: "error",\n      from: {},\n      to: { circular: true },\n    },\n    {\n      name: "no-source-to-test",\n      comment: "Production source must not depend on tests.",\n      severity: "error",\n      from: { path: "^(src|app|pages)(/|$)" },\n      to: { path: "(^|/)(test|tests|__tests__)(/|$)|\\\\.(spec|test)\\\\.[cm]?[jt]sx?$" },\n    },\n  ],\n  options: {\n    doNotFollow: { path: "node_modules" },\n    exclude: { path: "(^|/)(dist|build|coverage|\\\\.next|generated)(/|$)" },\n  },\n};\n`;
+      const change = fileChange(".dependency-cruiser.cjs", null, config, "Create conservative architecture rules");
       if (change) plan.files.push(change);
     }
   }

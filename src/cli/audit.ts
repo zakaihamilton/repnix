@@ -7,7 +7,7 @@ import { renderAudit } from "../reporting/console-reporter.js";
 export async function auditRepository(cwd = process.cwd()): Promise<AuditModel> {
   const context = await detectRepository(cwd);
   const { config } = await readConfig(context.root);
-  return buildAuditModel(context, detectAllProviders(context), config);
+  return buildAuditModel(context, await detectAllProviders(context), config);
 }
 
 export async function auditCommand(): Promise<number> {

@@ -1,3 +1,4 @@
+import { constants } from "node:fs";
 import { access, mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -14,6 +15,8 @@ import type {
   RepositoryContext,
 } from "../core/types.js";
 import type { AuditModel } from "../recommendations/recommendation-engine.js";
+import { normalizeDependencyCruiser } from "../providers/dependency-cruiser/normalizer.js";
+import { normalizeOsv } from "../providers/osv/normalizer.js";
 import { runCommand, type CommandResult } from "./command-runner.js";
 
 export interface RunHealthOptions {
@@ -53,6 +56,22 @@ async function expectedLocalBinary(root: string, binary: string): Promise<string
     (await localBinary(root, binary)) ??
     path.join(root, "node_modules", ".bin", `${binary}${process.platform === "win32" ? ".cmd" : ""}`)
   );
+}
+
+async function executableBinary(root: string, binary: string, searchPath = false): Promise<string | null> {
+  const local = await localBinary(root, binary);
+  if (local || !searchPath) return local;
+  for (const directory of (process.env.PATH ?? "").split(path.delimiter)) {
+    if (!directory) continue;
+    const candidate = path.join(directory, `${binary}${process.platform === "win32" ? ".exe" : ""}`);
+    try {
+      await access(candidate, constants.X_OK);
+      return candidate;
+    } catch {
+      // Keep searching PATH.
+    }
+  }
+  return null;
 }
 
 function safeScript(context: RepositoryContext, names: string[], kind: "general" | "format" | "test"): string | null {
@@ -333,6 +352,70 @@ export async function runJscpd(context: RepositoryContext, verbose: boolean): Pr
   }
 }
 
+function statusForFindings(findings: HealthFinding[]): "pass" | "warn" | "fail" {
+  if (!findings.length) return "pass";
+  return findings.some((finding) => finding.severity === "error") ? "fail" : "warn";
+}
+
+export async function runOsvScanner(context: RepositoryContext, verbose: boolean): Promise<HealthResult> {
+  const binary = await executableBinary(context.root, "osv-scanner", true);
+  if (!binary) return { provider: "osv-scanner", name: "OSV-Scanner", category: "security", status: "error", findings: [], durationMs: 0, message: "OSV-Scanner is configured but its executable is unavailable." };
+  const result = await runCommand(binary, ["--offline-vulnerabilities", "scan", "source", "--format=json", "--recursive", "."], { cwd: context.root, verbose, env: HEALTH_OFFLINE_ENV });
+  if (result.spawnError) return { provider: "osv-scanner", name: "OSV-Scanner", category: "security", status: "error", findings: [], durationMs: result.durationMs, message: result.spawnError };
+  try {
+    const findings = normalizeOsv(parseJsonOutput(result.stdout));
+    if (result.exitCode !== 0 && !findings.length) {
+      return { provider: "osv-scanner", name: "OSV-Scanner", category: "security", status: "error", findings: [], durationMs: result.durationMs, message: `OSV-Scanner could not complete its offline scan. ${outputExcerpt(result)}`.trim() };
+    }
+    return { provider: "osv-scanner", name: "OSV-Scanner", category: "security", status: statusForFindings(findings), findings, durationMs: result.durationMs };
+  } catch (error) {
+    return { provider: "osv-scanner", name: "OSV-Scanner", category: "security", status: "error", findings: [], durationMs: result.durationMs, message: `${error instanceof Error ? error.message : String(error)} ${outputExcerpt(result)}`.trim() };
+  }
+}
+
+export async function runDependencyCruiser(context: RepositoryContext, verbose: boolean): Promise<HealthResult> {
+  const binary = await localBinary(context.root, "depcruise");
+  if (!binary) return { provider: "dependency-cruiser", name: "dependency-cruiser", category: "architecture", status: "error", findings: [], durationMs: 0, message: "dependency-cruiser is declared but its local binary is unavailable. Install dependencies first." };
+  const configFile = [".dependency-cruiser.cjs", ".dependency-cruiser.mjs", ".dependency-cruiser.js", ".dependency-cruiser.json", ".dependency-cruiser.ts"].find((file) => context.files.has(file));
+  if (!configFile) return { provider: "dependency-cruiser", name: "dependency-cruiser", category: "architecture", status: "error", findings: [], durationMs: 0, message: "dependency-cruiser has no supported rules configuration." };
+  const result = await runCommand(binary, ["--config", configFile, "--output-type", "json", ...context.sourceRoots], { cwd: context.root, verbose, env: HEALTH_OFFLINE_ENV });
+  if (result.spawnError) return { provider: "dependency-cruiser", name: "dependency-cruiser", category: "architecture", status: "error", findings: [], durationMs: result.durationMs, message: result.spawnError };
+  try {
+    const findings = normalizeDependencyCruiser(parseJsonOutput(result.stdout));
+    if (result.exitCode !== 0 && !findings.length) {
+      return { provider: "dependency-cruiser", name: "dependency-cruiser", category: "architecture", status: "error", findings: [], durationMs: result.durationMs, message: `dependency-cruiser could not complete its analysis. ${outputExcerpt(result)}`.trim() };
+    }
+    return { provider: "dependency-cruiser", name: "dependency-cruiser", category: "architecture", status: statusForFindings(findings), findings, durationMs: result.durationMs };
+  } catch (error) {
+    return { provider: "dependency-cruiser", name: "dependency-cruiser", category: "architecture", status: "error", findings: [], durationMs: result.durationMs, message: `${error instanceof Error ? error.message : String(error)} ${outputExcerpt(result)}`.trim() };
+  }
+}
+
+async function runEslintBoundaries(context: RepositoryContext, verbose: boolean): Promise<HealthResult> {
+  const lintScript = safeScript(context, ["lint", "check:lint", "lint:check"], "general");
+  const command = lintScript
+    ? scriptCommand(context, lintScript)
+    : { command: await expectedLocalBinary(context.root, "eslint"), args: ["."] };
+  const runnable: RunnableCommand = { provider: "eslint-boundaries", name: "eslint-plugin-boundaries", category: "architecture", ...command };
+  return commandResult(runnable, await runCommand(runnable.command, runnable.args, { cwd: context.root, verbose, env: { ...HEALTH_OFFLINE_ENV, ...runnable.env } }));
+}
+
+export async function runSizeLimit(context: RepositoryContext, verbose: boolean): Promise<HealthResult> {
+  const sizeScript = safeScript(context, ["health:bundle", "size", "size-limit", "check:size"], "general");
+  const binary = sizeScript ? null : await localBinary(context.root, "size-limit");
+  if (!sizeScript && !binary) return { provider: "size-limit", name: "Size Limit", category: "bundle", status: "error", findings: [], durationMs: 0, message: "Size Limit is declared but its local binary is unavailable. Install dependencies first." };
+  const command = sizeScript ? scriptCommand(context, sizeScript) : { command: binary!, args: [] };
+  const result = await runCommand(command.command, command.args, { cwd: context.root, verbose, env: { ...HEALTH_OFFLINE_ENV, ...command.env } });
+  if (result.spawnError) return { provider: "size-limit", name: "Size Limit", category: "bundle", status: "error", findings: [], durationMs: result.durationMs, message: result.spawnError };
+  if (result.exitCode === 0) return { provider: "size-limit", name: "Size Limit", category: "bundle", status: "pass", findings: [], durationMs: result.durationMs };
+  const output = outputExcerpt(result);
+  if (/size limit|limit.{0,30}(?:exceed|over)|(?:exceed|over).{0,30}limit/i.test(output)) {
+    const finding = createFinding({ provider: "Size Limit", category: "bundle", type: "bundle-budget", severity: "error", message: "The configured bundle-size budget was exceeded.", metadata: { output } });
+    return { provider: "size-limit", name: "Size Limit", category: "bundle", status: "fail", findings: [finding], durationMs: result.durationMs };
+  }
+  return { provider: "size-limit", name: "Size Limit", category: "bundle", status: "error", findings: [], durationMs: result.durationMs, message: `Size Limit could not complete its check. ${output}`.trim() };
+}
+
 function severityAtLeast(severity: FindingSeverity, threshold: FindingSeverity): boolean {
   const rank: Record<FindingSeverity, number> = { info: 0, warning: 1, error: 2 };
   return rank[severity] >= rank[threshold];
@@ -349,6 +432,7 @@ export async function runHealth(
 ): Promise<HealthRun> {
   const { context, detections } = audit;
   const results: HealthResult[] = [];
+  const enabled = (provider: keyof NonNullable<RepnixConfig["providers"]>) => config.providers?.[provider]?.enabled !== false;
   if (!context.packageManager || context.diagnostics.some((item) => item.severity === "error")) {
     results.push({ provider: "repnix", name: "RepNix configuration", category: options.category ?? "types", status: "error", findings: [], durationMs: 0, message: context.diagnostics.find((item) => item.severity === "error")?.message ?? "Package manager unresolved" });
   } else {
@@ -377,6 +461,31 @@ export async function runHealth(
     }
     if ((!options.category || options.category === "duplication") && config.categories?.duplication !== "off" && detections.get("jscpd")?.installed && config.providers?.jscpd?.enabled !== false) {
       results.push(await runJscpd(context, options.verbose ?? false));
+    }
+    if ((!options.category || options.category === "security") && config.categories?.security !== "off" && detections.get("osv-scanner")?.activeCapabilities.vulnerabilities && enabled("osv-scanner")) {
+      results.push(await runOsvScanner(context, options.verbose ?? false));
+    }
+    if ((!options.category || options.category === "architecture") && config.categories?.architecture !== "off" && detections.get("dependency-cruiser")?.activeCapabilities.architectureRules && enabled("dependency-cruiser")) {
+      results.push(await runDependencyCruiser(context, options.verbose ?? false));
+    }
+    if ((!options.category || options.category === "architecture") && config.categories?.architecture !== "off" && detections.get("eslint-boundaries")?.activeCapabilities.architectureRules && enabled("eslint-boundaries")) {
+      if (options.category === "architecture" || !results.some((result) => result.category === "lint")) {
+        results.push(await runEslintBoundaries(context, options.verbose ?? false));
+      } else {
+        const lint = results.find((result) => result.category === "lint")!;
+        results.push({
+          provider: "eslint-boundaries",
+          name: "eslint-plugin-boundaries",
+          category: "architecture",
+          status: lint.status === "pass" ? "pass" : lint.status === "error" ? "error" : "skipped",
+          findings: [],
+          durationMs: 0,
+          ...(lint.status === "pass" ? {} : { message: "Architecture rules ran through the existing lint command; see the lint result." }),
+        });
+      }
+    }
+    if ((!options.category || options.category === "bundle") && config.categories?.bundle !== "off" && detections.get("size-limit")?.activeCapabilities.bundleBudget && enabled("size-limit")) {
+      results.push(await runSizeLimit(context, options.verbose ?? false));
     }
   }
 

@@ -17,9 +17,13 @@ describe("provider adapter contract", () => {
       "vitest",
       "knip",
       "jscpd",
+      "osv-scanner",
+      "eslint-boundaries",
+      "dependency-cruiser",
+      "size-limit",
     ]);
     const eslint = providers.find((provider) => provider.id === "eslint")!;
     expect(await eslint.detect(context)).toMatchObject({ installed: true, configured: true });
-    expect(await eslint.run(context)).toMatchObject({ status: "skipped", message: "Detection-only provider in the MVP." });
+    expect(await eslint.run(context)).toMatchObject({ status: "skipped", message: "Detection-only provider." });
   });
 });

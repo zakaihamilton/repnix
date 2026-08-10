@@ -5,7 +5,7 @@ import type {
   ProviderRecommendation,
   RepositoryContext,
 } from "../core/types.js";
-import { runJscpd, runKnip } from "../runners/health-runner.js";
+import { runDependencyCruiser, runJscpd, runKnip, runOsvScanner, runSizeLimit } from "../runners/health-runner.js";
 import { buildInstallPlan, type SetupProviderId } from "../setup/install-plan.js";
 import { PROVIDERS, detectProvider, type ProviderDescriptor } from "./catalog.js";
 
@@ -32,18 +32,21 @@ class ExternalToolAdapter implements HealthProvider {
 
   async recommend(context: RepositoryContext): Promise<ProviderRecommendation | null> {
     const detection = await this.detect(context);
-    if (detection.installed || !["knip", "jscpd"].includes(this.id)) return null;
+    if (detection.installed || !["knip", "jscpd", "dependency-cruiser"].includes(this.id)) return null;
     if (this.id === "knip" && context.sourceFiles.length > 0) {
-      return { recommended: true, priority: "baseline", reason: "Unused files, exports, and dependencies are not covered." };
+      return { recommended: true, priority: "baseline", actionable: true, reason: "Unused files, exports, and dependencies are not covered." };
     }
     if (this.id === "jscpd" && context.sourceFiles.length >= 2) {
-      return { recommended: true, priority: "baseline", reason: "Duplication detection is not covered." };
+      return { recommended: true, priority: "baseline", actionable: true, reason: "Duplication detection is not covered." };
+    }
+    if (this.id === "dependency-cruiser" && context.sourceFiles.length >= 2) {
+      return { recommended: true, priority: "optional", actionable: true, reason: "Architecture rules are not covered." };
     }
     return null;
   }
 
   async planInstall(context: RepositoryContext): Promise<InstallPlan> {
-    return ["knip", "jscpd"].includes(this.id)
+    return ["knip", "jscpd", "dependency-cruiser"].includes(this.id)
       ? await buildInstallPlan(context, [this.id as SetupProviderId], false)
       : emptyPlan();
   }
@@ -51,6 +54,9 @@ class ExternalToolAdapter implements HealthProvider {
   async run(context: RepositoryContext): Promise<HealthResult> {
     if (this.id === "knip") return await runKnip(context, false);
     if (this.id === "jscpd") return await runJscpd(context, false);
+    if (this.id === "osv-scanner") return await runOsvScanner(context, false);
+    if (this.id === "dependency-cruiser") return await runDependencyCruiser(context, false);
+    if (this.id === "size-limit") return await runSizeLimit(context, false);
     return {
       provider: this.id,
       name: this.name,
@@ -58,7 +64,7 @@ class ExternalToolAdapter implements HealthProvider {
       status: "skipped",
       findings: [],
       durationMs: 0,
-      message: "Detection-only provider in the MVP.",
+      message: this.id === "eslint-boundaries" ? "Architecture rules run through the existing ESLint command." : "Detection-only provider.",
     };
   }
 }

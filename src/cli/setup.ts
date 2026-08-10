@@ -14,18 +14,19 @@ export async function setupCommand(): Promise<number> {
   const audit = await auditRepository();
   process.stdout.write(`${renderAudit(audit)}\n\n`);
   if (audit.context.diagnostics.some((item) => item.severity === "error")) return 2;
-  if (!audit.recommendations.length) {
+  const setupRecommendations = audit.recommendations.filter((recommendation) => recommendation.actionable);
+  if (!setupRecommendations.length) {
     outro("No setup changes are recommended.");
     return 0;
   }
   const selected = await multiselect({
-    message: "Select baseline providers",
-    options: audit.recommendations.map((recommendation) => ({
+    message: "Select providers",
+    options: setupRecommendations.map((recommendation) => ({
       value: recommendation.provider,
       label: recommendation.name,
       hint: recommendation.reason,
     })),
-    initialValues: audit.recommendations.map((recommendation) => recommendation.provider),
+    initialValues: setupRecommendations.filter((recommendation) => recommendation.priority === "baseline").map((recommendation) => recommendation.provider),
     required: false,
   });
   if (isCancel(selected)) return 0;
@@ -34,6 +35,10 @@ export async function setupCommand(): Promise<number> {
     : false;
   if (isCancel(includeCi)) return 0;
   const plan = await buildInstallPlan(audit.context, selected as SetupProviderId[], includeCi);
+  if (!plan.commands.length && !plan.files.length && !plan.warnings.length && !plan.conflicts.length) {
+    outro("No setup changes are recommended.");
+    return 0;
+  }
   const preview = [
     ...plan.commands.map((command) => `$ ${command.command} ${command.args.join(" ")}`),
     ...plan.files.map(renderFileDiff),

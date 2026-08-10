@@ -1,3 +1,6 @@
+import { constants } from "node:fs";
+import { access, readFile } from "node:fs/promises";
+import path from "node:path";
 import type {
   ProviderCapabilities,
   ProviderDetection,
@@ -14,6 +17,11 @@ export interface ProviderDescriptor {
   scriptPattern: RegExp;
   capabilities: ProviderCapabilities;
   zeroConfig?: boolean;
+  binary?: string;
+  searchPath?: boolean;
+  packageJsonConfigKey?: string;
+  activeConfigPattern?: RegExp;
+  requiresConfiguration?: boolean;
 }
 
 export const PROVIDERS: ProviderDescriptor[] = [
@@ -108,34 +116,111 @@ export const PROVIDERS: ProviderDescriptor[] = [
     capabilities: { duplication: true },
     zeroConfig: true,
   },
+  {
+    id: "osv-scanner",
+    name: "OSV-Scanner",
+    category: "security",
+    packages: [],
+    configPatterns: [/(^|\/)osv-scanner\.toml$/],
+    scriptPattern: /(^|\s|&&|\|)osv-scanner(?:\s|$)/,
+    capabilities: { vulnerabilities: true },
+    binary: "osv-scanner",
+    searchPath: true,
+    zeroConfig: true,
+  },
+  {
+    id: "eslint-boundaries",
+    name: "eslint-plugin-boundaries",
+    category: "architecture",
+    packages: ["eslint-plugin-boundaries"],
+    configPatterns: [/(^|\/)eslint\.config\.[cm]?[jt]s$/, /(^|\/)\.eslintrc(?:\.[^/]+)?$/],
+    scriptPattern: /\bboundaries\//,
+    capabilities: { architectureRules: true },
+    activeConfigPattern: /boundaries\/(?:dependencies|element-types|entry-point|external|no-private|no-unknown)/,
+    requiresConfiguration: true,
+  },
+  {
+    id: "dependency-cruiser",
+    name: "dependency-cruiser",
+    category: "architecture",
+    packages: ["dependency-cruiser"],
+    configPatterns: [/(^|\/)\.dependency-cruiser\.(?:json|[cm]?[jt]s)$/],
+    scriptPattern: /(^|\s|&&|\|)(?:depcruise|dependency-cruiser)(?:\s|$)/,
+    capabilities: { dependencyCycles: true, architectureRules: true },
+    activeConfigPattern: /(?:forbidden\s*:|"forbidden"\s*:)/,
+    requiresConfiguration: true,
+  },
+  {
+    id: "size-limit",
+    name: "Size Limit",
+    category: "bundle",
+    packages: ["size-limit"],
+    configPatterns: [/(^|\/)\.size-limit\.(?:json|[cm]?[jt]s)$/],
+    scriptPattern: /(^|\s|&&|\|)size-limit(?:\s|$)/,
+    capabilities: { bundleBudget: true },
+    packageJsonConfigKey: "size-limit",
+    activeConfigPattern: /(?:limit\s*:|"limit"\s*:)/,
+    requiresConfiguration: true,
+  },
 ];
 
-export function detectProvider(
+async function executableOnPath(binary: string): Promise<string | null> {
+  for (const directory of (process.env.PATH ?? "").split(path.delimiter)) {
+    if (!directory) continue;
+    const candidate = path.join(directory, `${binary}${process.platform === "win32" ? ".exe" : ""}`);
+    try {
+      await access(candidate, constants.X_OK);
+      return candidate;
+    } catch {
+      // Keep searching PATH.
+    }
+  }
+  return null;
+}
+
+export async function detectProvider(
   descriptor: ProviderDescriptor,
   context: RepositoryContext,
-): ProviderDetection {
+): Promise<ProviderDetection> {
   const packageName = descriptor.packages.find((name) => context.installedPackages.has(name));
-  const configFiles = [...context.files].filter((file) =>
+  const candidateConfigFiles = [...context.files].filter((file) =>
     descriptor.configPatterns.some((pattern) => pattern.test(file)),
   );
+  const configFiles: string[] = [];
+  for (const file of candidateConfigFiles) {
+    if (!descriptor.activeConfigPattern) {
+      configFiles.push(file);
+      continue;
+    }
+    try {
+      if (descriptor.activeConfigPattern.test(await readFile(path.join(context.root, file), "utf8"))) configFiles.push(file);
+    } catch {
+      // Repository diagnostics handle malformed manifests; unreadable optional tool configs stay inactive.
+    }
+  }
   const rootConfigFiles = configFiles.filter((file) => !file.includes("/"));
   const scriptEntries = Object.entries(context.scripts).filter(([, command]) =>
     descriptor.scriptPattern.test(command),
   );
-  const packageJsonConfig = Object.hasOwn(context.packageJson, descriptor.id);
-  const installed = Boolean(packageName);
+  const packageConfigKey = descriptor.packageJsonConfigKey ?? descriptor.id;
+  const packageJsonConfig = Object.hasOwn(context.packageJson, packageConfigKey);
+  const packageJsonConfigActive = packageJsonConfig && (!descriptor.activeConfigPattern || descriptor.activeConfigPattern.test(JSON.stringify(context.packageJson[packageConfigKey])));
+  const pathBinary = descriptor.searchPath && descriptor.binary ? await executableOnPath(descriptor.binary) : null;
+  const installed = Boolean(packageName || pathBinary);
   const installedAtRoot = packageName
     ? context.installedPackageOrigins.get(packageName)?.includes("package.json") === true
     : false;
-  const configured = configFiles.length > 0 || scriptEntries.length > 0 || packageJsonConfig;
-  const active =
-    scriptEntries.length > 0 ||
-    (installedAtRoot && (rootConfigFiles.length > 0 || packageJsonConfig || descriptor.zeroConfig === true));
+  const configured = configFiles.length > 0 || scriptEntries.length > 0 || packageJsonConfigActive;
+  const active = descriptor.requiresConfiguration
+    ? installed && (rootConfigFiles.length > 0 || packageJsonConfigActive)
+    : scriptEntries.length > 0 ||
+      ((installedAtRoot || Boolean(pathBinary)) && (rootConfigFiles.length > 0 || packageJsonConfigActive || descriptor.zeroConfig === true));
   const evidence: string[] = [];
   if (packageName) evidence.push(`${packageName} ${context.installedPackages.get(packageName)}`);
+  if (pathBinary) evidence.push(pathBinary);
   evidence.push(...configFiles);
   evidence.push(...scriptEntries.map(([name]) => `script:${name}`));
-  if (packageJsonConfig) evidence.push(`package.json#${descriptor.id}`);
+  if (packageJsonConfig) evidence.push(`package.json#${packageConfigKey}`);
   const detection: ProviderDetection = {
     installed,
     configured,
@@ -148,6 +233,7 @@ export function detectProvider(
   return detection;
 }
 
-export function detectAllProviders(context: RepositoryContext): Map<string, ProviderDetection> {
-  return new Map(PROVIDERS.map((provider) => [provider.id, detectProvider(provider, context)]));
+export async function detectAllProviders(context: RepositoryContext): Promise<Map<string, ProviderDetection>> {
+  const detections = await Promise.all(PROVIDERS.map(async (provider) => [provider.id, await detectProvider(provider, context)] as const));
+  return new Map(detections);
 }

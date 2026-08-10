@@ -2,7 +2,7 @@
 
 RepNix is a local-first CLI that discovers the repository health checks a JavaScript or TypeScript project already has, identifies important gaps, installs a minimal specialist tool stack, and provides one normalized command for running it.
 
-RepNix orchestrates existing tools. It does not replace TypeScript, ESLint, Oxlint, Biome, Prettier, Jest, Vitest, Knip, or jscpd.
+RepNix orchestrates existing tools. It does not replace TypeScript, ESLint, Oxlint, Biome, Prettier, Jest, Vitest, Knip, jscpd, OSV-Scanner, dependency-cruiser, eslint-plugin-boundaries, or Size Limit.
 
 ## Requirements
 
@@ -50,11 +50,11 @@ Detects repository type, package manager, CI, existing providers, category cover
 
 ### `repnix setup`
 
-Offers Knip and jscpd when applicable. Setup preserves existing scripts and configuration, creates only a minimal `.jscpd.json` when necessary, and can conservatively add a GitHub Actions health step.
+Offers Knip and jscpd as baseline coverage when applicable. It can also offer dependency-cruiser as an optional architecture provider when lint-based boundary rules are absent. Setup preserves existing scripts and configuration, creates only minimal provider configuration when necessary, and can conservatively add a GitHub Actions health step.
 
 ### `repnix check [category]`
 
-Runs safe existing type, lint, formatting, and test commands plus installed Knip and jscpd providers. Child output is captured unless `--verbose` is used.
+Runs safe existing type, lint, formatting, and test commands plus active specialist providers. Phase 2 execution includes offline OSV-Scanner checks, dependency-cruiser architecture rules, eslint-plugin-boundaries through the existing lint command, and configured Size Limit budgets. Child output is captured unless `--verbose` is used.
 
 Exit codes:
 
@@ -83,6 +83,15 @@ Configuration is optional. Create `repnix.config.json` at the repository root:
   "providers": {
     "jscpd": {
       "enabled": true
+    },
+    "osv-scanner": {
+      "enabled": true
+    },
+    "dependency-cruiser": {
+      "enabled": true
+    },
+    "size-limit": {
+      "enabled": false
     }
   }
 }
@@ -90,11 +99,20 @@ Configuration is optional. Create `repnix.config.json` at the repository root:
 
 Category modes are `required`, `optional`, and `off`. Severity thresholds are `info`, `warning`, and `error`. Configuration is strict so misspelled categories or provider names fail visibly.
 
+## Phase 2 providers
+
+- **OSV-Scanner:** detected from the local executable and repository lockfiles. RepNix always invokes it with its offline vulnerability database mode, so `check` cannot fetch data. Install OSV-Scanner and prepare its local cache separately before requiring security coverage.
+- **dependency-cruiser:** detected only when a configuration contains active `forbidden` rules. Interactive setup can add the package, a conservative starter configuration, and a health script without replacing an existing configuration.
+- **eslint-plugin-boundaries:** credited only when an ESLint configuration contains active `boundaries/*` rules. RepNix uses the repository's existing lint command and does not generate repository-specific boundary rules.
+- **Size Limit:** credited only when a configuration contains an explicit `limit`. RepNix runs a known non-mutating Size Limit command but never invents a bundle budget.
+
+An installed package is not considered coverage by itself. Audit distinguishes an available provider from an actively configured capability.
+
 ## MVP limits
 
 - Monorepos use their existing root orchestration scripts; RepNix does not independently traverse every workspace.
-- Specialist lint, type, formatting, and test output is represented as a provider-attributed command finding. Knip and jscpd receive detailed normalization.
-- Security, architecture, bundle, accessibility, monorepo-consistency, and package-publishing providers are reserved for later adapters.
+- Specialist lint, type, formatting, test, eslint-plugin-boundaries, and Size Limit output is represented as a provider-attributed command finding. Knip, jscpd, OSV-Scanner, and dependency-cruiser receive detailed normalization.
+- Accessibility, monorepo-consistency, and package-publishing providers remain future adapters.
 
 ## Development
 
@@ -119,3 +137,13 @@ On macOS or Linux, the npm consumer acceptance test can also be run locally. It 
 ```bash
 pnpm test:e2e
 ```
+
+The real Phase 2 acceptance test packages RepNix, installs current dependency-cruiser and Size Limit releases into a disposable npm library, and verifies normalized architecture and bundle findings:
+
+```bash
+pnpm test:phase2
+```
+
+## Releases
+
+Tags matching `v<package-version>` trigger `.github/workflows/release.yml`. The workflow verifies the project and tag before publishing with npm trusted publishing. Configure the npm package's GitHub Actions trusted publisher for owner `zakaihamilton`, repository `repnix`, and workflow `release.yml` before creating a release tag.

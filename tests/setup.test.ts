@@ -49,4 +49,14 @@ describe("setup planning", () => {
     const planned = await planCiChange(context, "npm");
     expect(planned.change?.after).toContain("name: Repository health\n        run: npm run health");
   });
+
+  it("plans conservative dependency-cruiser rules without inferring repository layers", async () => {
+    const root = await copyFixture("minimal-js");
+    temporary.push(root);
+    const plan = await buildInstallPlan(await detectRepository(root), ["dependency-cruiser"], false);
+    expect(plan.packages.map((item) => item.name)).toEqual(["repnix", "dependency-cruiser"]);
+    expect(plan.files.map((item) => item.path)).toEqual(["package.json", ".dependency-cruiser.cjs"]);
+    expect(plan.files.find((item) => item.path === "package.json")?.after).toContain('"health:architecture": "depcruise --output-type json --config -- src"');
+    expect(plan.files.find((item) => item.path === ".dependency-cruiser.cjs")?.after).toContain("no-source-to-test");
+  });
 });

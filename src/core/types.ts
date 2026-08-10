@@ -76,6 +76,7 @@ export interface ProviderCapabilities {
   architectureRules?: boolean;
   vulnerabilities?: boolean;
   duplication?: boolean;
+  bundleBudget?: boolean;
 }
 
 export interface ProviderDetection {
@@ -91,6 +92,7 @@ export interface ProviderDetection {
 export interface ProviderRecommendation {
   recommended: boolean;
   priority: "baseline" | "optional" | "advanced";
+  actionable: boolean;
   reason: string;
 }
 

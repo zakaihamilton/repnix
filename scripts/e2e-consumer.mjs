@@ -30,8 +30,8 @@ const installArgs = {
 async function runInteractiveSetup(bin, expectNoChanges = false) {
   const useExpect = process.platform === "darwin" && process.env.REPNIX_E2E_PTY !== "python";
   const expectProgram = expectNoChanges
-    ? `set timeout 600\nlog_user 1\nspawn $env(REPNIX_E2E_BIN) setup\nexpect eof\ncatch wait result\nexit [lindex $result 3]`
-    : `set timeout 600\nlog_user 1\nspawn $env(REPNIX_E2E_BIN) setup\nexpect "Select baseline providers"\nsend "\\r"\nexpect "Apply changes?"\nsend "\\033\\[D\\r"\nexpect eof\ncatch wait result\nexit [lindex $result 3]`;
+    ? `set timeout 600\nlog_user 1\nspawn $env(REPNIX_E2E_BIN) setup\nexpect "Select providers"\nsend "\\r"\nexpect eof\ncatch wait result\nexit [lindex $result 3]`
+    : `set timeout 600\nlog_user 1\nspawn $env(REPNIX_E2E_BIN) setup\nexpect "Select providers"\nsend "\\r"\nexpect "Apply changes?"\nsend "\\033\\[D\\r"\nexpect eof\ncatch wait result\nexit [lindex $result 3]`;
   const interactiveCommand = useExpect ? "expect" : "python3";
   const interactiveArgs = useExpect
     ? ["-c", expectProgram]
