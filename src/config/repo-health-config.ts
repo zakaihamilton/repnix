@@ -13,6 +13,10 @@ const schema = z
       .object({
         knip: providerConfig.optional(),
         jscpd: providerConfig.optional(),
+        "osv-scanner": providerConfig.optional(),
+        "eslint-boundaries": providerConfig.optional(),
+        "dependency-cruiser": providerConfig.optional(),
+        "size-limit": providerConfig.optional(),
       })
       .strict()
       .optional(),

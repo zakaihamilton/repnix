@@ -19,7 +19,7 @@ const REQUIREMENTS: Record<HealthCategory, Capability[]> = {
   duplication: ["duplication"],
   security: ["vulnerabilities"],
   architecture: ["architectureRules"],
-  bundle: [],
+  bundle: ["bundleBudget"],
   accessibility: [],
   monorepo: [],
   "package-health": [],
@@ -37,7 +37,7 @@ export interface CategoryCoverage {
 }
 
 export interface Recommendation extends ProviderRecommendation {
-  provider: "knip" | "jscpd";
+  provider: "knip" | "jscpd" | "osv-scanner" | "eslint-boundaries" | "dependency-cruiser" | "size-limit";
   name: string;
   category: HealthCategory;
 }
@@ -54,6 +54,7 @@ function isApplicable(category: HealthCategory, context: RepositoryContext): boo
     case "types":
       return context.languages.includes("TypeScript");
     case "bundle":
+      return context.kinds.includes("react") || context.kinds.includes("nextjs") || context.kinds.includes("npm-library");
     case "accessibility":
       return context.kinds.includes("react") || context.kinds.includes("nextjs");
     case "monorepo":
@@ -93,9 +94,7 @@ function coverageFor(
   for (const descriptor of PROVIDERS) {
     const detection = detections.get(descriptor.id);
     if (!detection) continue;
-    const explicitlyDisabled =
-      (descriptor.id === "knip" || descriptor.id === "jscpd") &&
-      config.providers?.[descriptor.id]?.enabled === false;
+    const explicitlyDisabled = config.providers?.[descriptor.id as keyof NonNullable<RepnixConfig["providers"]>]?.enabled === false;
     if (explicitlyDisabled) continue;
     const matching = required.filter((capability) => detection.activeCapabilities[capability]);
     if (matching.length > 0) {
@@ -139,6 +138,7 @@ export function buildAuditModel(
       category: "dead-code",
       recommended: true,
       priority: "baseline",
+      actionable: true,
       reason: `${context.sourceFiles.length} JavaScript/TypeScript source file${context.sourceFiles.length === 1 ? "" : "s"} were found, but unused files, exports, and dependencies are not fully covered. Knip fills those gaps without replacing existing linting.`,
     });
   }
@@ -158,7 +158,78 @@ export function buildAuditModel(
       category: "duplication",
       recommended: true,
       priority: "baseline",
+      actionable: true,
       reason: `${context.sourceFiles.length} source files can accumulate copy/paste drift, and no duplication provider is active. jscpd adds focused duplication detection without overlapping lint or dead-code analysis.`,
+    });
+  }
+
+  const security = byCategory.get("security")!;
+  const osv = detections.get("osv-scanner")!;
+  const lockfiles = ["package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock", "bun.lockb"]
+    .filter((file) => context.files.has(file));
+  if (
+    security.status !== "covered" &&
+    security.status !== "off" &&
+    lockfiles.length > 0 &&
+    !osv.activeCapabilities.vulnerabilities &&
+    config.providers?.["osv-scanner"]?.enabled !== false
+  ) {
+    recommendations.push({
+      provider: "osv-scanner",
+      name: "OSV-Scanner",
+      category: "security",
+      recommended: true,
+      priority: "baseline",
+      actionable: false,
+      reason: `${lockfiles.join(", ")} provides a dependency inventory, but no offline vulnerability scan is active. OSV-Scanner protects dependencies using the OSV advisory database; install its platform binary and cache its offline database before checks.`,
+    });
+  }
+
+  const architecture = byCategory.get("architecture")!;
+  if (architecture.status !== "covered" && architecture.status !== "off" && context.sourceFiles.length >= 2) {
+    const eslintActive = detections.get("eslint")?.activeCapabilities.linting === true;
+    const boundaries = detections.get("eslint-boundaries")!;
+    const cruiser = detections.get("dependency-cruiser")!;
+    if (eslintActive && !boundaries.activeCapabilities.architectureRules && config.providers?.["eslint-boundaries"]?.enabled !== false) {
+      recommendations.push({
+        provider: "eslint-boundaries",
+        name: "eslint-plugin-boundaries",
+        category: "architecture",
+        recommended: true,
+        priority: "optional",
+        actionable: false,
+        reason: "ESLint is already active, so eslint-plugin-boundaries is the smallest non-overlapping architecture option. Its element types and dependency rules are repository-specific and must be configured intentionally.",
+      });
+    } else if (!eslintActive && !cruiser.activeCapabilities.architectureRules && config.providers?.["dependency-cruiser"]?.enabled !== false) {
+      recommendations.push({
+        provider: "dependency-cruiser",
+        name: "dependency-cruiser",
+        category: "architecture",
+        recommended: true,
+        priority: "optional",
+        actionable: true,
+        reason: "No ESLint architecture rules are active. dependency-cruiser adds standalone cycle protection and a conservative source-to-test boundary without overlapping linting.",
+      });
+    }
+  }
+
+  const bundle = byCategory.get("bundle")!;
+  const sizeLimit = detections.get("size-limit")!;
+  if (
+    bundle.status !== "covered" &&
+    bundle.status !== "off" &&
+    bundle.status !== "not-applicable" &&
+    !sizeLimit.activeCapabilities.bundleBudget &&
+    config.providers?.["size-limit"]?.enabled !== false
+  ) {
+    recommendations.push({
+      provider: "size-limit",
+      name: "Size Limit",
+      category: "bundle",
+      recommended: true,
+      priority: "optional",
+      actionable: false,
+      reason: "This frontend or publishable package can regress in shipped JavaScript size. Size Limit is appropriate once a real build artifact and an explicit budget are chosen; RepNix will not invent that budget.",
     });
   }
 

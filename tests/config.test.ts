@@ -16,6 +16,16 @@ describe("configuration", () => {
     }
   });
 
+  it("accepts Phase 2 provider enablement", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "repnix-config-"));
+    try {
+      await writeFile(path.join(root, "repnix.config.json"), JSON.stringify({ providers: { "osv-scanner": { enabled: false }, "dependency-cruiser": { enabled: true }, "eslint-boundaries": { enabled: true }, "size-limit": { enabled: false } } }));
+      expect((await readConfig(root)).config.providers).toMatchObject({ "osv-scanner": { enabled: false }, "dependency-cruiser": { enabled: true } });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("rejects unknown configuration fields", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "repnix-config-"));
     try {

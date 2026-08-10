@@ -54,7 +54,7 @@ def main() -> int:
         output += chunk
         prompt_text = bytes(character for character in output if 32 <= character <= 126).replace(b" ", b"").lower()
 
-        if should_apply and not selected and b"selectbaselineproviders" in prompt_text:
+        if not selected and b"selectproviders" in prompt_text:
             os.write(terminal, b"\r")
             selected = True
         if should_apply and not confirmed and b"applychanges?" in prompt_text:

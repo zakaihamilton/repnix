@@ -26,6 +26,7 @@
     "prepublishOnly": "npm run lint && npm run typecheck && npm run test:run",
     "test:e2e": "node scripts/e2e-consumer.mjs npm",
     "test:package": "node scripts/package-smoke.mjs",
+    "test:phase2": "node scripts/e2e-phase2.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",

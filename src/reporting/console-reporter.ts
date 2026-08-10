@@ -47,12 +47,18 @@ export function renderAudit(model: AuditModel): string {
     }
   }
   if (model.recommendations.length) {
-    lines.push("", pc.bold("Recommended baseline"), "─".repeat(48));
-    for (const recommendation of model.recommendations) {
-      lines.push(`+ ${pc.bold(recommendation.name)}`, `  ${recommendation.reason}`, "");
+    for (const priority of ["baseline", "optional", "advanced"] as const) {
+      const recommendations = model.recommendations.filter((recommendation) => recommendation.priority === priority);
+      if (!recommendations.length) continue;
+      const heading = priority === "baseline" ? "Recommended baseline" : priority === "optional" ? "Optional" : "Advanced";
+      lines.push("", pc.bold(heading), "─".repeat(48));
+      for (const recommendation of recommendations) {
+        const setup = recommendation.actionable ? "" : pc.dim(" (manual configuration)");
+        lines.push(`+ ${pc.bold(recommendation.name)}${setup}`, `  ${recommendation.reason}`, "");
+      }
     }
   } else {
-    lines.push("", pc.green("No actionable MVP recommendations."));
+    lines.push("", pc.green("No recommendations."));
   }
   return lines.join("\n").trimEnd();
 }
