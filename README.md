@@ -104,3 +104,18 @@ pnpm verify
 ```
 
 The package uses Node.js ESM, strict TypeScript, and Vitest.
+
+The end-to-end workflow also installs the packed CLI into disposable consumer repositories. It exercises interactive setup, real Knip and jscpd execution, JSON reporting, explain output, and setup idempotence across npm, pnpm, Yarn, and Bun. A separate matrix smoke-tests the published package shape and executable on Linux, macOS, and Windows.
+
+Run the packaged smoke test locally after building:
+
+```bash
+pnpm build
+pnpm test:package
+```
+
+On macOS or Linux, the npm consumer acceptance test can also be run locally. It drives the TTY-only setup flow through a disposable pseudo-terminal and accesses the package registry only inside the disposable setup project.
+
+```bash
+pnpm test:e2e
+```
