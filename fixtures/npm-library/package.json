@@ -1,0 +1,7 @@
+{
+  "name": "npm-library-fixture",
+  "version": "1.0.0",
+  "types": "dist/index.d.ts",
+  "exports": { ".": "./dist/index.js" },
+  "devDependencies": { "typescript": "^5.9.0" }
+}

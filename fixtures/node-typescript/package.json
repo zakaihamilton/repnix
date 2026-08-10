@@ -1,0 +1,7 @@
+{
+  "name": "node-typescript-fixture",
+  "private": true,
+  "packageManager": "yarn@4.9.0",
+  "scripts": { "typecheck": "tsc --noEmit" },
+  "devDependencies": { "typescript": "^5.9.0" }
+}

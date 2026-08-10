@@ -1,0 +1,7 @@
+{
+  "name": "react-eslint-fixture",
+  "private": true,
+  "scripts": { "lint": "eslint .", "test": "vitest run" },
+  "dependencies": { "react": "^19.0.0" },
+  "devDependencies": { "typescript": "^5.9.0", "eslint": "^9.0.0", "vitest": "^3.0.0" }
+}

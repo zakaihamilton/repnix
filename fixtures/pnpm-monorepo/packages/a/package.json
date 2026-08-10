@@ -1,0 +1,1 @@
+{ "name": "@fixture/a", "private": true, "devDependencies": { "typescript": "^5.9.0" } }

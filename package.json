@@ -1,0 +1,51 @@
+{
+  "name": "repnix",
+  "version": "0.1.0",
+  "description": "Local-first repository health orchestration for JavaScript and TypeScript projects",
+  "type": "module",
+  "bin": {
+    "repnix": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && node scripts/make-executable.mjs",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "verify": "pnpm lint && pnpm typecheck && pnpm build && pnpm test:run"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@10.15.0",
+  "keywords": [
+    "repository",
+    "health",
+    "quality",
+    "typescript",
+    "cli"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@clack/prompts": "^0.11.0",
+    "commander": "^14.0.0",
+    "fast-glob": "^3.3.3",
+    "jsonc-parser": "^3.3.1",
+    "picocolors": "^1.1.1",
+    "yaml": "^2.8.1",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.34.0",
+    "@types/node": "^20.19.11",
+    "eslint": "^9.34.0",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.41.0",
+    "vitest": "^3.2.4"
+  }
+}
