@@ -116,7 +116,11 @@ try {
   const trackedFiles = ["package.json", ".jscpd.json", "package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock", "bun.lockb"];
   const beforeSecondSetup = await snapshotFiles(consumer, trackedFiles);
   const secondSetupOutput = await runInteractiveSetup(bin, true);
-  assert(secondSetupOutput.includes("No setup changes are recommended"), "Second setup was not a no-op.");
+  assert(
+    secondSetupOutput.includes("No setup changes are needed for the checks you selected.") ||
+      secondSetupOutput.includes("No setup changes are recommended"),
+    "Second setup was not a no-op.",
+  );
   const afterSecondSetup = await snapshotFiles(consumer, trackedFiles);
   assert(JSON.stringify([...afterSecondSetup]) === JSON.stringify([...beforeSecondSetup]), "Second setup changed repository files.");
 
