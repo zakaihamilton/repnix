@@ -29,10 +29,15 @@ Then inspect your repository. This is read-only and does not install packages or
 
 ```bash
 npx repnix audit
+```
+
+If RepNix recommends checks you want to add, run the interactive setup. It explains why each check matters and previews every package, script, configuration file, and CI change before applying anything:
+
+```bash
 npx repnix setup
 ```
 
-If you want to add recommendations, run setup. It explains why each check matters and previews every package, script, configuration file, and CI change before applying anything:
+Setup requires an interactive terminal. If you are working in a non-interactive environment, use `repnix audit` to review recommendations and make the project changes yourself.
 
 Once setup is complete, run the unified health check:
 
@@ -86,7 +91,7 @@ audit → choose recommendations → setup → check → explain
 2. **Choose** the providers that fit your project.
 3. **Set up** packages, scripts, configuration, and optional CI integration through a previewed plan.
 4. **Check** all active health providers with one command.
-5. **Explain** findings with normalized messages, locations, severity, and source provider.
+5. **Explain** findings with normalized messages, locations, severity, and provider attribution.
 
 ### How to read the output
 
@@ -95,6 +100,20 @@ audit → choose recommendations → setup → check → explain
 - **Covered** means an active provider contributes the capability. **Partly covered** means some related capabilities are active but a gap remains. **Missing** means no active provider was found.
 - A **finding** is an issue reported by a check. A **check error** means the tool could not finish, usually because setup or configuration needs attention.
 - `repnix audit` is for deciding what to add. `repnix check` is for a quick pass/fail result. `repnix explain` is for deciding what to do about a finding.
+
+If `repnix check` says that no applicable health checks ran, RepNix did not find an active provider for that category. That is not the same as being covered; run `repnix audit` to see whether a provider is missing, disabled, or not relevant to the repository.
+
+### Setup guidance
+
+`repnix setup` is an interactive, opt-in change flow:
+
+- Baseline recommendations are preselected because they are useful for most JavaScript and TypeScript repositories.
+- Optional and advanced recommendations are not automatically enabled when they need project-specific rules or budgets.
+- Use **Space** to select or clear a provider and **Enter** to continue.
+- Before confirmation, RepNix shows the packages, scripts, configuration files, and optional CI changes it plans to apply. Existing files are preserved and conflicts are shown for review.
+- Some recommendations need preparation outside RepNix: OSV-Scanner needs its binary and local vulnerability database, architecture checks need module-boundary rules, and bundle checks need an explicit size budget.
+
+After setup completes, run `repnix check`. If it reports findings or a provider error, run `repnix explain` for the next place to look.
 
 ## See it in action
 
@@ -296,7 +315,7 @@ RepNix follows a detect → recommend → plan → run model:
 1. Detect repository type, package manager, source roots, scripts, CI, configuration, and active provider capabilities.
 2. Compare those capabilities with the health categories that apply to the repository.
 3. Build a minimal installation plan that preserves existing project choices.
-4. Run active providers and normalize their findings into a shared report with category, severity, source, and location.
+4. Run active providers and normalize their findings into a shared report with category, severity, provider, and location.
 
 The audit and reporting pipeline is designed to be safe to run locally and in CI. `setup` is the only command that can make changes, and it requires an explicit confirmation after showing the planned commands and file changes.
 
