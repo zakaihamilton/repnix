@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { resolveDiagnosticLogger, type DiagnosticLogger } from "../cli/options.js";
 
 export interface CommandResult {
   command: string;
@@ -14,8 +15,13 @@ export interface CommandResult {
 export interface RunCommandOptions {
   cwd: string;
   verbose?: boolean;
+  logger?: DiagnosticLogger;
   env?: NodeJS.ProcessEnv;
   maxOutputBytes?: number;
+}
+
+function formatCommand(command: string, args: string[]): string {
+  return [command, ...args].map((part) => JSON.stringify(part)).join(" ");
 }
 
 export async function runCommand(
@@ -25,6 +31,9 @@ export async function runCommand(
 ): Promise<CommandResult> {
   const started = performance.now();
   const maxOutput = options.maxOutputBytes ?? 10 * 1024 * 1024;
+  const displayCommand = formatCommand(command, args);
+  const logger = resolveDiagnosticLogger(options.logger ?? (options.verbose === undefined ? {} : { verbose: options.verbose }));
+  logger.debug("command.start", `Running ${displayCommand}`, { command: displayCommand, cwd: options.cwd });
   return await new Promise((resolve) => {
     let stdout = "";
     let stderr = "";
@@ -36,7 +45,7 @@ export async function runCommand(
       shell: false,
     });
     child.stdout.on("data", (chunk: Buffer) => {
-      if (options.verbose) process.stderr.write(chunk);
+      logger.output("stdout", chunk, { command: displayCommand });
       if (!overflow) stdout += chunk.toString();
       if (Buffer.byteLength(stdout) > maxOutput) {
         overflow = true;
@@ -44,7 +53,7 @@ export async function runCommand(
       }
     });
     child.stderr.on("data", (chunk: Buffer) => {
-      if (options.verbose) process.stderr.write(chunk);
+      logger.output("stderr", chunk, { command: displayCommand });
       if (!overflow) stderr += chunk.toString();
       if (Buffer.byteLength(stderr) > maxOutput) {
         overflow = true;
@@ -52,6 +61,7 @@ export async function runCommand(
       }
     });
     child.on("error", (error) => {
+      logger.error("command.spawn-error", `Could not start ${displayCommand}: ${error.message}`, { command: displayCommand, cwd: options.cwd });
       resolve({
         command,
         args,
@@ -64,6 +74,12 @@ export async function runCommand(
       });
     });
     child.on("close", (exitCode, signal) => {
+      logger.debug("command.finish", `Finished ${displayCommand}`, {
+        command: displayCommand,
+        exitCode,
+        signal,
+        durationMs: Math.round(performance.now() - started),
+      });
       resolve({
         command,
         args,

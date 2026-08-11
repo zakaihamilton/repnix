@@ -4,6 +4,18 @@ All notable changes to RepNix are documented here. The project follows semantic 
 
 ## Unreleased
 
+## 0.3.1 - 2026-08-11
+
+### Added
+
+- Add consistent `--verbose`, `--quiet`, `--log-level`, and `--log-format` diagnostics to every command.
+- Add structured JSON debug records for repository detection, provider output, and child-process execution.
+
+### Fixed
+
+- Include the exact command, exit status, duration, and output context in execution diagnostics.
+- Preserve machine-readable health reports on stdout while all diagnostics remain on stderr.
+
 ## 0.3.0 - 2026-08-11
 
 ### Added

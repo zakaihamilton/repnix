@@ -130,7 +130,10 @@ Run: repnix explain
 | `repnix check` | Run all active health checks. | No |
 | `repnix check <category>` | Run one health category, such as `dead-code` or `security`. | No |
 | `repnix check --json` | Emit a versioned normalized report to stdout. | No |
-| `repnix check --verbose` | Stream provider output to stderr while checks run. | No |
+| `repnix <command> --verbose` | Show debug diagnostics and stream provider output to stderr. | No |
+| `repnix <command> --quiet` | Suppress diagnostic output while keeping the command report. | No |
+| `repnix <command> --log-level <level>` | Set diagnostics to `silent`, `error`, `warn`, `info`, or `debug`. | No |
+| `repnix <command> --log-format json` | Emit newline-delimited structured diagnostics on stderr. | No |
 | `repnix explain` | Rerun checks and show detailed normalized findings. | No |
 
 Examples:
@@ -235,7 +238,8 @@ RepNix uses predictable exit codes:
 - `1` — findings at or above the configured threshold.
 - `2` — configuration, detection, or tool execution failure.
 
-`repnix check --json` writes the versioned report to stdout. With `--verbose`, child provider output goes to stderr so stdout remains machine-readable.
+`repnix check --json` writes the versioned report to stdout. With debug diagnostics (`--verbose` or `--log-level debug`), child provider output goes to stderr so stdout remains machine-readable.
+All commands accept the diagnostic options. `--verbose` is shorthand for `--log-level debug`; `--quiet` takes precedence over the other level switches. Use `--log-format json` when a log collector needs stable event names and context fields. If an unexpected error occurs, verbose mode includes its stack trace.
 
 ### GitHub Actions
 

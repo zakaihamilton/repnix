@@ -20,11 +20,16 @@ import { normalizeDependencyCruiser } from "../providers/dependency-cruiser/norm
 import { normalizeOsv } from "../providers/osv/normalizer.js";
 import { normalizePublint } from "../providers/publint/normalizer.js";
 import { normalizeAttw } from "../providers/attw/normalizer.js";
+import { resolveDiagnosticLogger, type DiagnosticLogger } from "../cli/options.js";
 import { runCommand, type CommandResult } from "./command-runner.js";
 
 export interface RunHealthOptions {
   category?: HealthCategory;
   verbose?: boolean;
+  quiet?: boolean;
+  logLevel?: "silent" | "error" | "warn" | "info" | "debug";
+  logFormat?: "text" | "json";
+  logger?: DiagnosticLogger;
 }
 
 interface RunnableCommand {
@@ -111,6 +116,10 @@ function outputExcerpt(result: CommandResult): string {
   return combined.length > 4000 ? combined.slice(-4000) : combined;
 }
 
+function commandLine(runnable: RunnableCommand): string {
+  return [runnable.command, ...runnable.args].map((part) => JSON.stringify(part)).join(" ");
+}
+
 function commandResult(
   runnable: RunnableCommand,
   result: CommandResult,
@@ -123,7 +132,7 @@ function commandResult(
       status: "error",
       findings: [],
       durationMs: result.durationMs,
-      message: result.spawnError,
+      message: `${runnable.name} could not start. Command: ${commandLine(runnable)}. ${result.spawnError}`,
     };
   }
   if (result.exitCode === 0) {
@@ -149,7 +158,7 @@ function commandResult(
       status: "error",
       findings: [],
       durationMs: result.durationMs,
-      message: `${runnable.name} is configured but its executable is unavailable. Install repository dependencies first.`,
+      message: `${runnable.name} is configured but its executable is unavailable: ${runnable.command}. Install repository dependencies first.`,
     };
   }
   return {
@@ -163,9 +172,11 @@ function commandResult(
         category: runnable.category,
         type: "command-failure",
         severity: "error",
-        message: `${runnable.name} exited with code ${result.exitCode ?? "unknown"}.`,
+        message: `${runnable.name} exited with code ${result.exitCode ?? "unknown"} while running ${commandLine(runnable)}.`,
         metadata: {
-          command: [runnable.command, ...runnable.args].join(" "),
+          command: commandLine(runnable),
+          durationMs: result.durationMs,
+          ...(result.signal ? { signal: result.signal } : {}),
           output: excerpt,
         },
       }),
@@ -266,7 +277,7 @@ interface PackedPackage {
 async function packLocalPackage(
   context: RepositoryContext,
   temporary: string,
-  verbose: boolean,
+  logger: DiagnosticLogger,
 ): Promise<PackedPackage> {
   const npm = process.platform === "win32" ? "npm.cmd" : "npm";
   const result = await runCommand(
@@ -274,7 +285,7 @@ async function packLocalPackage(
     ["pack", "--json", "--ignore-scripts", "--pack-destination", temporary, "."],
     {
       cwd: context.root,
-      verbose,
+      logger,
       env: {
         ...HEALTH_OFFLINE_ENV,
         npm_config_cache: path.join(temporary, "npm-cache"),
@@ -349,10 +360,11 @@ export function normalizeKnip(report: unknown): HealthFinding[] {
   return findings;
 }
 
-export async function runKnip(context: RepositoryContext, verbose: boolean): Promise<HealthResult> {
+export async function runKnip(context: RepositoryContext, diagnostics: DiagnosticLogger | boolean): Promise<HealthResult> {
+  const logger = resolveDiagnosticLogger(diagnostics);
   const binary = await localBinary(context.root, "knip");
   if (!binary) return { provider: "knip", name: "Knip", category: "dead-code", status: "error", findings: [], durationMs: 0, message: "Knip is declared but its local binary is unavailable. Install dependencies first." };
-  const result = await runCommand(binary, ["--reporter", "json"], { cwd: context.root, verbose, env: HEALTH_OFFLINE_ENV });
+  const result = await runCommand(binary, ["--reporter", "json"], { cwd: context.root, logger, env: HEALTH_OFFLINE_ENV });
   if (result.spawnError) return { provider: "knip", name: "Knip", category: "dead-code", status: "error", findings: [], durationMs: result.durationMs, message: result.spawnError };
   try {
     const findings = normalizeKnip(parseJsonOutput(result.stdout));
@@ -386,12 +398,13 @@ export function normalizeJscpd(report: unknown): HealthFinding[] {
   });
 }
 
-export async function runJscpd(context: RepositoryContext, verbose: boolean): Promise<HealthResult> {
+export async function runJscpd(context: RepositoryContext, diagnostics: DiagnosticLogger | boolean): Promise<HealthResult> {
+  const logger = resolveDiagnosticLogger(diagnostics);
   const binary = await localBinary(context.root, "jscpd");
   if (!binary) return { provider: "jscpd", name: "jscpd", category: "duplication", status: "error", findings: [], durationMs: 0, message: "jscpd is declared but its local binary is unavailable. Install dependencies first." };
   const temporary = await mkdtemp(path.join(os.tmpdir(), "repnix-jscpd-"));
   try {
-    const result = await runCommand(binary, [...context.sourceRoots, "--reporters", "json", "--output", temporary], { cwd: context.root, verbose, env: HEALTH_OFFLINE_ENV });
+    const result = await runCommand(binary, [...context.sourceRoots, "--reporters", "json", "--output", temporary], { cwd: context.root, logger, env: HEALTH_OFFLINE_ENV });
     if (result.spawnError) return { provider: "jscpd", name: "jscpd", category: "duplication", status: "error", findings: [], durationMs: result.durationMs, message: result.spawnError };
     const reports = await fg("**/jscpd-report.json", { cwd: temporary, absolute: true, onlyFiles: true });
     if (!reports.length) return { provider: "jscpd", name: "jscpd", category: "duplication", status: "error", findings: [], durationMs: result.durationMs, message: `jscpd did not create a JSON report. ${outputExcerpt(result)}`.trim() };
@@ -409,10 +422,11 @@ function statusForFindings(findings: HealthFinding[]): "pass" | "warn" | "fail" 
   return findings.some((finding) => finding.severity === "error") ? "fail" : "warn";
 }
 
-export async function runOsvScanner(context: RepositoryContext, verbose: boolean): Promise<HealthResult> {
+export async function runOsvScanner(context: RepositoryContext, diagnostics: DiagnosticLogger | boolean): Promise<HealthResult> {
+  const logger = resolveDiagnosticLogger(diagnostics);
   const binary = await executableBinary(context.root, "osv-scanner", true);
   if (!binary) return { provider: "osv-scanner", name: "OSV-Scanner", category: "security", status: "error", findings: [], durationMs: 0, message: "OSV-Scanner is configured but its executable is unavailable." };
-  const result = await runCommand(binary, ["--offline-vulnerabilities", "scan", "source", "--format=json", "--recursive", "."], { cwd: context.root, verbose, env: HEALTH_OFFLINE_ENV });
+  const result = await runCommand(binary, ["--offline-vulnerabilities", "scan", "source", "--format=json", "--recursive", "."], { cwd: context.root, logger, env: HEALTH_OFFLINE_ENV });
   if (result.spawnError) return { provider: "osv-scanner", name: "OSV-Scanner", category: "security", status: "error", findings: [], durationMs: result.durationMs, message: result.spawnError };
   try {
     const findings = normalizeOsv(parseJsonOutput(result.stdout));
@@ -425,12 +439,13 @@ export async function runOsvScanner(context: RepositoryContext, verbose: boolean
   }
 }
 
-export async function runDependencyCruiser(context: RepositoryContext, verbose: boolean): Promise<HealthResult> {
+export async function runDependencyCruiser(context: RepositoryContext, diagnostics: DiagnosticLogger | boolean): Promise<HealthResult> {
+  const logger = resolveDiagnosticLogger(diagnostics);
   const binary = await localBinary(context.root, "depcruise");
   if (!binary) return { provider: "dependency-cruiser", name: "dependency-cruiser", category: "architecture", status: "error", findings: [], durationMs: 0, message: "dependency-cruiser is declared but its local binary is unavailable. Install dependencies first." };
   const configFile = [".dependency-cruiser.cjs", ".dependency-cruiser.mjs", ".dependency-cruiser.js", ".dependency-cruiser.json", ".dependency-cruiser.ts"].find((file) => context.files.has(file));
   if (!configFile) return { provider: "dependency-cruiser", name: "dependency-cruiser", category: "architecture", status: "error", findings: [], durationMs: 0, message: "dependency-cruiser has no supported rules configuration." };
-  const result = await runCommand(binary, ["--config", configFile, "--output-type", "json", ...context.sourceRoots], { cwd: context.root, verbose, env: HEALTH_OFFLINE_ENV });
+  const result = await runCommand(binary, ["--config", configFile, "--output-type", "json", ...context.sourceRoots], { cwd: context.root, logger, env: HEALTH_OFFLINE_ENV });
   if (result.spawnError) return { provider: "dependency-cruiser", name: "dependency-cruiser", category: "architecture", status: "error", findings: [], durationMs: result.durationMs, message: result.spawnError };
   try {
     const findings = normalizeDependencyCruiser(parseJsonOutput(result.stdout));
@@ -443,21 +458,23 @@ export async function runDependencyCruiser(context: RepositoryContext, verbose: 
   }
 }
 
-async function runEslintBoundaries(context: RepositoryContext, verbose: boolean): Promise<HealthResult> {
+async function runEslintBoundaries(context: RepositoryContext, diagnostics: DiagnosticLogger | boolean): Promise<HealthResult> {
+  const logger = resolveDiagnosticLogger(diagnostics);
   const lintScript = safeScript(context, ["lint", "check:lint", "lint:check"], "general");
   const command = lintScript
     ? scriptCommand(context, lintScript)
     : { command: await expectedLocalBinary(context.root, "eslint"), args: ["."] };
   const runnable: RunnableCommand = { provider: "eslint-boundaries", name: "eslint-plugin-boundaries", category: "architecture", ...command };
-  return commandResult(runnable, await runCommand(runnable.command, runnable.args, { cwd: context.root, verbose, env: { ...HEALTH_OFFLINE_ENV, ...runnable.env } }));
+  return commandResult(runnable, await runCommand(runnable.command, runnable.args, { cwd: context.root, logger, env: { ...HEALTH_OFFLINE_ENV, ...runnable.env } }));
 }
 
-export async function runSizeLimit(context: RepositoryContext, verbose: boolean): Promise<HealthResult> {
+export async function runSizeLimit(context: RepositoryContext, diagnostics: DiagnosticLogger | boolean): Promise<HealthResult> {
+  const logger = resolveDiagnosticLogger(diagnostics);
   const sizeScript = safeScript(context, ["health:bundle", "size", "size-limit", "check:size"], "general");
   const binary = sizeScript ? null : await localBinary(context.root, "size-limit");
   if (!sizeScript && !binary) return { provider: "size-limit", name: "Size Limit", category: "bundle", status: "error", findings: [], durationMs: 0, message: "Size Limit is declared but its local binary is unavailable. Install dependencies first." };
   const command = sizeScript ? scriptCommand(context, sizeScript) : { command: binary!, args: [] };
-  const result = await runCommand(command.command, command.args, { cwd: context.root, verbose, env: { ...HEALTH_OFFLINE_ENV, ...command.env } });
+  const result = await runCommand(command.command, command.args, { cwd: context.root, logger, env: { ...HEALTH_OFFLINE_ENV, ...command.env } });
   if (result.spawnError) return { provider: "size-limit", name: "Size Limit", category: "bundle", status: "error", findings: [], durationMs: result.durationMs, message: result.spawnError };
   if (result.exitCode === 0) return { provider: "size-limit", name: "Size Limit", category: "bundle", status: "pass", findings: [], durationMs: result.durationMs };
   const output = outputExcerpt(result);
@@ -474,16 +491,17 @@ const { formatMessage } = await import("publint/utils");
 const result = await publint({ pack: { tarball: await readFile(process.argv[1]) } });
 process.stdout.write(JSON.stringify({ messages: result.messages.map((message) => ({ ...message, formatted: formatMessage(message, result.pkg) })) }));`;
 
-export async function runPublint(context: RepositoryContext, verbose: boolean): Promise<HealthResult> {
+export async function runPublint(context: RepositoryContext, diagnostics: DiagnosticLogger | boolean): Promise<HealthResult> {
+  const logger = resolveDiagnosticLogger(diagnostics);
   const binary = await localBinary(context.root, "publint");
   if (!binary) return { provider: "publint", name: "Publint", category: "package-health", status: "error", findings: [], durationMs: 0, message: "Publint is declared but its local binary is unavailable. Install dependencies first." };
   const temporary = await mkdtemp(path.join(os.tmpdir(), "repnix-publint-"));
   try {
-    const packed = await packLocalPackage(context, temporary, verbose);
+    const packed = await packLocalPackage(context, temporary, logger);
     if (!packed.tarball) return { provider: "publint", name: "Publint", category: "package-health", status: "error", findings: [], durationMs: packed.durationMs, message: packed.error ?? "The package could not be packed locally." };
     const result = await runCommand(process.execPath, ["--input-type=module", "--eval", PUBLINT_EVAL, packed.tarball], {
       cwd: context.root,
-      verbose,
+      logger,
       env: HEALTH_OFFLINE_ENV,
     });
     const durationMs = packed.durationMs + result.durationMs;
@@ -502,16 +520,17 @@ export async function runPublint(context: RepositoryContext, verbose: boolean): 
   }
 }
 
-export async function runAttw(context: RepositoryContext, verbose: boolean): Promise<HealthResult> {
+export async function runAttw(context: RepositoryContext, diagnostics: DiagnosticLogger | boolean): Promise<HealthResult> {
+  const logger = resolveDiagnosticLogger(diagnostics);
   const binary = await localBinary(context.root, "attw");
   if (!binary) return { provider: "attw", name: "Are The Types Wrong?", category: "package-health", status: "error", findings: [], durationMs: 0, message: "Are The Types Wrong? is declared but its local binary is unavailable. Install dependencies first." };
   const temporary = await mkdtemp(path.join(os.tmpdir(), "repnix-attw-"));
   try {
-    const packed = await packLocalPackage(context, temporary, verbose);
+    const packed = await packLocalPackage(context, temporary, logger);
     if (!packed.tarball) return { provider: "attw", name: "Are The Types Wrong?", category: "package-health", status: "error", findings: [], durationMs: packed.durationMs, message: packed.error ?? "The package could not be packed locally." };
     const result = await runCommand(binary, [packed.tarball, "--format", "json", "--no-definitely-typed"], {
       cwd: context.root,
-      verbose,
+      logger,
       env: HEALTH_OFFLINE_ENV,
       maxOutputBytes: 50 * 1024 * 1024,
     });
@@ -560,6 +579,7 @@ export async function runHealth(
   options: RunHealthOptions = {},
 ): Promise<HealthRun> {
   const { context, detections } = audit;
+  const logger = resolveDiagnosticLogger(options.logger ?? options);
   const results: HealthResult[] = [];
   const enabled = (provider: keyof NonNullable<RepnixConfig["providers"]>) => config.providers?.[provider]?.enabled !== false;
   if (!context.packageManager || context.diagnostics.some((item) => item.severity === "error")) {
@@ -580,26 +600,26 @@ export async function runHealth(
       if (config.categories?.[runnable.category] === "off") continue;
       const result = await runCommand(runnable.command, runnable.args, {
         cwd: context.root,
-        ...(options.verbose !== undefined ? { verbose: options.verbose } : {}),
+        logger,
         env: { ...HEALTH_OFFLINE_ENV, ...runnable.env },
       });
       results.push(commandResult(runnable, result));
     }
     if ((!options.category || options.category === "dead-code") && config.categories?.["dead-code"] !== "off" && detections.get("knip")?.installed && config.providers?.knip?.enabled !== false) {
-      results.push(await runKnip(context, options.verbose ?? false));
+      results.push(await runKnip(context, logger));
     }
     if ((!options.category || options.category === "duplication") && config.categories?.duplication !== "off" && detections.get("jscpd")?.installed && config.providers?.jscpd?.enabled !== false) {
-      results.push(await runJscpd(context, options.verbose ?? false));
+      results.push(await runJscpd(context, logger));
     }
     if ((!options.category || options.category === "security") && config.categories?.security !== "off" && detections.get("osv-scanner")?.activeCapabilities.vulnerabilities && enabled("osv-scanner")) {
-      results.push(await runOsvScanner(context, options.verbose ?? false));
+      results.push(await runOsvScanner(context, logger));
     }
     if ((!options.category || options.category === "architecture") && config.categories?.architecture !== "off" && detections.get("dependency-cruiser")?.activeCapabilities.architectureRules && enabled("dependency-cruiser")) {
-      results.push(await runDependencyCruiser(context, options.verbose ?? false));
+      results.push(await runDependencyCruiser(context, logger));
     }
     if ((!options.category || options.category === "architecture") && config.categories?.architecture !== "off" && detections.get("eslint-boundaries")?.activeCapabilities.architectureRules && enabled("eslint-boundaries")) {
       if (options.category === "architecture" || !results.some((result) => result.category === "lint")) {
-        results.push(await runEslintBoundaries(context, options.verbose ?? false));
+        results.push(await runEslintBoundaries(context, logger));
       } else {
         const lint = results.find((result) => result.category === "lint")!;
         results.push({
@@ -614,13 +634,13 @@ export async function runHealth(
       }
     }
     if ((!options.category || options.category === "bundle") && config.categories?.bundle !== "off" && detections.get("size-limit")?.activeCapabilities.bundleBudget && enabled("size-limit")) {
-      results.push(await runSizeLimit(context, options.verbose ?? false));
+      results.push(await runSizeLimit(context, logger));
     }
     if ((!options.category || options.category === "package-health") && config.categories?.["package-health"] !== "off" && detections.get("publint")?.activeCapabilities.packagePublishing && enabled("publint")) {
-      results.push(await runPublint(context, options.verbose ?? false));
+      results.push(await runPublint(context, logger));
     }
     if ((!options.category || options.category === "package-health") && config.categories?.["package-health"] !== "off" && detections.get("attw")?.activeCapabilities.typesCompatibility && enabled("attw")) {
-      results.push(await runAttw(context, options.verbose ?? false));
+      results.push(await runAttw(context, logger));
     }
   }
 
@@ -629,6 +649,11 @@ export async function runHealth(
   const errors = results.filter((result) => result.status === "error").length;
   const thresholdMatches = findings.filter((finding) => severityAtLeast(finding.severity, config.severityThreshold)).length;
   const exitCode: 0 | 1 | 2 = errors > 0 ? 2 : thresholdMatches > 0 ? 1 : 0;
+  for (const result of results) {
+    if (result.status === "error") logger.error("health.provider.error", result.message ?? `${result.name} could not complete.`, { provider: result.provider, category: result.category });
+    else if (result.status === "fail") logger.warn("health.provider.findings", `${result.name} reported findings.`, { provider: result.provider, category: result.category, findings: result.findings.length });
+  }
+  logger.info("health.run.finish", "Health checks complete", { exitCode, findings: findings.length, errors });
   return {
     schemaVersion: 1,
     generatedAt: new Date().toISOString(),

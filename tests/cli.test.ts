@@ -42,6 +42,64 @@ describe("CLI", () => {
     expect(result.stderr).toBe("");
   });
 
+  it("keeps JSON on stdout while streaming verbose diagnostics to stderr", async () => {
+    const root = await copyFixture("minimal-js");
+    temporary.push(root);
+    const manifestPath = path.join(root, "package.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as { scripts: Record<string, string> };
+    manifest.scripts.test = "node -e \"process.stdout.write('provider stdout\\n'); process.stderr.write('provider stderr\\n')\"";
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+
+    const result = await runCli(root, ["check", "tests", "--json", "--verbose"]);
+    const report = JSON.parse(result.stdout) as { summary: { exitCode: number } };
+    expect(report.summary.exitCode).toBe(0);
+    expect(result.code).toBe(0);
+    expect(result.stderr).toContain("provider stdout");
+    expect(result.stderr).toContain("provider stderr");
+    expect(result.stderr).toContain("Running");
+    expect(result.stderr).toContain("Finished");
+  });
+
+  it("supports quiet mode and structured debug records", async () => {
+    const root = await copyFixture("minimal-js");
+    temporary.push(root);
+    const manifestPath = path.join(root, "package.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as { scripts: Record<string, string> };
+    manifest.scripts.test = "node -e \"process.stdout.write('provider stdout\\n'); process.stderr.write('provider stderr\\n')\"";
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+
+    const quiet = await runCli(root, ["check", "tests", "--json", "--quiet"]);
+    expect(JSON.parse(quiet.stdout)).toMatchObject({ summary: { exitCode: 0 } });
+    expect(quiet.stderr).toBe("");
+
+    const structured = await runCli(root, ["check", "tests", "--json", "--log-level", "debug", "--log-format", "json"]);
+    const records = structured.stderr.trim().split("\n").map((line) => JSON.parse(line) as { event: string; message: string });
+    expect(records).toEqual(expect.arrayContaining([
+      expect.objectContaining({ event: "repository.detected" }),
+      expect.objectContaining({ event: "command.start" }),
+      expect.objectContaining({ event: "provider.output", message: expect.stringContaining("provider stdout") }),
+      expect.objectContaining({ event: "command.finish" }),
+    ]));
+  });
+
+  it("prints a stack trace for unexpected errors in verbose mode", async () => {
+    const root = await copyFixture("minimal-js");
+    temporary.push(root);
+    const result = await runCli(root, ["check", "not-a-category", "--verbose"]);
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain("Expected one of");
+    expect(result.stderr).toContain("at checkCommand");
+  });
+
+  it("keeps CLI argument errors structured when JSON diagnostics are requested", async () => {
+    const root = await copyFixture("minimal-js");
+    temporary.push(root);
+    const result = await runCli(root, ["check", "tests", "--log-format", "json", "--log-level", "nope"]);
+    const records = result.stderr.trim().split("\n").map((line) => JSON.parse(line) as { event: string; message: string });
+    expect(result.code).toBe(2);
+    expect(records).toEqual(expect.arrayContaining([expect.objectContaining({ event: "cli.error", message: expect.stringContaining("Invalid log level") })]));
+  });
+
   it("audits without mutating the fixture", async () => {
     const root = await copyFixture("react-eslint");
     temporary.push(root);
@@ -59,9 +117,10 @@ describe("CLI", () => {
     manifest.scripts.test = "node -e \"process.exit(1)\"";
     await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
     const result = await runCli(root, ["check", "--json"]);
-    const report = JSON.parse(result.stdout) as { summary: { exitCode: number; findings: number } };
+    const report = JSON.parse(result.stdout) as { summary: { exitCode: number; findings: number }; results: Array<{ findings: Array<{ metadata?: { command?: string } }> }> };
     expect(result.code).toBe(1);
     expect(report.summary).toMatchObject({ exitCode: 1, findings: 1 });
+    expect(report.results.flatMap((item) => item.findings).some((finding) => finding.metadata?.command?.includes("node -e"))).toBe(true);
   });
 
   it("uses exit 2 when required coverage is unavailable", async () => {
