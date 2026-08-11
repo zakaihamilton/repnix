@@ -4,6 +4,8 @@ All notable changes to RepNix are documented here. The project follows semantic 
 
 ## Unreleased
 
+- Publish new package versions automatically after pushes to `main`, while skipping versions already present on npm.
+
 ## 0.3.1 - 2026-08-11
 
 ### Added

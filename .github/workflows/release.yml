@@ -1,9 +1,13 @@
-name: Release
+name: Publish
 
 on:
   push:
-    tags:
-      - "v*"
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: npm-publish
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -26,11 +30,32 @@ jobs:
       - run: npm install --global npm@latest
       - run: pnpm install --frozen-lockfile
       - run: pnpm verify
-      - name: Verify tag matches package version
-        run: >-
-          node --input-type=module -e
-          "import pkg from './package.json' with { type: 'json' };
-          if (process.env.GITHUB_REF_NAME !== 'v' + pkg.version) {
-          throw new Error('Tag ' + process.env.GITHUB_REF_NAME + ' does not match package version v' + pkg.version)
-          }"
-      - run: npm publish
+      - name: Read package metadata
+        id: package
+        run: |
+          echo "name=$(node -p \"require('./package.json').name\")" >> "$GITHUB_OUTPUT"
+          echo "version=$(node -p \"require('./package.json').version\")" >> "$GITHUB_OUTPUT"
+      - name: Check whether the version is already published
+        id: published
+        env:
+          PACKAGE_NAME: ${{ steps.package.outputs.name }}
+          PACKAGE_VERSION: ${{ steps.package.outputs.version }}
+        run: |
+          set +e
+          output=$(npm view "${PACKAGE_NAME}@${PACKAGE_VERSION}" version --silent 2>&1)
+          status=$?
+          set -e
+          if [ "$status" -eq 0 ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "${PACKAGE_NAME}@${PACKAGE_VERSION} is already published; skipping."
+          elif printf '%s' "$output" | grep -qE 'E404|404 Not Found|is not in this registry'; then
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "${PACKAGE_NAME}@${PACKAGE_VERSION} is not published yet."
+          else
+            printf '%s\n' "$output"
+            echo "Unable to determine whether ${PACKAGE_NAME}@${PACKAGE_VERSION} is published." >&2
+            exit "$status"
+          fi
+      - name: Publish package
+        if: steps.published.outputs.exists != 'true'
+        run: npm publish
