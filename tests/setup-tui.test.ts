@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AUDIT_LABEL_COLUMN_WIDTH, AUDIT_TWO_COLUMN_MIN_WIDTH, COMPACT_LAYOUT_HEIGHT, COMPACT_LAYOUT_WIDTH, HORIZONTAL_PANE_MIN_WIDTH, auditContentLineCount, auditPageSummary, auditRecommendationSummary, auditSetupOptions, auditStatusPresentation, auditUsesSingleColumn, createSetupTuiTheme, diffLineColor, normalizeTuiDiffLine, selectedSetupOptions, selectionIndicator, selectionRowPresentation, setupCheckDetails, setupPaneLayout, setupStepIndex, tuiLayoutMetrics } from "../src/tui/setup-app.js";
+import { AUDIT_LABEL_COLUMN_WIDTH, AUDIT_TWO_COLUMN_MIN_WIDTH, COMPACT_LAYOUT_HEIGHT, COMPACT_LAYOUT_WIDTH, HORIZONTAL_PANE_MIN_WIDTH, auditContentLineCount, auditPageSummary, auditRecommendationSummary, auditSetupOptions, auditStatusPresentation, auditUsesSingleColumn, clampTuiScroll, createSetupTuiTheme, diffLineColor, normalizeTuiDiffLine, selectedSetupOptions, selectionIndicator, selectionRowPresentation, setupCheckDetails, setupPaneLayout, setupStepIndex, tuiLayoutMetrics } from "../src/tui/setup-app.js";
 import { createSetupTuiModel, selectionItems, setupTuiReducer } from "../src/tui/setup-state.js";
 import type { AuditModel, Recommendation } from "../src/recommendations/recommendation-engine.js";
 import type { RepositoryContext } from "../src/core/types.js";
@@ -137,6 +137,7 @@ describe("setup TUI presentation", () => {
     expect(auditSetupOptions(audit)).toEqual(["jscpd", "dependency-cruiser", "GitHub Actions health step"]);
     expect(auditContentLineCount(audit, true)).toBe(12);
     expect(auditContentLineCount(audit, false)).toBe(11);
+    expect(auditContentLineCount(audit, true, 40)).toBeGreaterThan(auditContentLineCount(audit, true, 80));
     const setupModel = createSetupTuiModel(recommendations);
     setupModel.selectedProviders = ["jscpd", "dependency-cruiser"];
     setupModel.includeCi = true;
@@ -162,6 +163,8 @@ describe("setup TUI presentation", () => {
     expect(setupPaneLayout(HORIZONTAL_PANE_MIN_WIDTH, 45)).toBe("horizontal");
     expect(setupPaneLayout(HORIZONTAL_PANE_MIN_WIDTH - 1, 45)).toBe("vertical");
     expect(tuiLayoutMetrics(24, true)).toEqual({ bodyHeight: 13, detailViewport: 7 });
+    expect(clampTuiScroll(20, 10, 4)).toBe(6);
+    expect(clampTuiScroll(20, 3, 4)).toBe(0);
   });
 
   it("uses one audit coverage column when the terminal is not wide enough", () => {

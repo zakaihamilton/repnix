@@ -4,6 +4,7 @@ import { CATEGORY_DESCRIPTIONS, CATEGORY_LABELS, PROVIDER_DESCRIPTIONS, PROVIDER
 import type { DiagnosticLogger, DiagnosticOptions } from "../cli/options.js";
 import { resolveDiagnosticLogger } from "../cli/options.js";
 import { auditRepository } from "../cli/audit.js";
+import { wrapTerminalText } from "../reporting/console-reporter.js";
 import type { AuditModel, CoverageStatus } from "../recommendations/recommendation-engine.js";
 import type { InstallPlan, InstallProgress, RepositoryContext } from "../core/types.js";
 import { applyInstallPlan } from "../setup/apply-plan.js";
@@ -196,6 +197,10 @@ export function tuiLayoutMetrics(height: number, compact = false): TuiLayoutMetr
     bodyHeight,
     detailViewport: Math.max(bodyHeight - DETAIL_PANEL_CHROME_ROWS, 1),
   };
+}
+
+export function clampTuiScroll(scroll: number, lineCount: number, viewport: number): number {
+  return Math.min(Math.max(scroll, 0), Math.max(lineCount - Math.max(viewport, 1), 0));
 }
 
 export interface SetupTuiDependencies {
@@ -548,9 +553,13 @@ export function auditUsesSingleColumn(width: number): boolean {
   return width < AUDIT_TWO_COLUMN_MIN_WIDTH;
 }
 
-export function auditContentLineCount(audit: AuditModel, singleColumn: boolean): number {
+export function auditContentLineCount(audit: AuditModel, singleColumn: boolean, width = 80): number {
   const coverageRows = singleColumn ? audit.coverage.length : Math.ceil(audit.coverage.length / 2);
-  return 9 + coverageRows + (auditSetupOptions(audit).length ? 1 : 0);
+  const setupOptions = auditSetupOptions(audit);
+  const setupRows = setupOptions.length
+    ? wrapTerminalText(`Setup options: ${setupOptions.join(" · ")}`, Math.max(width - 6, 1)).length
+    : 0;
+  return 9 + coverageRows + setupRows;
 }
 
 function auditCoverageRow(entry: AuditModel["coverage"][number], theme: SetupTuiTheme): React.ReactElement {
@@ -594,8 +603,9 @@ function AuditView({ audit, singleColumn, scroll, viewport, theme }: { audit: Au
     ...(setupOptions.length ? [<Text key="setup-options" {...textColor(theme)} wrap="wrap">Setup options: {setupOptions.join(" · ")}</Text>] : []),
     <Text key="prompt" color={actionable ? theme.primary : theme.success} bold>{actionable ? "Press Enter to choose checks and continue setup." : "No actionable setup changes were found. Press Enter to finish."}</Text>,
   ];
-  const start = Math.min(Math.max(scroll, 0), Math.max(lines.length - 1, 0));
-  const visible = lines.slice(start, start + Math.max(viewport, 1));
+  const visibleRows = Math.max(viewport, 1);
+  const start = clampTuiScroll(scroll, lines.length, visibleRows);
+  const visible = lines.slice(start, start + visibleRows);
   return (
     <Panel title="Repository audit" theme={theme} borderColor={theme.info}>
       {visible}
@@ -716,13 +726,14 @@ function DetailsView({ plan, model, width, layout, theme }: { plan: InstallPlan;
   const file = plan.files[model.reviewCursor];
   if (!file) return <Panel title="Details" theme={theme}><Text color={theme.muted}>There are no file details to show.</Text></Panel>;
   const diff = renderFileDiff(file, Math.max(width - 8, 32)).split("\n").map(normalizeTuiDiffLine);
-  const visible = diff.slice(model.detailScroll, model.detailScroll + layout.detailViewport);
+  const scroll = clampTuiScroll(model.detailScroll, diff.length, layout.detailViewport);
+  const visible = diff.slice(scroll, scroll + layout.detailViewport);
   return (
     <Panel title={`File detail · ${file.path}`} theme={theme} borderColor={theme.info}>
       <Text color={theme.muted}>{file.reason}</Text>
       <Newline />
       {visible.map((line, index) => <Text key={`${index}-${line}`} {...foregroundColor(diffLineColor(line, theme))}>{line}</Text>)}
-      {model.detailScroll + visible.length < diff.length ? <Text color={theme.muted}>↓ more</Text> : null}
+      {scroll + visible.length < diff.length ? <Text color={theme.muted}>↓ more</Text> : null}
     </Panel>
   );
 }
@@ -830,7 +841,7 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
   const sidebarMode = paneLayout === "focused-sidebar";
   const auditSingleColumn = auditUsesSingleColumn(width);
   const layout = tuiLayoutMetrics(height, compact);
-  const auditLineCount = audit ? auditContentLineCount(audit, auditSingleColumn) : 0;
+  const auditLineCount = audit ? auditContentLineCount(audit, auditSingleColumn, width) : 0;
   const detailFile = plan?.files[model.reviewCursor];
   const detailLineCount = detailFile ? renderFileDiff(detailFile, Math.max(width - 8, 32)).split("\n").length : 0;
   const busy = model.screen === "loading" || model.screen === "planning" || model.screen === "applying";
