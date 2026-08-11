@@ -309,6 +309,8 @@ After installing dependencies, add the unified check to an existing GitHub Actio
   run: npm run health
 ```
 
+When `repnix setup` is asked to update CI, it looks for a workflow job with a checkout step and a supported package-manager install step, then inserts the health step immediately after that install using the job's package manager. It prefers a uniquely identified test, check, or CI job when several jobs qualify; ties are left unchanged and the candidate job locations are shown for manual review.
+
 For machine-readable CI integrations, use `npx repnix check --json` and redirect or collect stdout as an artifact.
 
 ## How it works

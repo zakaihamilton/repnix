@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Box, Newline, Text, render, useApp, useInput, useStdout } from "ink";
-import { PROVIDER_DESCRIPTIONS } from "../core/health-category.js";
+import { CATEGORY_DESCRIPTIONS, CATEGORY_LABELS, PROVIDER_DESCRIPTIONS, PROVIDER_NEXT_STEPS } from "../core/health-category.js";
 import type { DiagnosticLogger, DiagnosticOptions } from "../cli/options.js";
 import { resolveDiagnosticLogger } from "../cli/options.js";
 import { auditRepository } from "../cli/audit.js";
 import type { AuditModel } from "../recommendations/recommendation-engine.js";
-import type { InstallPlan, InstallProgress } from "../core/types.js";
+import type { InstallPlan, InstallProgress, RepositoryContext } from "../core/types.js";
 import { applyInstallPlan } from "../setup/apply-plan.js";
 import { buildInstallPlan } from "../setup/install-plan.js";
 import { renderFileDiff } from "../setup/file-plan.js";
@@ -157,7 +157,12 @@ export function selectionRowPresentation(
   theme: SetupTuiTheme,
   width = 30,
 ): SelectionRowPresentation {
-  const label = `${active ? "▸" : " "} ${selectionIndicator(checked)} ${name}${priority ? `  · ${priority}` : ""}`;
+  const prefix = `${active ? "▸" : " "} ${selectionIndicator(checked)} `;
+  const priorityLabel = priority ? `· ${priority}` : "";
+  const priorityGap = priority
+    ? " ".repeat(Math.max(1, width - prefix.length - name.length - priorityLabel.length))
+    : "";
+  const label = `${prefix}${name}${priorityGap}${priorityLabel}`.padEnd(width, " ");
   const base = { label: label.padEnd(width, " "), ... (active ? { color: theme.primary } : textColor(theme)), bold: active };
   return active ? { ...base, backgroundColor: theme.active } : base;
 }
@@ -299,6 +304,157 @@ function providerFor(items: SetupSelectionItem[], model: SetupTuiModel): SetupSe
   return items[model.cursor];
 }
 
+export interface SetupCheckDetails {
+  checks: string[];
+  scope: string;
+  setup: string[];
+  command: string;
+  caveat?: string;
+}
+
+function packageManagerRun(context: RepositoryContext, script: string): string {
+  return context.packageManager ? `${context.packageManager} run ${script}` : `run ${script}`;
+}
+
+function sourceScope(context: RepositoryContext): string {
+  const fileCount = `${context.sourceFiles.length} source file${context.sourceFiles.length === 1 ? "" : "s"}`;
+  if (!context.sourceRoots.length) return fileCount;
+  const roots = context.sourceRoots.slice(0, 3).join(", ");
+  const suffix = context.sourceRoots.length > 3 ? `, +${context.sourceRoots.length - 3} more` : "";
+  return `${fileCount} under ${roots}${suffix}`;
+}
+
+function existingConfig(context: RepositoryContext, files: string[]): string | undefined {
+  return files.find((file) => context.files.has(file));
+}
+
+export function setupCheckDetails(recommendation: AuditModel["recommendations"][number], context: RepositoryContext): SetupCheckDetails {
+  const scope = sourceScope(context);
+  switch (recommendation.provider) {
+    case "knip":
+      return {
+        checks: ["Unused files, exports, and dependencies that are not reachable from the project entry points."],
+        scope: `${scope}; package.json scripts and workspace packages are used to understand entry points.`,
+        setup: ["Install Knip as a development dependency.", "Add the health:dead-code script to package.json."],
+        command: packageManagerRun(context, "health:dead-code"),
+      };
+    case "jscpd": {
+      const config = existingConfig(context, [".jscpd.json", "jscpd.json"]);
+      return {
+        checks: ["Repeated code blocks across the detected source roots, including copies that can drift apart over time."],
+        scope,
+        setup: [
+          "Install jscpd as a development dependency.",
+          "Add the health:duplication script to package.json.",
+          config ? `Extend ${config} with safe generated/build exclusions.` : "Create .jscpd.json with safe generated/build exclusions.",
+        ],
+        command: packageManagerRun(context, "health:duplication"),
+        ...(context.packageJson.jscpd !== undefined && !config
+          ? { caveat: "A jscpd configuration embedded in package.json will be preserved; verify its exclusions manually." }
+          : {}),
+      };
+    }
+    case "dependency-cruiser": {
+      const config = existingConfig(context, [
+        ".dependency-cruiser.json",
+        ".dependency-cruiser.js",
+        ".dependency-cruiser.cjs",
+        ".dependency-cruiser.mjs",
+        ".dependency-cruiser.ts",
+      ]);
+      return {
+        checks: ["Circular dependencies between modules.", "Production source importing test files through conservative starter rules."],
+        scope,
+        setup: [
+          "Install dependency-cruiser as a development dependency.",
+          "Add the health:architecture script to package.json.",
+          config ? `Use the existing ${config} without overwriting it.` : "Create .dependency-cruiser.cjs with conservative starter rules.",
+        ],
+        command: packageManagerRun(context, "health:architecture"),
+        ...(config ? { caveat: `Existing rules in ${config} are preserved and will determine the final boundaries.` } : {}),
+      };
+    }
+    case "publint":
+      return {
+        checks: ["Package exports, entry points, metadata, and the files consumers receive from npm."],
+        scope: `${context.packageJson.name ?? "the package"} package manifest and its publishable file layout.`,
+        setup: ["Install Publint as a development dependency.", "Add the health:package:publint script to package.json."],
+        command: packageManagerRun(context, "health:package:publint"),
+      };
+    case "attw":
+      return {
+        checks: ["Whether TypeScript types resolve correctly for consumers using Node and bundler-style package entry points."],
+        scope: `${context.packageJson.name ?? "the package"} after it is packed, including its published type declarations.`,
+        setup: ["Install Are The Types Wrong? as a development dependency.", "Add the health:package:types script to package.json."],
+        command: packageManagerRun(context, "health:package:types"),
+      };
+    default:
+      return {
+        checks: [PROVIDER_DESCRIPTIONS[recommendation.name] ?? "The recommended repository health check."],
+        scope,
+        setup: ["Install the check as a development dependency.", "Add its health script to package.json."],
+        command: packageManagerRun(context, `health:${recommendation.category}`),
+        ...(PROVIDER_NEXT_STEPS[recommendation.name] ? { caveat: PROVIDER_NEXT_STEPS[recommendation.name] } : {}),
+      };
+  }
+}
+
+function DetailSection({ title, children, theme }: { title: string; children: React.ReactNode; theme: SetupTuiTheme }): React.ReactElement {
+  return (
+    <Box flexDirection="column" marginBottom={1}>
+      <Text color={theme.secondary} bold>{title}</Text>
+      {children}
+    </Box>
+  );
+}
+
+function CheckDetailView({ recommendation, context, theme }: { recommendation: AuditModel["recommendations"][number]; context: RepositoryContext; theme: SetupTuiTheme }): React.ReactElement {
+  const details = setupCheckDetails(recommendation, context);
+  return (
+    <>
+      <Text color={theme.info} bold>{PROVIDER_DESCRIPTIONS[recommendation.name] ?? "Repository health check"}</Text>
+      <Text color={theme.muted}>{CATEGORY_LABELS[recommendation.category]}: {CATEGORY_DESCRIPTIONS[recommendation.category]}</Text>
+      <Newline />
+      <DetailSection title="WHY THIS REPOSITORY" theme={theme}>
+        <Text {...textColor(theme)}>{recommendation.reason}</Text>
+      </DetailSection>
+      <DetailSection title="WHAT IT CHECKS" theme={theme}>
+        {details.checks.map((check) => <Text key={check} {...textColor(theme)}>  • {check}</Text>)}
+      </DetailSection>
+      <DetailSection title="SCOPE" theme={theme}>
+        <Text {...textColor(theme)}>  {details.scope}</Text>
+      </DetailSection>
+      <DetailSection title="SETUP ADDS" theme={theme}>
+        {details.setup.map((item) => <Text key={item} {...textColor(theme)}>  + {item}</Text>)}
+      </DetailSection>
+      <DetailSection title="RUNS" theme={theme}>
+        <Text color={theme.primary}>  $ {details.command}</Text>
+      </DetailSection>
+      {!recommendation.actionable ? <Text color={theme.warning}>◆ Manual configuration required before this check can run.</Text> : null}
+      {details.caveat ? <Text color={theme.warning}>◆ {details.caveat}</Text> : null}
+    </>
+  );
+}
+
+function CiDetailView({ context, theme }: { context: RepositoryContext; theme: SetupTuiTheme }): React.ReactElement {
+  const command = packageManagerRun(context, "health");
+  return (
+    <>
+      <Text color={theme.info} bold>Add the unified repository health check to GitHub Actions.</Text>
+      <Newline />
+      <DetailSection title="WHAT IT ADDS" theme={theme}>
+        <Text {...textColor(theme)}>  A Repository health step in the most obvious workflow job after dependencies are installed.</Text>
+      </DetailSection>
+      <DetailSection title="RUNS" theme={theme}>
+        <Text color={theme.primary}>  $ {command}</Text>
+      </DetailSection>
+      <DetailSection title="SAFETY" theme={theme}>
+        <Text {...textColor(theme)}>  Existing workflow steps are preserved. If RepNix cannot identify one unambiguous checkout and install job, it leaves the workflow unchanged and shows a manual warning in the review.</Text>
+      </DetailSection>
+    </>
+  );
+}
+
 function SelectView({ audit, model, theme }: { audit: AuditModel; model: SetupTuiModel; theme: SetupTuiTheme }): React.ReactElement {
   const items = selectionItems(audit.recommendations, audit.context.hasCI);
   const selected = providerFor(items, model);
@@ -325,16 +481,11 @@ function SelectView({ audit, model, theme }: { audit: AuditModel; model: SetupTu
         })}
         {items.length === 0 ? <Text color={theme.success}>No setup changes are recommended.</Text> : null}
       </Panel>
-      <Panel title={recommendation ? recommendation.name : selected?.name ?? "Setup overview"} theme={theme} borderColor={recommendation ? theme.primary : theme.border}>
+      <Panel title={recommendation ? `${recommendation.name} · ${CATEGORY_LABELS[recommendation.category]}` : selected?.name ?? "Setup overview"} theme={theme} borderColor={recommendation ? theme.primary : theme.border}>
         {recommendation ? (
-          <>
-            <Text color={theme.info} bold>{PROVIDER_DESCRIPTIONS[recommendation.name] ?? "Repository health check"}</Text>
-            <Newline />
-            <Text {...textColor(theme)}>{recommendation.reason}</Text>
-            {!recommendation.actionable ? <><Newline /><Text color={theme.warning}>◆ Manual configuration required before this check can run.</Text></> : null}
-          </>
+          <CheckDetailView recommendation={recommendation} context={audit.context} theme={theme} />
         ) : selected?.kind === "ci" ? (
-          <Text {...textColor(theme)}>{audit.context.hasCI ? "Add the unified repository health check to the most obvious GitHub Actions job." : "No GitHub Actions workflow was detected."}</Text>
+          <CiDetailView context={audit.context} theme={theme} />
         ) : (
           <Text color={theme.muted}>Select a check to see why it is recommended and what it will add.</Text>
         )}

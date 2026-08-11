@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { createSetupTuiTheme, diffLineColor, normalizeTuiDiffLine, selectionIndicator, selectionRowPresentation, tuiLayoutMetrics } from "../src/tui/setup-app.js";
+import { createSetupTuiTheme, diffLineColor, normalizeTuiDiffLine, selectionIndicator, selectionRowPresentation, setupCheckDetails, tuiLayoutMetrics } from "../src/tui/setup-app.js";
 import { createSetupTuiModel, selectionItems, setupTuiReducer } from "../src/tui/setup-state.js";
 import type { Recommendation } from "../src/recommendations/recommendation-engine.js";
+import type { RepositoryContext } from "../src/core/types.js";
 
 const recommendations: Recommendation[] = [
   {
@@ -33,6 +34,27 @@ const recommendations: Recommendation[] = [
   },
 ];
 
+const context: RepositoryContext = {
+  root: "/repo",
+  packageManager: "pnpm",
+  frameworks: [],
+  languages: ["TypeScript"],
+  kinds: ["typescript"],
+  isMonorepo: false,
+  packageCount: 1,
+  hasCI: true,
+  ciProvider: "github-actions",
+  packageJson: { name: "example" },
+  manifests: [],
+  installedPackages: new Map(),
+  installedPackageOrigins: new Map(),
+  scripts: {},
+  files: new Set(["src/index.ts"]),
+  sourceFiles: ["src/index.ts", "src/other.ts"],
+  sourceRoots: ["src"],
+  diagnostics: [],
+};
+
 describe("setup TUI presentation", () => {
   it("uses filled square selection indicators", () => {
     expect(selectionIndicator(true)).toBe("■");
@@ -53,7 +75,8 @@ describe("setup TUI presentation", () => {
     const active = selectionRowPresentation("Vitest", true, true, "baseline", theme);
     const inactive = selectionRowPresentation("Vitest", false, false, undefined, theme);
 
-    expect(active.label).toMatch(/^▸ ■ Vitest\s{2}· baseline/);
+    expect(active.label).toMatch(/^▸ ■ Vitest\s+· baseline\s*$/);
+    expect(active.label).toHaveLength(30);
     expect(active.color).toBe(theme.primary);
     expect(active.backgroundColor).toBe(theme.active);
     expect(active.bold).toBe(true);
@@ -65,6 +88,11 @@ describe("setup TUI presentation", () => {
     const longRow = selectionRowPresentation("dependency-cruiser", false, true, "optional", theme, 36);
     expect(longRow.label).toHaveLength(36);
     expect(longRow.label).not.toContain("\n");
+
+    const baseline = selectionRowPresentation("jscpd", false, false, "baseline", theme, 36);
+    expect(baseline.label.endsWith("· baseline")).toBe(true);
+    expect(longRow.label.endsWith("· optional")).toBe(true);
+    expect(baseline.label.indexOf("· baseline")).toBe(longRow.label.indexOf("· optional"));
   });
 
   it("selects rich colors only when truecolor is available", () => {
@@ -82,6 +110,26 @@ describe("setup TUI presentation", () => {
     expect(tuiLayoutMetrics(24)).toEqual({ bodyHeight: 16, detailViewport: 10 });
     expect(tuiLayoutMetrics(40)).toEqual({ bodyHeight: 32, detailViewport: 26 });
     expect(tuiLayoutMetrics(1)).toEqual({ bodyHeight: 1, detailViewport: 1 });
+  });
+
+  it("builds provider-specific setup details for the selection pane", () => {
+    const details = setupCheckDetails(recommendations[0]!, context);
+
+    expect(details.checks[0]).toContain("Repeated code blocks");
+    expect(details.scope).toContain("2 source files under src");
+    expect(details.setup).toContain("Create .jscpd.json with safe generated/build exclusions.");
+    expect(details.command).toBe("pnpm run health:duplication");
+  });
+
+  it("explains how an existing architecture config is handled", () => {
+    const details = setupCheckDetails(recommendations[1]!, {
+      ...context,
+      files: new Set(["src/index.ts", ".dependency-cruiser.cjs"]),
+    });
+
+    expect(details.setup).toContain("Use the existing .dependency-cruiser.cjs without overwriting it.");
+    expect(details.caveat).toContain("Existing rules in .dependency-cruiser.cjs are preserved");
+    expect(details.command).toBe("pnpm run health:architecture");
   });
 });
 

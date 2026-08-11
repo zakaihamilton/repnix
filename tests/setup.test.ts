@@ -66,6 +66,80 @@ describe("setup planning", () => {
     expect(planned.change?.after).toContain("name: Repository health\n        run: npm run health");
   });
 
+  it("inserts CI after the matching package-manager install step", async () => {
+    const root = await copyFixture("minimal-js");
+    temporary.push(root);
+    await mkdir(path.join(root, ".github", "workflows"), { recursive: true });
+    await writeFile(path.join(root, ".github", "workflows", "ci.yml"), `jobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-node@v4\n      - run: yarn install --frozen-lockfile\n      - run: yarn test\n  docs:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: npm install\n      - run: npm test\n`);
+
+    const planned = await planCiChange(await detectRepository(root), "yarn");
+
+    expect(planned.warning).toBeUndefined();
+    expect(planned.change?.after).toContain("- run: yarn install --frozen-lockfile\n      - name: Repository health\n        run: yarn run health");
+    expect(planned.change?.after).not.toContain("- run: npm install\n      - name: Repository health");
+  });
+
+  it("accepts a workflow without setup-node when checkout and install are unambiguous", async () => {
+    const root = await copyFixture("minimal-js");
+    temporary.push(root);
+    await mkdir(path.join(root, ".github", "workflows"), { recursive: true });
+    await writeFile(path.join(root, ".github", "workflows", "ci.yml"), `jobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: pnpm install --frozen-lockfile\n      - run: pnpm test\n`);
+
+    const planned = await planCiChange(await detectRepository(root), "pnpm");
+
+    expect(planned.warning).toBeUndefined();
+    expect(planned.change?.after).toContain("- run: pnpm install --frozen-lockfile\n      - name: Repository health");
+  });
+
+  it("recognizes Corepack Yarn installs and prefers the test job", async () => {
+    const root = await copyFixture("minimal-js");
+    temporary.push(root);
+    await mkdir(path.join(root, ".github", "workflows"), { recursive: true });
+    await writeFile(path.join(root, ".github", "workflows", "ci.yml"), `jobs:\n  lint:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: corepack yarn --immutable\n      - run: yarn lint\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: corepack yarn install\n      - run: corepack yarn test\n`);
+
+    const planned = await planCiChange(await detectRepository(root), "yarn");
+
+    expect(planned.warning).toBeUndefined();
+    expect(planned.change?.after).toContain("- run: corepack yarn install\n      - name: Repository health\n        run: yarn run health");
+    expect(planned.change?.after).not.toContain("- run: corepack yarn --immutable\n      - name: Repository health");
+  });
+
+  it("uses the package manager that the selected CI job actually installs", async () => {
+    const root = await copyFixture("minimal-js");
+    temporary.push(root);
+    await mkdir(path.join(root, ".github", "workflows"), { recursive: true });
+    await writeFile(path.join(root, ".github", "workflows", "ci.yml"), `jobs:\n  quality:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: npm ci --ignore-scripts\n      - run: npm test\n`);
+
+    const planned = await planCiChange(await detectRepository(root), "yarn");
+
+    expect(planned.warning).toBeUndefined();
+    expect(planned.change?.after).toContain("- run: npm ci --ignore-scripts\n      - name: Repository health\n        run: npm run health");
+  });
+
+  it("explains which jobs are ambiguous when their CI purpose ties", async () => {
+    const root = await copyFixture("minimal-js");
+    temporary.push(root);
+    await mkdir(path.join(root, ".github", "workflows"), { recursive: true });
+    await writeFile(path.join(root, ".github", "workflows", "ci.yml"), `jobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: npm install\n      - run: npm test\n  check:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: npm install\n      - run: npm check\n`);
+
+    const planned = await planCiChange(await detectRepository(root), "npm");
+
+    expect(planned.change).toBeNull();
+    expect(planned.warning).toContain("Candidates: .github/workflows/ci.yml#test (npm), .github/workflows/ci.yml#check (npm).");
+  });
+
+  it("does not warn when a health step already exists", async () => {
+    const root = await copyFixture("minimal-js");
+    temporary.push(root);
+    await mkdir(path.join(root, ".github", "workflows"), { recursive: true });
+    await writeFile(path.join(root, ".github", "workflows", "ci.yml"), `jobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: npm install\n      - run: npm run health\n`);
+
+    const planned = await planCiChange(await detectRepository(root), "npm");
+
+    expect(planned.warning).toBeUndefined();
+    expect(planned.change).toBeNull();
+  });
+
   it("plans conservative dependency-cruiser rules without inferring repository layers", async () => {
     const root = await copyFixture("minimal-js");
     temporary.push(root);
