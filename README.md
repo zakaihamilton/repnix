@@ -5,9 +5,11 @@
 [![End-to-end](https://github.com/zakaihamilton/repnix/actions/workflows/e2e.yml/badge.svg)](https://github.com/zakaihamilton/repnix/actions/workflows/e2e.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**Discover the health checks your JavaScript or TypeScript repository needs.**
+**Discover and run the checks that keep your JavaScript or TypeScript repository safe to change.**
 
-RepNix is a local-first CLI that audits the guardrails you already have, identifies important gaps, and helps you add a focused set of complementary tools. It then gives your team one normalized command for running repository health checks locally and in CI.
+RepNix is a local-first CLI that explains the guardrails you already have, identifies useful gaps, and helps you add a focused set of complementary tools. It then gives your team one command for running repository health checks locally and in CI.
+
+If terms such as “dead code,” “dependency security,” or “package health” are new to you, start with `repnix audit`. It explains each category in plain language before recommending anything.
 
 RepNix orchestrates the tools you choose. It does not replace your existing TypeScript, ESLint, Biome, Prettier, Vitest, Jest, Knip, OSV-Scanner, dependency-cruiser, or package-quality workflows.
 
@@ -23,14 +25,14 @@ Install RepNix as a development dependency:
 npm install --save-dev repnix
 ```
 
-Then inspect your repository and choose the missing guardrails you want to add:
+Then inspect your repository. This is read-only and does not install packages or edit files:
 
 ```bash
 npx repnix audit
 npx repnix setup
 ```
 
-Setup is interactive. It previews every package, script, configuration file, and CI change before applying anything.
+If you want to add recommendations, run setup. It explains why each check matters and previews every package, script, configuration file, and CI change before applying anything:
 
 Once setup is complete, run the unified health check:
 
@@ -38,12 +40,26 @@ Once setup is complete, run the unified health check:
 npm run health
 ```
 
-Or use RepNix directly:
+For detailed explanations of findings, use:
 
 ```bash
 npx repnix check
 npx repnix explain
 ```
+
+## A beginner-friendly workflow
+
+Think of repository health as a set of safety nets:
+
+- **Type safety** catches mismatched values before the program runs.
+- **Linting and formatting** catch risky patterns and keep code consistent.
+- **Tests** protect behavior when code changes.
+- **Dead-code and duplication checks** find code that is unused or repeated.
+- **Security checks** look for known vulnerabilities in third-party dependencies.
+- **Architecture and bundle checks** protect module boundaries and shipped JavaScript size.
+- **Package publishing checks** verify what npm consumers will receive.
+
+RepNix detects which of these apply to your repository and shows the next useful step. A recommendation is not automatically a problem: optional checks often need a project-specific rule or budget before they can be useful.
 
 ## Why RepNix?
 
@@ -72,12 +88,22 @@ audit → choose recommendations → setup → check → explain
 4. **Check** all active health providers with one command.
 5. **Explain** findings with normalized messages, locations, severity, and source provider.
 
+### How to read the output
+
+- A **category** is the kind of protection being measured, such as tests or dependency security.
+- A **provider** is the tool that performs the check, such as Vitest, Knip, or OSV-Scanner.
+- **Covered** means an active provider contributes the capability. **Partly covered** means some related capabilities are active but a gap remains. **Missing** means no active provider was found.
+- A **finding** is an issue reported by a check. A **check error** means the tool could not finish, usually because setup or configuration needs attention.
+- `repnix audit` is for deciding what to add. `repnix check` is for a quick pass/fail result. `repnix explain` is for deciding what to do about a finding.
+
 ## See it in action
 
 ```text
 $ npx repnix audit
 
-Repository
+Repository health audit
+
+RepNix looks at the checks already protecting this repository, then points out useful gaps.
 
 typescript
 react
@@ -86,6 +112,7 @@ GitHub Actions
 
 Repository Guardrails
 ────────────────────────────────────────────────
+✓ covered   ◐ partly covered   ✗ missing   – off = disabled   – n/a = not relevant
 Type safety                 ✓ TypeScript
 Linting                     ✓ ESLint
 Formatting                  ✓ Prettier
@@ -94,13 +121,15 @@ Dead code                   ✗ Missing
 Duplication                 ✗ Missing
 Dependency security         ✗ Missing
 
-Recommended baseline
+Recommended baseline — start here
 ────────────────────────────────────────────────
 + Knip
-  Unused files, exports, and dependencies are not fully covered.
+  What it checks: Finds unused files, exports, and dependencies.
+  Nothing currently checks for unused files, exports, or dependencies. This helps remove stale code and keeps dependencies intentional.
 
 + jscpd
-  No duplication provider is active.
+  What it checks: Finds copy-and-paste code that may become inconsistent.
+  58 source files can accumulate copy-and-paste drift, and no duplication check is active. This helps you find repeated code before the copies start behaving differently.
 ```
 
 After setup, the unified check stays intentionally small:
@@ -108,7 +137,7 @@ After setup, the unified check stays intentionally small:
 ```text
 $ npx repnix check
 
-Repository Health
+Repository health check
 
 Type safety            ✓  TypeScript
 Linting                ✓  ESLint
@@ -117,25 +146,26 @@ Tests                  ✓  Vitest
 Dead code              ⚠  2  Knip
 Duplication            ✓  jscpd
 
-2 findings
-Run: repnix explain
+2 findings need attention at the configured severity threshold.
+
+Next: run repnix explain to see what each finding means and where to start.
 ```
 
 ## Commands
 
 | Command | Purpose | Changes files? |
 | --- | --- | :---: |
-| `repnix audit` | Inspect repository health coverage and recommendations. | No |
-| `repnix setup` | Interactively preview and apply recommended provider setup. | Yes, after confirmation |
-| `repnix check` | Run all active health checks. | No |
-| `repnix check <category>` | Run one health category, such as `dead-code` or `security`. | No |
+| `repnix audit` | See what your repository already checks, what is missing, and why it matters. | No |
+| `repnix setup` | Review and apply recommended checks through an interactive preview. | Yes, after confirmation |
+| `repnix check` | Run all active health checks and get a short result. | No |
+| `repnix check <category>` | Run one category, such as `dead-code` or `security`. | No |
 | `repnix check --json` | Emit a versioned normalized report to stdout. | No |
 | `repnix <command> --verbose` | Show debug diagnostics and stream provider output to stderr. | No |
 | `repnix <command> --quiet` | Suppress diagnostic output while keeping the command report. | No |
 | `repnix <command> --log-level <level>` | Set diagnostics to `silent`, `error`, `warn`, `info`, or `debug`. | No |
 | `repnix <command> --log-format json` | Emit newline-delimited structured diagnostics on stderr. | No |
 | `repnix <command> --timeout <seconds>` | Set the maximum runtime for each repository command; the default is five minutes. | No |
-| `repnix explain` | Rerun checks and show detailed normalized findings. | No |
+| `repnix explain` | Rerun checks and explain findings, locations, severity, and next steps. | No |
 
 Examples:
 
@@ -160,22 +190,22 @@ npx repnix check --json > repnix-report.json
 npx repnix explain
 ```
 
-## What RepNix can cover
+## What each health category means
 
-RepNix separates repository health into categories so each capability has a clear home.
+RepNix separates repository health into categories so each capability has a clear home. The category name is also the value you can pass to `repnix check <category>`.
 
-| Health category | Existing project tools | Specialist providers |
+| Category | What it protects | Typical tools |
 | --- | --- | --- |
-| Type safety | TypeScript | — |
-| Linting | ESLint, Oxlint, Biome | — |
-| Formatting | Prettier, Oxfmt, Biome | — |
-| Tests | Jest, Vitest, safe test scripts | — |
-| Dead code | — | Knip |
-| Duplication | — | jscpd |
-| Dependency security | — | OSV-Scanner |
-| Architecture | ESLint | dependency-cruiser, `eslint-plugin-boundaries` |
-| Bundle size | — | Size Limit |
-| Package publishing | — | Publint, Are The Types Wrong? |
+| `types` — Type safety | Catches mismatched values before runtime. | TypeScript |
+| `lint` — Linting | Finds suspicious or inconsistent code patterns. | ESLint, Oxlint, Biome |
+| `format` — Formatting | Keeps code style consistent. | Prettier, Oxfmt, Biome |
+| `tests` — Tests | Protects existing behavior from regressions. | Jest, Vitest, safe test scripts |
+| `dead-code` — Dead code | Finds unused files, exports, and dependencies. | Knip |
+| `duplication` — Duplication | Finds repeated code that can drift apart. | jscpd |
+| `security` — Dependency security | Finds known vulnerabilities in dependencies. | OSV-Scanner |
+| `architecture` — Architecture boundaries | Protects allowed relationships between modules. | dependency-cruiser, `eslint-plugin-boundaries` |
+| `bundle` — Bundle regression | Protects shipped JavaScript size. | Size Limit |
+| `package-health` — Package publishing | Checks what npm consumers receive. | Publint, Are The Types Wrong? |
 
 ### Existing project checks
 
@@ -207,7 +237,7 @@ Package-health checks analyze a local packed artifact with lifecycle scripts dis
 
 ## Configuration
 
-Configuration is optional. Add `repnix.config.json` to make important categories required, adjust the failure threshold, or disable a provider intentionally:
+Configuration is optional. Add `repnix.config.json` when your team wants to make a category required, change which findings fail CI, or intentionally disable a provider:
 
 ```json
 {
@@ -227,17 +257,23 @@ Configuration is optional. Add `repnix.config.json` to make important categories
 }
 ```
 
-Category modes are `required`, `optional`, and `off`. Severity thresholds are `info`, `warning`, and `error`. Configuration is strict, so misspelled categories and provider names fail visibly.
+Category modes are:
+
+- `required` — the category must have an active provider; otherwise the check fails with exit code `2`.
+- `optional` — run the category when a provider is active, but do not require setup.
+- `off` — skip the category intentionally.
+
+Severity thresholds are `info`, `warning`, and `error`. A finding at or above the threshold produces exit code `1`. Configuration is strict, so misspelled categories and provider names fail with a correction tip.
 
 Use `required` for coverage that must exist, `off` for categories that do not apply to your repository, and provider flags when you want to keep a detected tool out of the RepNix run.
 
 ## Exit codes and automation
 
-RepNix uses predictable exit codes:
+RepNix uses predictable exit codes so both people and CI can understand the result:
 
-- `0` — healthy at the configured severity threshold.
-- `1` — findings at or above the configured threshold.
-- `2` — configuration, detection, or tool execution failure.
+- `0` — all configured checks passed at the configured severity threshold.
+- `1` — one or more findings reached the configured threshold; run `repnix explain` to understand them.
+- `2` — RepNix could not complete a check because of configuration, repository detection, or tool execution; this is different from a code finding.
 
 `repnix check --json` writes the versioned report to stdout. With debug diagnostics (`--verbose` or `--log-level debug`), child provider output goes to stderr so stdout remains machine-readable.
 All commands accept the diagnostic options. `--verbose` is shorthand for `--log-level debug`; `--quiet` takes precedence over the other level switches. Use `--log-format json` when a log collector needs stable event names and context fields. If an unexpected error occurs, verbose mode includes its stack trace.

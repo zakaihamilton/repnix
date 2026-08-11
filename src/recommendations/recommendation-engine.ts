@@ -155,7 +155,7 @@ export function buildAuditModel(
       recommended: true,
       priority: "baseline",
       actionable: true,
-      reason: `${context.sourceFiles.length} JavaScript/TypeScript source file${context.sourceFiles.length === 1 ? "" : "s"} were found, but unused files, exports, and dependencies are not fully covered. Knip fills those gaps without replacing existing linting.`,
+      reason: `${context.sourceFiles.length} JavaScript/TypeScript source file${context.sourceFiles.length === 1 ? "" : "s"} were found, but nothing currently checks for unused files, exports, or dependencies. This helps remove stale code and keeps dependencies intentional.`,
     });
   }
 
@@ -175,7 +175,7 @@ export function buildAuditModel(
       recommended: true,
       priority: "baseline",
       actionable: true,
-      reason: `${context.sourceFiles.length} source files can accumulate copy/paste drift, and no duplication provider is active. jscpd adds focused duplication detection without overlapping lint or dead-code analysis.`,
+      reason: `${context.sourceFiles.length} source files can accumulate copy-and-paste drift, and no duplication check is active. This helps you find repeated code before the copies start behaving differently.`,
     });
   }
 
@@ -197,7 +197,7 @@ export function buildAuditModel(
       recommended: true,
       priority: "baseline",
       actionable: false,
-      reason: `${lockfiles.join(", ")} provides a dependency inventory, but no offline vulnerability scan is active. OSV-Scanner protects dependencies using the OSV advisory database; install its platform binary and cache its offline database before checks.`,
+      reason: `${lockfiles.join(", ")} lists the dependencies in this project, but none are being checked for known vulnerabilities. OSV-Scanner uses a local advisory database, so its binary and database must be prepared before checks can run.`,
     });
   }
 
@@ -214,7 +214,7 @@ export function buildAuditModel(
         recommended: true,
         priority: "optional",
         actionable: false,
-        reason: "ESLint is already active, so eslint-plugin-boundaries is the smallest non-overlapping architecture option. Its element types and dependency rules are repository-specific and must be configured intentionally.",
+        reason: "ESLint is already active, so eslint-plugin-boundaries can add dependency rules without introducing another lint command. You will need to define which folders or module types may depend on each other.",
       });
     } else if (!eslintActive && !cruiser.activeCapabilities.architectureRules && config.providers?.["dependency-cruiser"]?.enabled !== false) {
       recommendations.push({
@@ -224,7 +224,7 @@ export function buildAuditModel(
         recommended: true,
         priority: "optional",
         actionable: true,
-        reason: "No ESLint architecture rules are active. dependency-cruiser adds standalone cycle protection and a conservative source-to-test boundary without overlapping linting.",
+        reason: "No ESLint architecture rules are active. dependency-cruiser can find dependency cycles and stop production code from importing test code, without changing your existing lint setup.",
       });
     }
   }
@@ -245,7 +245,7 @@ export function buildAuditModel(
       recommended: true,
       priority: "optional",
       actionable: false,
-      reason: "This frontend or publishable package can regress in shipped JavaScript size. Size Limit is appropriate once a real build artifact and an explicit budget are chosen; RepNix will not invent that budget.",
+      reason: "This frontend or publishable package ships JavaScript that can grow over time. Size Limit is useful after you choose a real build artifact and an explicit size budget; RepNix will not guess that budget for you.",
     });
   }
 
@@ -260,7 +260,7 @@ export function buildAuditModel(
         recommended: true,
         priority: "baseline",
         actionable: true,
-        reason: "This repository is publishable to npm, but no active package-manifest and published-file validation is present. Publint checks exports, module formats, entry points, and the actual package contents without overlapping source linting.",
+        reason: "This repository is publishable to npm, but nothing currently checks whether the package metadata, entry points, and published files agree. Publint checks the package consumers will actually install.",
       });
     }
     const attw = detections.get("attw")!;
@@ -277,7 +277,7 @@ export function buildAuditModel(
         recommended: true,
         priority: "baseline",
         actionable: true,
-        reason: `${evidence}, but TypeScript consumer resolution is not actively checked. Are The Types Wrong? validates the locally packed artifact across Node and bundler resolution modes alongside, rather than duplicating, Publint.`,
+        reason: `${evidence}, but TypeScript consumer resolution is not actively checked. Are The Types Wrong? tests the locally packed package in the ways Node and bundlers resolve TypeScript types.`,
       });
     }
   }

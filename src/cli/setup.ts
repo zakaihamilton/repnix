@@ -1,5 +1,6 @@
 import { confirm, isCancel, multiselect, note, outro } from "@clack/prompts";
 import pc from "picocolors";
+import { PROVIDER_DESCRIPTIONS } from "../core/health-category.js";
 import { auditRepository } from "./audit.js";
 import { renderAudit } from "../reporting/console-reporter.js";
 import { applyInstallPlan } from "../setup/apply-plan.js";
@@ -18,14 +19,18 @@ export async function setupCommand(options: DiagnosticOptions = {}): Promise<num
   if (audit.context.diagnostics.some((item) => item.severity === "error")) return 2;
   const setupRecommendations = audit.recommendations.filter((recommendation) => recommendation.actionable);
   if (!setupRecommendations.length) {
-    outro("No setup changes are recommended.");
+    outro("No setup changes are recommended. Your active checks already cover the gaps RepNix found.");
     return 0;
   }
+  note(
+    "Baseline checks are selected because they cover common gaps for most projects. Optional checks need project-specific rules or budgets, so review their explanation before selecting them.",
+    "How to choose checks",
+  );
   const selected = await multiselect({
-    message: "Select providers",
+    message: "Choose the checks to add (Space selects, Enter confirms)",
     options: setupRecommendations.map((recommendation) => ({
       value: recommendation.provider,
-      label: `${recommendation.name} (${recommendation.reason})`,
+      label: `${recommendation.name} — ${PROVIDER_DESCRIPTIONS[recommendation.name] ?? recommendation.reason}`,
     })),
     initialValues: setupRecommendations.filter((recommendation) => recommendation.priority === "baseline").map((recommendation) => recommendation.provider),
     required: false,
@@ -37,9 +42,13 @@ export async function setupCommand(options: DiagnosticOptions = {}): Promise<num
   if (isCancel(includeCi)) return 0;
   const plan = await buildInstallPlan(audit.context, selected as SetupProviderId[], includeCi);
   if (!plan.commands.length && !plan.files.length && !plan.warnings.length && !plan.conflicts.length) {
-    outro("No setup changes are recommended.");
+    outro("No setup changes are needed for the checks you selected.");
     return 0;
   }
+  note(
+    "Review this preview carefully. RepNix may install development packages, add package scripts, create configuration files, and optionally add a GitHub Actions step. Existing conflicting files and scripts are shown instead of overwritten.",
+    "What will change",
+  );
   const preview = [
     ...plan.commands.map((command) => `$ ${command.command} ${command.args.join(" ")}`),
     ...plan.files.map(renderFileDiff),
@@ -47,9 +56,9 @@ export async function setupCommand(options: DiagnosticOptions = {}): Promise<num
     ...plan.conflicts.map((conflict) => `CONFLICT: ${conflict}`),
   ].join("\n\n");
   note(preview || "No changes", "Planned changes");
-  const apply = await confirm({ message: "Apply changes?", initialValue: false });
+  const apply = await confirm({ message: "Apply these reviewed changes?", initialValue: false });
   if (isCancel(apply) || !apply) return 0;
   await applyInstallPlan(audit.context, plan, logger, options.timeout === undefined ? undefined : options.timeout * 1000);
-  outro(pc.green("Repository health setup complete."));
+  outro(pc.green("Repository health setup complete. Run `repnix check` to verify the new checks, or `repnix explain` for details."));
   return 0;
 }

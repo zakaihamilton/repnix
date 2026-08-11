@@ -6,32 +6,34 @@ import { explainCommand } from "./cli/explain.js";
 import { setupCommand } from "./cli/setup.js";
 import { addDiagnosticOptions, type DiagnosticOptions } from "./cli/options.js";
 import { VERSION } from "./core/version.js";
+import { CATEGORY_DESCRIPTIONS, CATEGORY_LABELS, HEALTH_CATEGORIES } from "./core/health-category.js";
 
 const program = new Command()
   .name("repnix")
-  .description("Find and orchestrate missing JavaScript/TypeScript repository health checks")
+  .description("Find missing checks and make JavaScript/TypeScript repositories safer to change")
   .version(VERSION)
-  .showHelpAfterError();
+  .showHelpAfterError()
+  .addHelpText("after", `\nStart here:\n  repnix audit   See what your repository already checks and what is missing.\n  repnix setup   Add recommended checks after reviewing a preview.\n  repnix check   Run all active checks.\n  repnix explain  Read findings in plain language.\n\nHealth categories:\n${HEALTH_CATEGORIES.map((category) => `  ${category.padEnd(16)} ${CATEGORY_LABELS[category]} — ${CATEGORY_DESCRIPTIONS[category]}`).join("\n")}\n`);
 
-addDiagnosticOptions(program.command("audit").description("Inspect repository health guardrails without modifying files")).action(async (options: DiagnosticOptions) => {
+addDiagnosticOptions(program.command("audit").description("Read-only overview of active checks, missing coverage, and recommendations")).action(async (options: DiagnosticOptions) => {
   process.exitCode = await auditCommand(options);
 });
 
-addDiagnosticOptions(program.command("setup").description("Preview and interactively install recommended health providers")).action(async (options: DiagnosticOptions) => {
+addDiagnosticOptions(program.command("setup").description("Review and interactively add recommended checks")).action(async (options: DiagnosticOptions) => {
   process.exitCode = await setupCommand(options);
 });
 
 const check = program
   .command("check")
-  .description("Run configured repository health checks")
-  .argument("[category]", "run one health category")
+  .description("Run all active checks, or one category such as dead-code or security")
+  .argument("[category]", "optional category name, for example dead-code or security")
   .option("--json", "emit versioned JSON to stdout")
   .action(async (category: string | undefined, options: DiagnosticOptions & { json?: boolean }) => {
     process.exitCode = await checkCommand(category, options);
   });
 addDiagnosticOptions(check);
 
-addDiagnosticOptions(program.command("explain").description("Rerun checks and explain normalized findings")).action(async (options: DiagnosticOptions) => {
+addDiagnosticOptions(program.command("explain").description("Rerun checks and explain findings, locations, and next steps")).action(async (options: DiagnosticOptions) => {
   process.exitCode = await explainCommand(options);
 });
 

@@ -87,7 +87,7 @@ describe("CLI", () => {
     temporary.push(root);
     const result = await runCli(root, ["check", "not-a-category", "--verbose"]);
     expect(result.code).toBe(2);
-    expect(result.stderr).toContain("Expected one of");
+    expect(result.stderr).toContain("Use a category name such as 'dead-code' or 'security'");
     expect(result.stderr).toContain("at checkCommand");
   });
 
