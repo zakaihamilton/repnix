@@ -46,7 +46,7 @@ jobs:
           PACKAGE_VERSION: ${{ steps.package.outputs.version }}
         run: |
           set +e
-          output=$(npm view "${PACKAGE_NAME}@${PACKAGE_VERSION}" version --silent 2>&1)
+          output=$(npm view "${PACKAGE_NAME}@${PACKAGE_VERSION}" version 2>&1)
           status=$?
           set -e
           if [ "$status" -eq 0 ]; then
