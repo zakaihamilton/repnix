@@ -61,6 +61,8 @@ export interface RepositoryContext {
   files: Set<string>;
   sourceFiles: string[];
   sourceRoots: string[];
+  workspaceRoots?: string[];
+  workspaceSourceFiles?: Record<string, string[]>;
   diagnostics: RepositoryDiagnostic[];
 }
 
@@ -69,6 +71,10 @@ export interface ProviderCapabilities {
   linting?: boolean;
   formatting?: boolean;
   testing?: boolean;
+  accessibilityRules?: boolean;
+  workspaceConsistency?: boolean;
+  testCoverage?: boolean;
+  mutationTesting?: boolean;
   unusedFiles?: boolean;
   unusedExports?: boolean;
   unusedDependencies?: boolean;
@@ -79,6 +85,13 @@ export interface ProviderCapabilities {
   bundleBudget?: boolean;
   packagePublishing?: boolean;
   typesCompatibility?: boolean;
+  secrets?: boolean;
+  licenses?: boolean;
+  documentation?: boolean;
+  performance?: boolean;
+  release?: boolean;
+  ciWorkflow?: boolean;
+  codeSecurity?: boolean;
 }
 
 export interface ProviderDetection {
@@ -158,6 +171,7 @@ export interface HealthResult {
   findings: HealthFinding[];
   durationMs: number;
   message?: string;
+  scope?: string;
 }
 
 export interface HealthRun {
@@ -169,6 +183,7 @@ export interface HealthRun {
     kinds: RepositoryKind[];
     frameworks: string[];
     languages: string[];
+    workspaces?: string[];
   };
   summary: {
     status: "healthy" | "findings" | "error";

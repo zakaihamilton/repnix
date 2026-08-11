@@ -3,6 +3,7 @@ export const HEALTH_CATEGORIES = [
   "lint",
   "format",
   "tests",
+  "coverage",
   "dead-code",
   "duplication",
   "security",
@@ -10,6 +11,12 @@ export const HEALTH_CATEGORIES = [
   "bundle",
   "accessibility",
   "monorepo",
+  "secrets",
+  "licenses",
+  "documentation",
+  "performance",
+  "release",
+  "ci",
   "package-health",
 ] as const;
 
@@ -20,6 +27,7 @@ export const CATEGORY_LABELS: Record<HealthCategory, string> = {
   lint: "Linting",
   format: "Formatting",
   tests: "Tests",
+  coverage: "Test coverage",
   "dead-code": "Dead code",
   duplication: "Duplication",
   security: "Dependency security",
@@ -27,6 +35,12 @@ export const CATEGORY_LABELS: Record<HealthCategory, string> = {
   bundle: "Bundle regression",
   accessibility: "Accessibility",
   monorepo: "Monorepo consistency",
+  secrets: "Secret scanning",
+  licenses: "License policy",
+  documentation: "Documentation",
+  performance: "Performance budgets",
+  release: "Release readiness",
+  ci: "CI workflow health",
   "package-health": "Package publishing",
 };
 
@@ -36,6 +50,7 @@ export const CATEGORY_DESCRIPTIONS: Record<HealthCategory, string> = {
   lint: "Finds suspicious or inconsistent code patterns while you are developing.",
   format: "Keeps code style consistent so reviews can focus on behavior.",
   tests: "Runs automated tests that protect existing behavior from regressions.",
+  coverage: "Measures whether tests exercise enough of the code and behavior that matter.",
   "dead-code": "Finds files, exports, and dependencies that nothing in the project uses.",
   duplication: "Finds repeated code that can drift apart when one copy changes.",
   security: "Checks third-party dependencies for publicly known security vulnerabilities.",
@@ -43,6 +58,12 @@ export const CATEGORY_DESCRIPTIONS: Record<HealthCategory, string> = {
   bundle: "Checks that shipped JavaScript stays within a deliberate size budget.",
   accessibility: "Checks whether user interfaces can be used by people with different abilities.",
   monorepo: "Checks whether packages in a monorepo follow the project’s shared rules.",
+  secrets: "Finds credentials and other sensitive values that should not be committed.",
+  licenses: "Checks dependency licenses against the project’s allowed and denied license policy.",
+  documentation: "Checks Markdown and public documentation for broken or inconsistent structure.",
+  performance: "Protects web and build performance with explicit budgets.",
+  release: "Checks versioning, changelog, and release metadata before publishing.",
+  ci: "Checks CI workflows for syntax errors and unsafe automation patterns.",
   "package-health": "Checks what consumers receive when an npm package is published.",
 };
 
@@ -55,6 +76,8 @@ export const PROVIDER_DESCRIPTIONS: Record<string, string> = {
   Oxfmt: "Checks that files follow one consistent formatting style.",
   Jest: "Runs automated tests for your project.",
   Vitest: "Runs automated tests for your project.",
+  c8: "Measures test coverage and can enforce coverage thresholds.",
+  Stryker: "Mutates code to measure whether tests catch behavioral changes.",
   "Test script": "Uses the project’s existing test command.",
   Knip: "Finds unused files, exports, and dependencies.",
   jscpd: "Finds copy-and-paste code that may become inconsistent.",
@@ -64,10 +87,21 @@ export const PROVIDER_DESCRIPTIONS: Record<string, string> = {
   "Size Limit": "Checks that built JavaScript stays below configured size budgets.",
   Publint: "Checks package exports, entry points, metadata, and published files.",
   "Are The Types Wrong?": "Checks whether published TypeScript types work for consumers.",
+  "eslint-plugin-jsx-a11y": "Checks common accessibility problems in JSX.",
+  syncpack: "Checks dependency versions and package metadata across workspaces.",
+  Gitleaks: "Scans repository history and files for leaked secrets.",
+  "license-checker": "Reports dependency licenses for comparison with project policy.",
+  markdownlint: "Checks Markdown structure and style.",
+  "Lighthouse CI": "Checks configured web performance budgets.",
+  Changesets: "Checks release metadata and pending package changes.",
+  actionlint: "Checks GitHub Actions workflow syntax and common mistakes.",
 };
 
 export const PROVIDER_NEXT_STEPS: Record<string, string> = {
   "OSV-Scanner": "Next step: install the OSV-Scanner binary and prepare its local vulnerability database.",
   "eslint-plugin-boundaries": "Next step: define the folder or module boundary rules in your ESLint configuration.",
   "Size Limit": "Next step: choose a build artifact and set an explicit size budget.",
+  "eslint-plugin-jsx-a11y": "Next step: enable the plugin’s recommended rules in the existing ESLint configuration.",
+  Gitleaks: "Next step: install the Gitleaks binary or make it available in CI.",
+  actionlint: "Next step: install actionlint or add it to the CI image.",
 };

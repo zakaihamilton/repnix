@@ -36,6 +36,26 @@ describe("configuration", () => {
     }
   });
 
+  it("accepts repository policies and expanded providers", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "repnix-config-"));
+    try {
+      await writeFile(path.join(root, "repnix.config.json"), JSON.stringify({
+        policies: {
+          licenses: { allow: ["MIT"], deny: ["GPL-3.0-only"] },
+          coverage: { lines: 80, branches: 70 },
+          performance: { maxLcpMs: 2500, maxCls: 0.1 },
+        },
+        providers: { syncpack: { enabled: true }, gitleaks: { enabled: false }, markdownlint: { enabled: true } },
+      }));
+      expect((await readConfig(root)).config).toMatchObject({
+        policies: { licenses: { allow: ["MIT"] }, coverage: { lines: 80 } },
+        providers: { syncpack: { enabled: true }, gitleaks: { enabled: false } },
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("rejects unknown configuration fields", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "repnix-config-"));
     try {

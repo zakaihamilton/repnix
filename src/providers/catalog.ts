@@ -7,7 +7,7 @@ import type {
   RepositoryContext,
 } from "../core/types.js";
 import type { HealthCategory } from "../core/health-category.js";
-import { isNonMutatingTestCommand } from "../repository/script-detection.js";
+import { isNonMutatingQualityCommand, isNonMutatingTestCommand } from "../repository/script-detection.js";
 
 export interface ProviderDescriptor {
   id: string;
@@ -24,6 +24,8 @@ export interface ProviderDescriptor {
   activeConfigPattern?: RegExp;
   requiresConfiguration?: boolean;
   scriptNames?: string[];
+  scriptKind?: "test" | "quality";
+  command?: { binary: string; args: string[]; searchPath?: boolean };
 }
 
 export const PROVIDERS: ProviderDescriptor[] = [
@@ -114,6 +116,29 @@ export const PROVIDERS: ProviderDescriptor[] = [
     capabilities: { testing: true },
   },
   {
+    id: "c8",
+    name: "c8",
+    category: "coverage",
+    packages: ["c8"],
+    configPatterns: [/(^|\/)(?:\.c8rc(?:\.[^/]+)?|c8\.config\.[cm]?[jt]s)$/],
+    scriptPattern: /(^|\s|&&|\|)c8(?:\s|$)/,
+    scriptNames: ["coverage", "test:coverage", "check:coverage"],
+    scriptKind: "test",
+    capabilities: { testCoverage: true },
+    zeroConfig: true,
+  },
+  {
+    id: "stryker",
+    name: "Stryker",
+    category: "coverage",
+    packages: ["@stryker-mutator/core"],
+    configPatterns: [/(^|\/)stryker\.config\.[cm]?[jt]s$/],
+    scriptPattern: /(^|\s|&&|\|)stryker(?:\s|$)/,
+    capabilities: { mutationTesting: true },
+    command: { binary: "stryker", args: ["run"] },
+    requiresConfiguration: true,
+  },
+  {
     id: "knip",
     name: "Knip",
     category: "dead-code",
@@ -151,6 +176,17 @@ export const PROVIDERS: ProviderDescriptor[] = [
     zeroConfig: true,
   },
   {
+    id: "jsx-a11y",
+    name: "eslint-plugin-jsx-a11y",
+    category: "accessibility",
+    packages: ["eslint-plugin-jsx-a11y"],
+    configPatterns: [/(^|\/)eslint\.config\.[cm]?[jt]s$/, /(^|\/)\.eslintrc(?:\.[^/]+)?$/],
+    scriptPattern: /(^|\s|&&|\|)eslint(?:\s|$)/,
+    capabilities: { accessibilityRules: true },
+    activeConfigPattern: /jsx-a11y/,
+    requiresConfiguration: true,
+  },
+  {
     id: "eslint-boundaries",
     name: "eslint-plugin-boundaries",
     category: "architecture",
@@ -183,6 +219,85 @@ export const PROVIDERS: ProviderDescriptor[] = [
     packageJsonConfigKey: "size-limit",
     activeConfigPattern: /(?:limit\s*:|"limit"\s*:)/,
     requiresConfiguration: true,
+  },
+  {
+    id: "syncpack",
+    name: "syncpack",
+    category: "monorepo",
+    packages: ["syncpack"],
+    configPatterns: [/(^|\/)\.syncpack(?:\.[^/]+)?$/],
+    scriptPattern: /(^|\s|&&|\|)syncpack(?:\s|$)/,
+    capabilities: { workspaceConsistency: true },
+    command: { binary: "syncpack", args: ["list-mismatches"] },
+    zeroConfig: true,
+  },
+  {
+    id: "gitleaks",
+    name: "Gitleaks",
+    category: "secrets",
+    packages: [],
+    configPatterns: [/(^|\/)\.gitleaks\.(?:toml|ya?ml)$/],
+    scriptPattern: /(^|\s|&&|\|)gitleaks(?:\s|$)/,
+    capabilities: { secrets: true },
+    binary: "gitleaks",
+    searchPath: true,
+    command: { binary: "gitleaks", args: ["detect", "--source", ".", "--no-banner", "--redact", "--exit-code", "1"], searchPath: true },
+    zeroConfig: true,
+  },
+  {
+    id: "license-checker",
+    name: "license-checker",
+    category: "licenses",
+    packages: ["license-checker"],
+    configPatterns: [],
+    scriptPattern: /(^|\s|&&|\|)license-checker(?:\s|$)/,
+    capabilities: { licenses: true },
+    command: { binary: "license-checker", args: ["--json"] },
+    zeroConfig: true,
+  },
+  {
+    id: "markdownlint",
+    name: "markdownlint",
+    category: "documentation",
+    packages: ["markdownlint-cli2"],
+    configPatterns: [/(^|\/)\.markdownlint(?:[.-][^/]+)?$/],
+    scriptPattern: /(^|\s|&&|\|)markdownlint(?:-cli2)?(?:\s|$)/,
+    capabilities: { documentation: true },
+    command: { binary: "markdownlint-cli2", args: ["**/*.md"] },
+    zeroConfig: true,
+  },
+  {
+    id: "lhci",
+    name: "Lighthouse CI",
+    category: "performance",
+    packages: ["@lhci/cli"],
+    configPatterns: [/(^|\/)lighthouserc\.[cm]?[jt]s(?:on)?$/],
+    scriptPattern: /(^|\s|&&|\|)lhci(?:\s|$)/,
+    capabilities: { performance: true },
+    requiresConfiguration: true,
+  },
+  {
+    id: "changesets",
+    name: "Changesets",
+    category: "release",
+    packages: ["@changesets/cli"],
+    configPatterns: [/(^|\/)\.changeset\/config\.json$/],
+    scriptPattern: /(^|\s|&&|\|)changeset(?:\s|$)/,
+    capabilities: { release: true },
+    requiresConfiguration: true,
+  },
+  {
+    id: "actionlint",
+    name: "actionlint",
+    category: "ci",
+    packages: [],
+    configPatterns: [/(^|\/)\.github\/workflows\/[^/]+\.ya?ml$/],
+    scriptPattern: /(^|\s|&&|\|)actionlint(?:\s|$)/,
+    capabilities: { ciWorkflow: true },
+    binary: "actionlint",
+    searchPath: true,
+    command: { binary: "actionlint", args: [".github/workflows"], searchPath: true },
+    zeroConfig: true,
   },
   {
     id: "publint",
@@ -240,10 +355,9 @@ export async function detectProvider(
       // Repository diagnostics handle malformed manifests; unreadable optional tool configs stay inactive.
     }
   }
-  const rootConfigFiles = configFiles.filter((file) => !file.includes("/"));
   const scriptEntries = Object.entries(context.scripts).filter(([name, command]) =>
     descriptor.scriptNames
-      ? descriptor.scriptNames.includes(name) && isNonMutatingTestCommand(command)
+      ? descriptor.scriptNames.includes(name) && (descriptor.scriptKind === "quality" ? isNonMutatingQualityCommand(command) : isNonMutatingTestCommand(command))
       : descriptor.scriptPattern.test(command),
   );
   const packageConfigKey = descriptor.packageJsonConfigKey ?? descriptor.id;
@@ -256,9 +370,9 @@ export async function detectProvider(
     : false;
   const configured = configFiles.length > 0 || scriptEntries.length > 0 || packageJsonConfigActive;
   const active = descriptor.requiresConfiguration
-    ? installed && (rootConfigFiles.length > 0 || packageJsonConfigActive)
+    ? installed && (configFiles.length > 0 || packageJsonConfigActive)
     : scriptEntries.length > 0 ||
-      ((installedAtRoot || Boolean(pathBinary)) && (rootConfigFiles.length > 0 || packageJsonConfigActive || descriptor.zeroConfig === true));
+      ((installedAtRoot || Boolean(pathBinary)) && (configFiles.length > 0 || packageJsonConfigActive || descriptor.zeroConfig === true));
   const evidence: string[] = [];
   if (packageName) evidence.push(`${packageName} ${context.installedPackages.get(packageName)}`);
   if (pathBinary) evidence.push(pathBinary);

@@ -30,6 +30,9 @@ describe("repository detection", () => {
     expect(library.kinds).toContain("npm-library");
     expect(monorepo).toMatchObject({ packageManager: "pnpm", isMonorepo: true, packageCount: 3 });
     expect(monorepo.installedPackageOrigins.get("typescript")).toContain("packages/a/package.json");
+    expect(monorepo.workspaceRoots).toEqual([".", "packages/a", "packages/b"]);
+    expect(monorepo.workspaceSourceFiles?.["packages/a"]).toContain("packages/a/src/index.ts");
+    expect((await detectAllProviders(monorepo)).get("syncpack")?.activeCapabilities.workspaceConsistency).toBeUndefined();
   });
 
   it("reports conflicting lockfiles instead of guessing", async () => {
@@ -96,5 +99,22 @@ describe("repository detection", () => {
     expect(providers.get("oxfmt")?.activeCapabilities.formatting).toBe(true);
     expect(providers.get("vitest")?.activeCapabilities.testing).toBe(true);
     expect(providers.get("test-script")?.activeCapabilities.testing).toBeUndefined();
+  });
+
+  it("credits configured accessibility rules and workspace consistency", async () => {
+    const reactRoot = await copyFixture("react-eslint");
+    temporary.push(reactRoot);
+    const reactManifestPath = path.join(reactRoot, "package.json");
+    const reactManifest = JSON.parse(await readFile(reactManifestPath, "utf8")) as { devDependencies: Record<string, string> };
+    reactManifest.devDependencies["eslint-plugin-jsx-a11y"] = "^6.10.2";
+    await writeFile(reactManifestPath, `${JSON.stringify(reactManifest, null, 2)}\n`);
+    await writeFile(path.join(reactRoot, "eslint.config.js"), `export default [{ plugins: { "jsx-a11y": {} }, rules: { "jsx-a11y/alt-text": "error" } }];\n`);
+    const reactProviders = await detectAllProviders(await detectRepository(reactRoot));
+    expect(reactProviders.get("jsx-a11y")?.activeCapabilities.accessibilityRules).toBe(true);
+
+    const monorepo = await detectRepository(fixturePath("pnpm-monorepo"));
+    monorepo.installedPackages.set("syncpack", "^14.0.0");
+    monorepo.installedPackageOrigins.set("syncpack", ["package.json"]);
+    expect((await detectAllProviders(monorepo)).get("syncpack")?.activeCapabilities.workspaceConsistency).toBe(true);
   });
 });

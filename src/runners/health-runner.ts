@@ -22,6 +22,7 @@ import { normalizePublint } from "../providers/publint/normalizer.js";
 import { normalizeAttw } from "../providers/attw/normalizer.js";
 import { resolveDiagnosticLogger, type DiagnosticLogger } from "../cli/options.js";
 import { runCommand, type CommandResult } from "./command-runner.js";
+import { PROVIDERS, type ProviderDescriptor } from "../providers/catalog.js";
 
 export interface RunHealthOptions {
   category?: HealthCategory;
@@ -42,6 +43,16 @@ interface RunnableCommand {
   env?: NodeJS.ProcessEnv;
   timeoutMs?: number;
 }
+
+const GENERIC_SCRIPT_PROVIDERS: Array<{ id: string; category: HealthCategory; names: string[]; kind: "general" | "test" }> = [
+  { id: "c8", category: "coverage", names: ["health:coverage", "coverage", "test:coverage", "check:coverage"], kind: "test" },
+  { id: "stryker", category: "coverage", names: ["health:mutation", "mutation", "stryker"], kind: "general" },
+  { id: "syncpack", category: "monorepo", names: ["health:monorepo", "monorepo", "syncpack"], kind: "general" },
+  { id: "license-checker", category: "licenses", names: ["health:licenses", "licenses", "license-checker"], kind: "general" },
+  { id: "markdownlint", category: "documentation", names: ["health:documentation", "documentation", "docs", "markdownlint"], kind: "general" },
+  { id: "lhci", category: "performance", names: ["health:performance", "performance", "lhci"], kind: "general" },
+  { id: "changesets", category: "release", names: ["health:release", "release", "changeset:status"], kind: "general" },
+];
 
 const HEALTH_OFFLINE_ENV: NodeJS.ProcessEnv = {
   COREPACK_ENABLE_NETWORK: "0",
@@ -84,9 +95,9 @@ async function executableBinary(root: string, binary: string, searchPath = false
   return null;
 }
 
-function safeScript(context: RepositoryContext, names: string[], kind: "general" | "format" | "test"): string | null {
+function safeScriptFrom(scripts: Record<string, string>, names: string[], kind: "general" | "format" | "test"): string | null {
   for (const name of names) {
-    const command = context.scripts[name];
+    const command = scripts[name];
     if (!command) continue;
     if (/--fix(?:\s|$)|--write(?:\s|$)|\bwatch\b|--watch/.test(command)) continue;
     if (kind === "test" && !isNonMutatingTestCommand(command)) continue;
@@ -95,6 +106,10 @@ function safeScript(context: RepositoryContext, names: string[], kind: "general"
     return name;
   }
   return null;
+}
+
+function safeScript(context: RepositoryContext, names: string[], kind: "general" | "format" | "test"): string | null {
+  return safeScriptFrom(context.scripts, names, kind);
 }
 
 function scriptCommand(context: RepositoryContext, script: string): Pick<RunnableCommand, "command" | "args" | "env"> {
@@ -110,6 +125,28 @@ function scriptCommand(context: RepositoryContext, script: string): Pick<Runnabl
       npm_lifecycle_event: script,
       npm_package_json: path.join(context.root, "package.json"),
       PATH: `${path.join(context.root, "node_modules", ".bin")}${path.delimiter}${process.env.PATH ?? ""}`,
+    },
+  };
+}
+
+function workspaceScriptCommand(context: RepositoryContext, workspace: string, script: string): Pick<RunnableCommand, "command" | "args" | "env"> {
+  const packageManager = context.packageManager!;
+  const args = packageManager === "npm"
+    ? ["run", "--prefix", workspace, script]
+    : packageManager === "pnpm"
+      ? ["--dir", workspace, "run", script]
+      : packageManager === "yarn"
+        ? ["--cwd", workspace, script]
+        : ["--cwd", workspace, "run", script];
+  return {
+    command: packageManager,
+    args,
+    env: {
+      CI: "1",
+      INIT_CWD: context.root,
+      npm_lifecycle_event: script,
+      npm_package_json: path.join(context.root, workspace, "package.json"),
+      PATH: `${path.join(context.root, workspace, "node_modules", ".bin")}${path.delimiter}${path.join(context.root, "node_modules", ".bin")}${path.delimiter}${process.env.PATH ?? ""}`,
     },
   };
 }
@@ -264,7 +301,156 @@ async function basicCommands(
       commands.push({ provider: id, name, category: "tests", command: binary, args, env: { CI: "1" }, ...(timeoutMs === undefined ? {} : { timeoutMs }) });
     }
   }
+  for (const provider of GENERIC_SCRIPT_PROVIDERS) {
+    if (!Object.keys(detections.get(provider.id)?.activeCapabilities ?? {}).length) continue;
+    const script = safeScript(context, provider.names, provider.kind);
+    if (!script || commands.some((command) => command.provider === `script:${script}`)) continue;
+    commands.push({
+      provider: provider.id,
+      name: PROVIDERS.find((descriptor) => descriptor.id === provider.id)?.name ?? provider.id,
+      category: provider.category,
+      ...scriptCommand(context, script),
+      ...(timeoutMs === undefined ? {} : { timeoutMs }),
+    });
+  }
+  for (const manifest of context.manifests) {
+    const workspace = path.posix.dirname(manifest.path.replaceAll(path.sep, "/"));
+    if (workspace === ".") continue;
+    const scripts = manifest.packageJson.scripts ?? {};
+    const checks: Array<{ category: HealthCategory; names: string[]; kind: "general" | "test" }> = [
+      { category: "types", names: ["typecheck", "type-check", "check:types"], kind: "general" },
+      { category: "lint", names: ["lint", "check:lint", "lint:check"], kind: "general" },
+      { category: "format", names: ["format:check", "check:format", "format-check"], kind: "general" },
+      { category: "tests", names: ["test", "test:run", "check:test"], kind: "test" },
+    ];
+    for (const check of checks) {
+      const script = safeScriptFrom(scripts, check.names, check.kind);
+      if (!script) continue;
+      commands.push({
+        provider: `workspace:${workspace}:${script}`,
+        name: `${workspace} ${script}`,
+        category: check.category,
+        ...workspaceScriptCommand(context, workspace, script),
+        ...(timeoutMs === undefined ? {} : { timeoutMs }),
+      });
+    }
+  }
   return commands;
+}
+
+async function genericProviderCommand(
+  context: RepositoryContext,
+  descriptor: ProviderDescriptor,
+  timeoutMs?: number,
+): Promise<RunnableCommand | null> {
+  if (!descriptor.command) return null;
+  const binary = await executableBinary(context.root, descriptor.command.binary, descriptor.command.searchPath === true);
+  const args = descriptor.id === "actionlint"
+    ? [...context.files].filter((file) => /^\.github\/workflows\/.*\.ya?ml$/.test(file))
+    : descriptor.command.args;
+  if (!binary) {
+    return {
+      provider: descriptor.id,
+      name: descriptor.name,
+      category: descriptor.category,
+      command: path.join(context.root, "node_modules", ".bin", descriptor.command.binary),
+      args,
+      ...(timeoutMs === undefined ? {} : { timeoutMs }),
+    };
+  }
+  return {
+    provider: descriptor.id,
+    name: descriptor.name,
+    category: descriptor.category,
+    command: binary,
+    args,
+    ...(timeoutMs === undefined ? {} : { timeoutMs }),
+  };
+}
+
+async function runGenericProvider(
+  context: RepositoryContext,
+  descriptor: ProviderDescriptor,
+  diagnostics: DiagnosticLogger,
+  timeoutMs?: number,
+): Promise<HealthResult> {
+  const runnable = await genericProviderCommand(context, descriptor, timeoutMs);
+  if (!runnable) return { provider: descriptor.id, name: descriptor.name, category: descriptor.category, status: "skipped", findings: [], durationMs: 0, message: "This provider is detection-only until a repository command is configured." };
+  const result = await runCommand(runnable.command, runnable.args, {
+    cwd: context.root,
+    logger: diagnostics,
+    env: { ...HEALTH_OFFLINE_ENV },
+    ...(timeoutMs === undefined ? {} : { timeoutMs }),
+  });
+  return commandResult(runnable, result);
+}
+
+async function runCoveragePolicy(
+  context: RepositoryContext,
+  config: RepnixConfig,
+  diagnostics: DiagnosticLogger,
+  timeoutMs?: number,
+): Promise<HealthResult> {
+  const script = safeScript(context, ["test", "test:run", "check:test"], "test");
+  const thresholds = config.policies?.coverage;
+  if (!script || !thresholds || !Object.keys(thresholds).length) {
+    return { provider: "c8", name: "c8", category: "coverage", status: "skipped", findings: [], durationMs: 0, message: "Coverage is detected, but no coverage policy and test command are configured." };
+  }
+  const args = ["--check-coverage"];
+  for (const [key, value] of Object.entries(thresholds)) {
+    if (typeof value === "number") args.push(`--${key}`, String(value));
+  }
+  const testArgs = context.packageManager === "npm"
+    ? ["run", script]
+    : context.packageManager === "pnpm"
+      ? ["run", script]
+      : context.packageManager === "yarn"
+        ? [script]
+        : ["run", script];
+  const runnable: RunnableCommand = {
+    provider: "c8",
+    name: "c8",
+    category: "coverage",
+    command: await expectedLocalBinary(context.root, "c8"),
+    args: [...args, context.packageManager!, ...testArgs],
+    ...(timeoutMs === undefined ? {} : { timeoutMs }),
+  };
+  return commandResult(runnable, await runCommand(runnable.command, runnable.args, {
+    cwd: context.root,
+    logger: diagnostics,
+    env: HEALTH_OFFLINE_ENV,
+    ...(timeoutMs === undefined ? {} : { timeoutMs }),
+  }));
+}
+
+async function runLicensePolicy(
+  context: RepositoryContext,
+  config: RepnixConfig,
+  diagnostics: DiagnosticLogger,
+  timeoutMs?: number,
+): Promise<HealthResult> {
+  const binary = await localBinary(context.root, "license-checker");
+  if (!binary) return { provider: "license-checker", name: "license-checker", category: "licenses", status: "error", findings: [], durationMs: 0, message: "license-checker is declared but its local binary is unavailable. Install dependencies first." };
+  const result = await runCommand(binary, ["--json"], { cwd: context.root, logger: diagnostics, env: HEALTH_OFFLINE_ENV, ...(timeoutMs === undefined ? {} : { timeoutMs }) });
+  if (result.spawnError) return { provider: "license-checker", name: "license-checker", category: "licenses", status: "error", findings: [], durationMs: result.durationMs, message: result.spawnError };
+  try {
+    const report = parseJsonOutput(result.stdout);
+    const allow = new Set(config.policies?.licenses?.allow ?? []);
+    const deny = new Set(config.policies?.licenses?.deny ?? []);
+    const findings: HealthFinding[] = [];
+    if (report && typeof report === "object") {
+      for (const [dependency, value] of Object.entries(report as Record<string, unknown>)) {
+        const license = value && typeof value === "object" && typeof (value as Record<string, unknown>).licenses === "string"
+          ? (value as Record<string, unknown>).licenses as string
+          : "UNKNOWN";
+        const denied = deny.has(license) || (allow.size > 0 && !allow.has(license));
+        if (denied) findings.push(createFinding({ provider: "license-checker", category: "licenses", type: "license-policy", severity: "error", message: `${dependency} uses license ${license}, which is outside the configured license policy.`, metadata: { dependency, license } }));
+      }
+    }
+    return { provider: "license-checker", name: "license-checker", category: "licenses", status: statusForFindings(findings), findings, durationMs: result.durationMs };
+  } catch (error) {
+    return { provider: "license-checker", name: "license-checker", category: "licenses", status: "error", findings: [], durationMs: result.durationMs, message: `${error instanceof Error ? error.message : String(error)} ${outputExcerpt(result)}`.trim() };
+  }
 }
 
 function parseJsonOutput(stdout: string): unknown {
@@ -602,7 +788,7 @@ export async function runHealth(
   const logger = resolveDiagnosticLogger(options.logger ?? options);
   const timeoutMs = options.timeout === undefined ? undefined : options.timeout * 1000;
   const results: HealthResult[] = [];
-  const enabled = (provider: keyof NonNullable<RepnixConfig["providers"]>) => config.providers?.[provider]?.enabled !== false;
+  const enabled = (provider: string) => (config.providers as Record<string, { enabled: boolean }> | undefined)?.[provider]?.enabled !== false;
   if (!context.packageManager || context.diagnostics.some((item) => item.severity === "error")) {
     results.push({ provider: "repnix", name: "RepNix configuration", category: options.category ?? "types", status: "error", findings: [], durationMs: 0, message: context.diagnostics.find((item) => item.severity === "error")?.message ?? "Package manager unresolved" });
   } else {
@@ -664,6 +850,31 @@ export async function runHealth(
     if ((!options.category || options.category === "package-health") && config.categories?.["package-health"] !== "off" && detections.get("attw")?.activeCapabilities.typesCompatibility && enabled("attw")) {
       results.push(await runAttw(context, logger, timeoutMs));
     }
+    if ((!options.category || options.category === "accessibility") && config.categories?.accessibility !== "off" && detections.get("jsx-a11y")?.activeCapabilities.accessibilityRules && enabled("jsx-a11y")) {
+      const lint = results.find((result) => result.category === "lint");
+      results.push({
+        provider: "jsx-a11y",
+        name: "eslint-plugin-jsx-a11y",
+        category: "accessibility",
+        status: lint?.status === "pass" ? "pass" : lint?.status === "error" ? "error" : lint?.status === "fail" ? "fail" : "skipped",
+        findings: [],
+        durationMs: 0,
+        ...(lint && lint.status !== "pass" ? { message: "Accessibility rules ran through the existing lint command; see the lint result." } : {}),
+      });
+    }
+    for (const descriptor of PROVIDERS) {
+      if (!descriptor.command || !Object.keys(detections.get(descriptor.id)?.activeCapabilities ?? {}).length) continue;
+      if (options.category && descriptor.category !== options.category) continue;
+      if (config.categories?.[descriptor.category] === "off" || !enabled(descriptor.id)) continue;
+      if (results.some((result) => result.provider === descriptor.id)) continue;
+      if (["osv-scanner", "dependency-cruiser", "size-limit", "publint", "attw"].includes(descriptor.id)) continue;
+      results.push(descriptor.id === "license-checker"
+        ? await runLicensePolicy(context, config, logger, timeoutMs)
+        : await runGenericProvider(context, descriptor, logger, timeoutMs));
+    }
+    if ((!options.category || options.category === "coverage") && config.categories?.coverage !== "off" && detections.get("c8")?.activeCapabilities.testCoverage && enabled("c8") && !results.some((result) => result.provider === "c8")) {
+      results.push(await runCoveragePolicy(context, config, logger, timeoutMs));
+    }
   }
 
   results.sort((a, b) => categoryOrder(a.category) - categoryOrder(b.category) || a.name.localeCompare(b.name));
@@ -685,6 +896,7 @@ export async function runHealth(
       kinds: context.kinds,
       frameworks: context.frameworks,
       languages: context.languages,
+      ...(context.workspaceRoots ? { workspaces: context.workspaceRoots } : {}),
     },
     summary: {
       status: exitCode === 2 ? "error" : exitCode === 1 ? "findings" : "healthy",

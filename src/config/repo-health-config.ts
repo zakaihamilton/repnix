@@ -19,6 +19,24 @@ const schema = z
         "size-limit": providerConfig.optional(),
         publint: providerConfig.optional(),
         attw: providerConfig.optional(),
+        c8: providerConfig.optional(),
+        stryker: providerConfig.optional(),
+        "jsx-a11y": providerConfig.optional(),
+        syncpack: providerConfig.optional(),
+        gitleaks: providerConfig.optional(),
+        "license-checker": providerConfig.optional(),
+        markdownlint: providerConfig.optional(),
+        lhci: providerConfig.optional(),
+        changesets: providerConfig.optional(),
+        actionlint: providerConfig.optional(),
+      })
+      .strict()
+      .optional(),
+    policies: z
+      .object({
+        licenses: z.object({ allow: z.array(z.string()).optional(), deny: z.array(z.string()).optional() }).strict().optional(),
+        coverage: z.object({ lines: z.number().min(0).max(100).optional(), functions: z.number().min(0).max(100).optional(), branches: z.number().min(0).max(100).optional(), statements: z.number().min(0).max(100).optional() }).strict().optional(),
+        performance: z.object({ maxLcpMs: z.number().positive().optional(), maxCls: z.number().nonnegative().optional(), maxTbtMs: z.number().positive().optional() }).strict().optional(),
       })
       .strict()
       .optional(),

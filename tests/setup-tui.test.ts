@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { createSetupTuiTheme, diffLineColor, normalizeTuiDiffLine, selectionIndicator, selectionRowPresentation, setupCheckDetails, tuiLayoutMetrics } from "../src/tui/setup-app.js";
+import { AUDIT_LABEL_COLUMN_WIDTH, AUDIT_TWO_COLUMN_MIN_WIDTH, COMPACT_LAYOUT_HEIGHT, COMPACT_LAYOUT_WIDTH, HORIZONTAL_PANE_MIN_WIDTH, auditContentLineCount, auditPageSummary, auditRecommendationSummary, auditSetupOptions, auditStatusPresentation, auditUsesSingleColumn, clampTuiScroll, createSetupTuiTheme, diffLineColor, normalizeTuiDiffLine, selectedSetupOptions, selectionIndicator, selectionRowPresentation, setupCheckDetails, setupPaneLayout, setupStepIndex, tuiLayoutMetrics } from "../src/tui/setup-app.js";
 import { createSetupTuiModel, selectionItems, setupTuiReducer } from "../src/tui/setup-state.js";
-import type { Recommendation } from "../src/recommendations/recommendation-engine.js";
+import type { AuditModel, Recommendation } from "../src/recommendations/recommendation-engine.js";
 import type { RepositoryContext } from "../src/core/types.js";
 
 const recommendations: Recommendation[] = [
@@ -112,6 +112,66 @@ describe("setup TUI presentation", () => {
     expect(tuiLayoutMetrics(1)).toEqual({ bodyHeight: 1, detailViewport: 1 });
   });
 
+  it("summarizes the audit page facts, coverage states, and recommendation priorities", () => {
+    const audit: AuditModel = {
+      context: {
+        ...context,
+        packageJson: { name: "example-app" },
+        packageManager: "pnpm",
+        frameworks: ["React"],
+        languages: ["TypeScript"],
+        hasCI: true,
+        packageCount: 3,
+        workspaceRoots: [".", "packages/core", "packages/web"],
+      },
+      detections: new Map(),
+      coverage: [
+        { category: "types", status: "covered", providers: ["TypeScript"], capabilities: ["typeChecking"], missingCapabilities: [] },
+        { category: "security", status: "missing", providers: [], capabilities: [], missingCapabilities: ["vulnerabilities"] },
+      ],
+      recommendations,
+    };
+    expect(auditPageSummary(audit)).toMatchObject({ repositoryName: "example-app", packageManager: "pnpm", ci: "GitHub Actions", workspaceCount: 2 });
+    expect(auditRecommendationSummary(recommendations)).toEqual({ baseline: 2, optional: 1, advanced: 0, total: 3 });
+    expect(auditRecommendationSummary(recommendations, true)).toEqual({ baseline: 1, optional: 1, advanced: 0, total: 2 });
+    expect(auditSetupOptions(audit)).toEqual(["jscpd", "dependency-cruiser", "GitHub Actions health step"]);
+    expect(auditContentLineCount(audit, true)).toBe(12);
+    expect(auditContentLineCount(audit, false)).toBe(11);
+    expect(auditContentLineCount(audit, true, 40)).toBeGreaterThan(auditContentLineCount(audit, true, 80));
+    const setupModel = createSetupTuiModel(recommendations);
+    setupModel.selectedProviders = ["jscpd", "dependency-cruiser"];
+    setupModel.includeCi = true;
+    expect(selectedSetupOptions(audit, setupModel)).toEqual(["jscpd", "dependency-cruiser", "GitHub Actions health step"]);
+    const theme = createSetupTuiTheme({ isTTY: false, hasColors: () => false });
+    expect(auditStatusPresentation("covered", theme)).toMatchObject({ symbol: "✓" });
+    expect(auditStatusPresentation("missing", theme)).toMatchObject({ symbol: "✗" });
+  });
+
+  it("maps the four setup steps to the correct active header step", () => {
+    expect(setupStepIndex("audit")).toBe(0);
+    expect(setupStepIndex("select")).toBe(1);
+    expect(setupStepIndex("review")).toBe(2);
+    expect(setupStepIndex("applying")).toBe(3);
+    expect(AUDIT_LABEL_COLUMN_WIDTH).toBe(25);
+  });
+
+  it("chooses pane layout from terminal aspect ratio and constrained dimensions", () => {
+    expect(setupPaneLayout(80, 100)).toBe("vertical");
+    expect(setupPaneLayout(174, 45)).toBe("horizontal");
+    expect(setupPaneLayout(COMPACT_LAYOUT_WIDTH - 1, COMPACT_LAYOUT_HEIGHT - 1)).toBe("focused-sidebar");
+    expect(setupPaneLayout(COMPACT_LAYOUT_WIDTH, COMPACT_LAYOUT_HEIGHT)).toBe("vertical");
+    expect(setupPaneLayout(HORIZONTAL_PANE_MIN_WIDTH, 45)).toBe("horizontal");
+    expect(setupPaneLayout(HORIZONTAL_PANE_MIN_WIDTH - 1, 45)).toBe("vertical");
+    expect(tuiLayoutMetrics(24, true)).toEqual({ bodyHeight: 13, detailViewport: 7 });
+    expect(clampTuiScroll(20, 10, 4)).toBe(6);
+    expect(clampTuiScroll(20, 3, 4)).toBe(0);
+  });
+
+  it("uses one audit coverage column when the terminal is not wide enough", () => {
+    expect(auditUsesSingleColumn(AUDIT_TWO_COLUMN_MIN_WIDTH - 1)).toBe(true);
+    expect(auditUsesSingleColumn(AUDIT_TWO_COLUMN_MIN_WIDTH)).toBe(false);
+  });
+
   it("builds provider-specific setup details for the selection pane", () => {
     const details = setupCheckDetails(recommendations[0]!, context);
 
@@ -134,6 +194,49 @@ describe("setup TUI presentation", () => {
 });
 
 describe("setup TUI state", () => {
+  it("starts on the audit page and advances only after an explicit transition", () => {
+    let model = createSetupTuiModel(recommendations);
+    expect(model.screen).toBe("audit");
+    model = setupTuiReducer(model, { type: "begin-selection" });
+    expect(model.screen).toBe("select");
+  });
+
+  it("shows the empty state after an audit with no actionable recommendations", () => {
+    let model = createSetupTuiModel(recommendations.map((recommendation) => ({ ...recommendation, actionable: false })));
+    expect(model.screen).toBe("audit");
+    model = setupTuiReducer(model, { type: "show-empty" });
+    expect(model.screen).toBe("empty");
+  });
+
+  it("scrolls the audit page without wrapping past its content", () => {
+    let model = createSetupTuiModel(recommendations);
+    model = setupTuiReducer(model, { type: "move-audit", direction: "down", lineCount: 29, viewport: 7 });
+    expect(model.auditScroll).toBe(1);
+    model = setupTuiReducer(model, { type: "move-audit", direction: "up", lineCount: 29, viewport: 7 });
+    expect(model.auditScroll).toBe(0);
+    for (let index = 0; index < 40; index += 1) {
+      model = setupTuiReducer(model, { type: "move-audit", direction: "down", lineCount: 29, viewport: 7 });
+    }
+    expect(model.auditScroll).toBe(22);
+  });
+
+  it("returns from selection to audit before allowing setup to exit", () => {
+    let model = createSetupTuiModel(recommendations);
+    model = setupTuiReducer(model, { type: "begin-selection" });
+    model = setupTuiReducer(model, { type: "back-to-audit" });
+    expect(model.screen).toBe("audit");
+  });
+
+  it("toggles the compact navigation sidebar and resets it for each selection or review page", () => {
+    let model = createSetupTuiModel(recommendations);
+    model = setupTuiReducer(model, { type: "begin-selection" });
+    model = setupTuiReducer(model, { type: "toggle-sidebar" });
+    expect(model.sidebarCollapsed).toBe(true);
+    model = setupTuiReducer(model, { type: "begin-planning" });
+    model = setupTuiReducer(model, { type: "planning-complete" });
+    expect(model.sidebarCollapsed).toBe(false);
+  });
+
   it("selects baseline actionable providers by default and appends CI when available", () => {
     const model = createSetupTuiModel(recommendations);
     const items = selectionItems(recommendations, true);

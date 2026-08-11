@@ -37,7 +37,7 @@ class ExternalToolAdapter implements HealthProvider {
 
   async recommend(context: RepositoryContext): Promise<ProviderRecommendation | null> {
     const detection = await this.detect(context);
-    if (Object.keys(detection.activeCapabilities).length > 0 || !["knip", "jscpd", "dependency-cruiser", "publint", "attw"].includes(this.id)) return null;
+    if (Object.keys(detection.activeCapabilities).length > 0 || !["knip", "jscpd", "dependency-cruiser", "publint", "attw", "syncpack", "license-checker", "markdownlint"].includes(this.id)) return null;
     if (this.id === "knip" && context.sourceFiles.length > 0) {
       return { recommended: true, priority: "baseline", actionable: true, reason: "Unused files, exports, and dependencies are not covered." };
     }
@@ -53,11 +53,20 @@ class ExternalToolAdapter implements HealthProvider {
     if (this.id === "attw" && context.kinds.includes("npm-library") && (context.packageJson.types || context.packageJson.typings || publishesTypes(context.packageJson.exports))) {
       return { recommended: true, priority: "baseline", actionable: true, reason: "Published TypeScript declarations are not tested across consumer resolution modes." };
     }
+    if (this.id === "syncpack" && context.isMonorepo) {
+      return { recommended: true, priority: "baseline", actionable: true, reason: "Workspace dependency versions and package metadata are not checked for consistency." };
+    }
+    if (this.id === "license-checker" && context.installedPackages.size > 0) {
+      return { recommended: true, priority: "optional", actionable: true, reason: "Dependency licenses are not reported against a project policy." };
+    }
+    if (this.id === "markdownlint" && [...context.files].some((file) => /\.md$/i.test(file))) {
+      return { recommended: true, priority: "optional", actionable: true, reason: "Markdown documentation is not checked for consistent structure." };
+    }
     return null;
   }
 
   async planInstall(context: RepositoryContext): Promise<InstallPlan> {
-    return ["knip", "jscpd", "dependency-cruiser", "publint", "attw"].includes(this.id)
+    return ["knip", "jscpd", "dependency-cruiser", "publint", "attw", "syncpack", "license-checker", "markdownlint"].includes(this.id)
       ? await buildInstallPlan(context, [this.id as SetupProviderId], false)
       : emptyPlan();
   }

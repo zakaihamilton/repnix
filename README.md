@@ -5,9 +5,9 @@
 [![End-to-end](https://github.com/zakaihamilton/repnix/actions/workflows/e2e.yml/badge.svg)](https://github.com/zakaihamilton/repnix/actions/workflows/e2e.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**Discover and run the checks that keep your JavaScript or TypeScript repository safe to change.**
+**Discover and run the checks that keep your software repository safe to change.**
 
-RepNix is a local-first CLI that explains the guardrails you already have, identifies useful gaps, and helps you add a focused set of complementary tools. It then gives your team one command for running repository health checks locally and in CI.
+RepNix is a local-first CLI that explains the guardrails you already have, identifies useful gaps, and helps you add a focused set of complementary tools. It supports JavaScript and TypeScript repositories first, while also covering workspace consistency, documentation, supply-chain policy, CI workflows, release readiness, and frontend performance.
 
 If terms such as “dead code,” “dependency security,” or “package health” are new to you, start with `repnix audit`. It explains each category in plain language before recommending anything.
 
@@ -78,6 +78,8 @@ RepNix gives you a clear inventory and a deliberate next step:
 - **Preserves your choices.** Setup keeps existing scripts and configuration, creates only the files it needs, and shows conflicts instead of overwriting them blindly.
 - **Stays local-first.** `audit`, `check`, and `explain` do not install packages or access a package registry. Security and package-health checks use local/offline execution paths.
 - **Produces one report.** Human-readable output groups findings by category and provider; `--json` emits a versioned normalized report for automation.
+- **Scales across workspaces.** Root and workspace quality scripts can run as separate, attributed results instead of hiding failures behind one aggregate command.
+- **Supports explicit policy.** License and coverage thresholds can be recorded in `repnix.config.json`.
 
 ## The workflow
 
@@ -107,14 +109,17 @@ If `repnix check` says that no applicable health checks ran, RepNix did not find
 
 `repnix setup` is an interactive, opt-in change flow:
 
-- In a capable terminal, setup opens a full-screen keyboard-driven dashboard with provider selection, a change summary, optional file details, and an explicit apply confirmation.
+- In a capable terminal, setup opens a full-screen keyboard-driven dashboard that starts with an audit page showing detected project facts, category coverage, and recommendation priorities. Press **Enter** to continue to provider selection, review the planned changes, and explicitly confirm apply.
+- On the audit page, use **Enter** to continue or **q/Esc** to leave without changing files. If no actionable recommendations exist, the audit page explains that there is nothing to add before setup exits.
 - Baseline recommendations are preselected because they are useful for most JavaScript and TypeScript repositories.
 - Optional and advanced recommendations are not automatically enabled when they need project-specific rules or budgets.
-- Use **↑/↓** or **j/k** to move. On the selection screen, **Space** selects or clears a provider and **Enter** continues. On the review screen, **↑/↓** moves between files, **Space** inspects the focused file, and **Enter** opens confirmation. In the confirmation dialog, focus starts on **Cancel**; press **→** to focus **Apply**, then **Enter**. Use **Esc/q/Ctrl+C** to leave safely before applying. While changes are being applied, exit keys are disabled until the rollback-safe operation finishes.
+- Use **↑/↓** or **j/k** to move after the audit page. On the selection screen, **Space** selects or clears a provider and **Enter** continues. Press **Esc** or **Backspace** to return to the previous page; use **q** to quit. On the review screen, **↑/↓** moves between files, **Space** inspects the focused file, and **Enter** opens confirmation. In the confirmation dialog, focus starts on **Cancel**; press **→** to focus **Apply**, then **Enter**. While changes are being applied, exit keys are disabled until the rollback-safe operation finishes.
 - Before confirmation, RepNix shows the packages, scripts, configuration files, and optional CI changes it plans to apply. Existing files are preserved and conflicts are shown for review.
 - Some recommendations need preparation outside RepNix: OSV-Scanner needs its binary and local vulnerability database, architecture checks need module-boundary rules, and bundle checks need an explicit size budget.
 
 If the terminal is too small or does not support the full-screen dashboard, RepNix falls back to its sequential prompts. Non-interactive environments should use `repnix audit` for a read-only review.
+
+The interactive setup flow is: `audit → select checks → review changes → apply safely`.
 
 After setup completes, run `repnix check`. If it reports findings or a provider error, run `repnix explain` for the next place to look.
 
@@ -222,11 +227,20 @@ RepNix separates repository health into categories so each capability has a clea
 | `lint` — Linting | Finds suspicious or inconsistent code patterns. | ESLint, Oxlint, Biome |
 | `format` — Formatting | Keeps code style consistent. | Prettier, Oxfmt, Biome |
 | `tests` — Tests | Protects existing behavior from regressions. | Jest, Vitest, safe test scripts |
+| `coverage` — Test coverage | Measures test reach and optional coverage thresholds. | c8, Stryker |
 | `dead-code` — Dead code | Finds unused files, exports, and dependencies. | Knip |
 | `duplication` — Duplication | Finds repeated code that can drift apart. | jscpd |
 | `security` — Dependency security | Finds known vulnerabilities in dependencies. | OSV-Scanner |
 | `architecture` — Architecture boundaries | Protects allowed relationships between modules. | dependency-cruiser, `eslint-plugin-boundaries` |
 | `bundle` — Bundle regression | Protects shipped JavaScript size. | Size Limit |
+| `accessibility` — Accessibility | Checks whether user interfaces can be used by people with different abilities. | eslint-plugin-jsx-a11y |
+| `monorepo` — Monorepo consistency | Checks whether packages in a monorepo follow shared rules. | syncpack, workspace scripts |
+| `secrets` — Secret scanning | Finds credentials and sensitive values committed to the repository. | Gitleaks |
+| `licenses` — License policy | Checks dependency licenses against an allow/deny policy. | license-checker |
+| `documentation` — Documentation | Checks Markdown structure and style. | markdownlint |
+| `performance` — Performance budgets | Protects configured web or build performance budgets. | Lighthouse CI, Size Limit |
+| `release` — Release readiness | Checks release metadata and package change intent. | Changesets |
+| `ci` — CI workflow health | Checks GitHub Actions workflow syntax and common mistakes. | actionlint |
 | `package-health` — Package publishing | Checks what npm consumers receive. | Publint, Are The Types Wrong? |
 
 ### Existing project checks
@@ -237,6 +251,15 @@ RepNix detects and runs the safe commands your repository already uses for:
 - Linting — ESLint, Oxlint, or Biome.
 - Formatting — Prettier, Oxfmt, or Biome.
 - Tests — Jest, Vitest, or a safe existing test script.
+- Test coverage — c8 or Stryker when a coverage or mutation command is configured.
+- Accessibility — active `eslint-plugin-jsx-a11y` rules in an ESLint configuration.
+- Monorepo consistency — syncpack or safe workspace scripts.
+- Secret scanning — Gitleaks when its binary or repository script is available.
+- License policy — license-checker with an optional allow/deny policy.
+- Documentation — markdownlint for Markdown files.
+- Performance — Lighthouse CI or existing performance scripts with an explicit configuration.
+- Release readiness — Changesets and its configuration.
+- CI workflow health — actionlint for GitHub Actions workflows.
 
 ### Specialist checks
 
@@ -247,6 +270,15 @@ When the repository needs additional coverage, RepNix can recommend and orchestr
 - **Dependency security:** OSV-Scanner using its offline vulnerability database.
 - **Architecture:** dependency-cruiser or active `eslint-plugin-boundaries` rules.
 - **Bundle size:** Size Limit when an explicit budget already exists.
+- **Accessibility:** eslint-plugin-jsx-a11y through an existing ESLint setup.
+- **Workspace consistency:** syncpack for dependency and package metadata drift.
+- **Coverage:** c8 for threshold checks and Stryker for mutation testing.
+- **Secret scanning:** Gitleaks, using a local binary or CI-provided binary.
+- **License policy:** license-checker with explicit allowed or denied licenses.
+- **Documentation:** markdownlint for Markdown files.
+- **Performance:** Lighthouse CI when a URL/build configuration and budgets exist.
+- **Release readiness:** Changesets when the repository uses changesets.
+- **CI workflow health:** actionlint for GitHub Actions workflow files.
 
 ### Package publishing
 
@@ -269,12 +301,32 @@ Configuration is optional. Add `repnix.config.json` when your team wants to make
     "architecture": "off"
   },
   "severityThreshold": "warning",
+  "policies": {
+    "licenses": {
+      "allow": ["MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause"],
+      "deny": ["GPL-3.0-only"]
+    },
+    "coverage": {
+      "lines": 80,
+      "functions": 80,
+      "branches": 75,
+      "statements": 80
+    },
+    "performance": {
+      "maxLcpMs": 2500,
+      "maxCls": 0.1,
+      "maxTbtMs": 300
+    }
+  },
   "providers": {
     "jscpd": { "enabled": true },
     "osv-scanner": { "enabled": true },
     "dependency-cruiser": { "enabled": true },
     "publint": { "enabled": true },
-    "attw": { "enabled": true }
+    "attw": { "enabled": true },
+    "syncpack": { "enabled": true },
+    "license-checker": { "enabled": true },
+    "markdownlint": { "enabled": true }
   }
 }
 ```
@@ -286,6 +338,8 @@ Category modes are:
 - `off` — skip the category intentionally.
 
 Severity thresholds are `info`, `warning`, and `error`. A finding at or above the threshold produces exit code `1`. Configuration is strict, so misspelled categories and provider names fail with a correction tip.
+
+Policies are optional and provider-aware. License `allow` and `deny` lists are enforced by license-checker; coverage thresholds are used when RepNix runs c8 around the configured test command. Performance values document the budgets expected by a configured Lighthouse CI provider; RepNix does not invent a URL or build command.
 
 Use `required` for coverage that must exist, `off` for categories that do not apply to your repository, and provider flags when you want to keep a detected tool out of the RepNix run.
 
@@ -326,11 +380,11 @@ The audit and reporting pipeline is designed to be safe to run locally and in CI
 
 ## Notes and current limits
 
-- Monorepos use their existing root orchestration scripts; RepNix does not independently traverse every workspace.
+- Workspace package scripts are executed separately when they use recognized non-mutating type, lint, format, or test commands. RepNix does not invent a workspace task graph or rewrite package scripts automatically.
 - Existing repository scripts are only run when they look like non-mutating quality checks. Scripts containing fix, write, watch, install, publish, deployment, or other mutating commands are skipped and the configured provider fallback is used where available.
 - Setup applies planned files atomically and restores planned files plus package-manager lockfiles if dependency installation fails. Package-manager lifecycle scripts can still run during a normal dependency installation.
 - Specialist lint, type, formatting, test, `eslint-plugin-boundaries`, and Size Limit output is represented as a provider-attributed command finding. Knip, jscpd, OSV-Scanner, dependency-cruiser, Publint, and Are The Types Wrong? receive detailed normalization.
-- Accessibility and monorepo-consistency providers are not yet available in the MVP.
+- Accessibility, workspace consistency, coverage, secret scanning, license policy, documentation, release, performance, and CI workflow providers are available when their provider is installed and configured. Some providers intentionally remain manual because they need project-specific URLs, budgets, binaries, or policy rules.
 - OSV-Scanner must be installed separately with its local vulnerability database prepared before security coverage can be required.
 - Architecture rules and bundle budgets are repository-specific. RepNix does not invent boundary policies or size budgets.
 
