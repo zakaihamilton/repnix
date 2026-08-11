@@ -5,13 +5,15 @@ import { renderAudit } from "../reporting/console-reporter.js";
 import { applyInstallPlan } from "../setup/apply-plan.js";
 import { buildInstallPlan, type SetupProviderId } from "../setup/install-plan.js";
 import { renderFileDiff } from "../setup/file-plan.js";
+import { resolveDiagnosticLogger, type DiagnosticOptions } from "./options.js";
 
-export async function setupCommand(): Promise<number> {
+export async function setupCommand(options: DiagnosticOptions = {}): Promise<number> {
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
     process.stderr.write("repnix setup is interactive and requires a TTY. Run repnix audit for a read-only report.\n");
     return 2;
   }
-  const audit = await auditRepository();
+  const logger = resolveDiagnosticLogger(options);
+  const audit = await auditRepository(process.cwd(), { ...options, logger });
   process.stdout.write(`${renderAudit(audit)}\n\n`);
   if (audit.context.diagnostics.some((item) => item.severity === "error")) return 2;
   const setupRecommendations = audit.recommendations.filter((recommendation) => recommendation.actionable);
@@ -48,7 +50,7 @@ export async function setupCommand(): Promise<number> {
   note(preview || "No changes", "Planned changes");
   const apply = await confirm({ message: "Apply changes?", initialValue: false });
   if (isCancel(apply) || !apply) return 0;
-  await applyInstallPlan(audit.context, plan);
+  await applyInstallPlan(audit.context, plan, logger);
   outro(pc.green("Repository health setup complete."));
   return 0;
 }
