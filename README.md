@@ -134,6 +134,7 @@ Run: repnix explain
 | `repnix <command> --quiet` | Suppress diagnostic output while keeping the command report. | No |
 | `repnix <command> --log-level <level>` | Set diagnostics to `silent`, `error`, `warn`, `info`, or `debug`. | No |
 | `repnix <command> --log-format json` | Emit newline-delimited structured diagnostics on stderr. | No |
+| `repnix <command> --timeout <seconds>` | Set the maximum runtime for each repository command; the default is five minutes. | No |
 | `repnix explain` | Rerun checks and show detailed normalized findings. | No |
 
 Examples:
@@ -266,6 +267,8 @@ The audit and reporting pipeline is designed to be safe to run locally and in CI
 ## Notes and current limits
 
 - Monorepos use their existing root orchestration scripts; RepNix does not independently traverse every workspace.
+- Existing repository scripts are only run when they look like non-mutating quality checks. Scripts containing fix, write, watch, install, publish, deployment, or other mutating commands are skipped and the configured provider fallback is used where available.
+- Setup applies planned files atomically and restores planned files plus package-manager lockfiles if dependency installation fails. Package-manager lifecycle scripts can still run during a normal dependency installation.
 - Specialist lint, type, formatting, test, `eslint-plugin-boundaries`, and Size Limit output is represented as a provider-attributed command finding. Knip, jscpd, OSV-Scanner, dependency-cruiser, Publint, and Are The Types Wrong? receive detailed normalization.
 - Accessibility and monorepo-consistency providers are not yet available in the MVP.
 - OSV-Scanner must be installed separately with its local vulnerability database prepared before security coverage can be required.

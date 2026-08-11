@@ -23,6 +23,7 @@ export interface DiagnosticOptions {
   quiet?: boolean;
   logLevel?: LogLevel;
   logFormat?: LogFormat;
+  timeout?: number;
   logger?: DiagnosticLogger;
 }
 
@@ -46,6 +47,14 @@ export function parseLogLevel(value: string): LogLevel {
 export function parseLogFormat(value: string): LogFormat {
   if ((LOG_FORMATS as readonly string[]).includes(value)) return value as LogFormat;
   throw new Error(`Invalid log format '${value}'. Expected one of: ${LOG_FORMATS.join(", ")}`);
+}
+
+export function parseTimeout(value: string): number {
+  const seconds = Number(value);
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    throw new Error(`Invalid timeout '${value}'. Expected a positive number of seconds`);
+  }
+  return seconds;
 }
 
 function renderText(level: Exclude<LogLevel, "silent">, event: string, message: string, context: Record<string, unknown>): string {
@@ -110,5 +119,6 @@ export function addDiagnosticOptions(command: Command): Command {
     .option("--verbose", "enable debug diagnostics and stream provider output to stderr")
     .option("--quiet", "suppress diagnostic output")
     .option("--log-level <level>", `set diagnostic level (${LOG_LEVELS.join(" | ")})`, parseLogLevel)
-    .option("--log-format <format>", `set diagnostic format (${LOG_FORMATS.join(" | ")})`, parseLogFormat);
+    .option("--log-format <format>", `set diagnostic format (${LOG_FORMATS.join(" | ")})`, parseLogFormat)
+    .option("--timeout <seconds>", "set the maximum runtime for each repository command", parseTimeout);
 }

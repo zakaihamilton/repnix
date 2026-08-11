@@ -3,7 +3,7 @@ import { parseDocument } from "yaml";
 import type { FileChange, PackageManagerId, RepositoryContext } from "../core/types.js";
 import { fileChange, readOptional } from "./file-plan.js";
 
-const INSTALL_PATTERN = /^(\s*)-\s+run:\s+(?:npm\s+(?:ci|install)|pnpm\s+install|yarn\s+install|bun\s+install)\s*$/gm;
+const INSTALL_PATTERN = /^(\s*)-\s+run:\s+(?:npm\s+(?:ci|install)|pnpm\s+install|yarn\s+install|bun\s+install)(?:\s+[^\n]+)?\s*$/gm;
 
 export async function planCiChange(
   context: RepositoryContext,
