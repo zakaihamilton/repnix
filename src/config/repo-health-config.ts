@@ -42,9 +42,11 @@ export async function readConfig(root: string): Promise<ConfigResult> {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return { config: schema.parse({}), path: null };
     }
-    if (error instanceof SyntaxError) throw new Error(`Invalid repnix.config.json: ${error.message}`);
+    if (error instanceof SyntaxError) {
+      throw new Error(`Invalid repnix.config.json: ${error.message}\nConfiguration tip: use valid JSON, then run 'repnix audit' to check the file without changing it.`);
+    }
     if (error instanceof z.ZodError) {
-      throw new Error(`Invalid repnix.config.json: ${z.prettifyError(error)}`);
+      throw new Error(`Invalid repnix.config.json: ${z.prettifyError(error)}\nConfiguration tip: category modes are 'required', 'optional', or 'off'; severityThreshold is 'info', 'warning', or 'error'.`);
     }
     throw error;
   }

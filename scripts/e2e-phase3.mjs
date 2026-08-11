@@ -74,8 +74,8 @@ try {
   assert(report.results.every((result) => result.category === "package-health"), "Category filtering included an unrelated result.");
 
   const explain = await run(bin, ["explain"], { cwd: consumer, allowExitCodes: [1], timeoutMs: 600_000 });
-  assert(explain.stdout.includes("Source: Publint"), "Explain output omitted Publint attribution.");
-  assert(explain.stdout.includes("Source: Are The Types Wrong?"), "Explain output omitted ATTW attribution.");
+  assert(explain.stdout.includes("Reported by: Publint"), "Explain output omitted Publint attribution.");
+  assert(explain.stdout.includes("Reported by: Are The Types Wrong?"), "Explain output omitted ATTW attribution.");
 
   process.stdout.write("Phase 3 package-health acceptance test passed.\n");
 } finally {

@@ -30,8 +30,8 @@ const installArgs = {
 async function runInteractiveSetup(bin, expectNoChanges = false) {
   const useExpect = process.platform === "darwin" && process.env.REPNIX_E2E_PTY !== "python";
   const expectProgram = expectNoChanges
-    ? `set timeout 600\nlog_user 1\nspawn $env(REPNIX_E2E_BIN) setup\nexpect "Select providers"\nsend "\\r"\nexpect eof\ncatch wait result\nexit [lindex $result 3]`
-    : `set timeout 600\nlog_user 1\nspawn $env(REPNIX_E2E_BIN) setup\nexpect "Select providers"\nsend "\\r"\nexpect "Apply changes?"\nsend "\\033\\[D\\r"\nexpect eof\ncatch wait result\nexit [lindex $result 3]`;
+    ? `set timeout 600\nlog_user 1\nspawn $env(REPNIX_E2E_BIN) setup\nexpect "Choose the checks to add"\nsend "\\r"\nexpect eof\ncatch wait result\nexit [lindex $result 3]`
+    : `set timeout 600\nlog_user 1\nspawn $env(REPNIX_E2E_BIN) setup\nexpect "Choose the checks to add"\nsend "\\r"\nexpect "Apply these reviewed changes?"\nsend "\\033\\[D\\r"\nexpect eof\ncatch wait result\nexit [lindex $result 3]`;
   const interactiveCommand = useExpect ? "expect" : "python3";
   const interactiveArgs = useExpect
     ? ["-c", expectProgram]
@@ -116,7 +116,11 @@ try {
   const trackedFiles = ["package.json", ".jscpd.json", "package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock", "bun.lockb"];
   const beforeSecondSetup = await snapshotFiles(consumer, trackedFiles);
   const secondSetupOutput = await runInteractiveSetup(bin, true);
-  assert(secondSetupOutput.includes("No setup changes are recommended"), "Second setup was not a no-op.");
+  assert(
+    secondSetupOutput.includes("No setup changes are needed for the checks you selected.") ||
+      secondSetupOutput.includes("No setup changes are recommended"),
+    "Second setup was not a no-op.",
+  );
   const afterSecondSetup = await snapshotFiles(consumer, trackedFiles);
   assert(JSON.stringify([...afterSecondSetup]) === JSON.stringify([...beforeSecondSetup]), "Second setup changed repository files.");
 

@@ -1,5 +1,5 @@
 import { readConfig } from "../config/repo-health-config.js";
-import { HEALTH_CATEGORIES, type HealthCategory } from "../core/health-category.js";
+import { CATEGORY_LABELS, HEALTH_CATEGORIES, type HealthCategory } from "../core/health-category.js";
 import { renderHealth } from "../reporting/console-reporter.js";
 import { runHealth } from "../runners/health-runner.js";
 import { auditRepository } from "./audit.js";
@@ -11,7 +11,8 @@ export interface CheckOptions extends DiagnosticOptions {
 
 export async function checkCommand(category: string | undefined, options: CheckOptions): Promise<number> {
   if (category && !HEALTH_CATEGORIES.includes(category as HealthCategory)) {
-    throw new Error(`Unknown health category '${category}'. Expected one of: ${HEALTH_CATEGORIES.join(", ")}`);
+    const choices = HEALTH_CATEGORIES.map((name) => `${name} (${CATEGORY_LABELS[name]})`).join(", ");
+    throw new Error(`Unknown health category '${category}'. Use a category name such as 'dead-code' or 'security'. Available categories: ${choices}`);
   }
   const logger = resolveDiagnosticLogger(options);
   const audit = await auditRepository(process.cwd(), { ...options, logger });

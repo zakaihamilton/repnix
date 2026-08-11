@@ -1,6 +1,6 @@
 import { stripVTControlCharacters } from "node:util";
 import pc from "picocolors";
-import { CATEGORY_LABELS } from "../core/health-category.js";
+import { CATEGORY_DESCRIPTIONS, CATEGORY_LABELS, PROVIDER_DESCRIPTIONS, PROVIDER_NEXT_STEPS } from "../core/health-category.js";
 import type { HealthFinding, HealthRun } from "../core/types.js";
 import type { AuditModel, CoverageStatus } from "../recommendations/recommendation-engine.js";
 
@@ -85,7 +85,10 @@ function mark(status: CoverageStatus): string {
 export function renderAudit(model: AuditModel): string {
   const { context } = model;
   const width = terminalWidth();
-  const lines = [pc.bold("Repository"), ""];
+  const lines = [pc.bold("Repository health audit"), ""];
+  addWrapped(lines, "RepNix looks at the checks already protecting this repository, then points out useful gaps. This audit is read-only.", width);
+  lines.push("");
+  lines.push(pc.bold("Detected project"), "");
   lines.push(
     ...context.kinds.map((kind) => kind.replaceAll("-", " ")),
     ...context.frameworks,
@@ -104,6 +107,9 @@ export function renderAudit(model: AuditModel): string {
     pc.bold("Repository Guardrails"),
     rule(width),
   );
+  addWrapped(lines, "These symbols show whether a kind of protection is active in your project:", width);
+  addWrapped(lines, "✓ covered   ◐ partly covered   ✗ missing   – off = disabled   – n/a = not relevant", width, "  ");
+  lines.push("");
   for (const entry of model.coverage) {
     const detail =
       entry.status === "not-applicable" || entry.status === "off"
@@ -134,17 +140,27 @@ export function renderAudit(model: AuditModel): string {
     for (const priority of ["baseline", "optional", "advanced"] as const) {
       const recommendations = model.recommendations.filter((recommendation) => recommendation.priority === priority);
       if (!recommendations.length) continue;
-      const heading = priority === "baseline" ? "Recommended baseline" : priority === "optional" ? "Optional" : "Advanced";
+      const heading = priority === "baseline"
+        ? "Recommended baseline — start here"
+        : priority === "optional"
+          ? "Optional — useful when your project needs it"
+          : "Advanced — add when you have a specific goal";
       lines.push("", pc.bold(heading), rule(width));
       for (const recommendation of recommendations) {
         const setup = recommendation.actionable ? "" : pc.dim(" (manual configuration)");
         lines.push(`+ ${pc.bold(recommendation.name)}${setup}`);
+        const description = PROVIDER_DESCRIPTIONS[recommendation.name];
+        if (description) addWrapped(lines, `What it checks: ${description}`, width, "  ");
         addWrapped(lines, recommendation.reason, width, "  ");
+        if (!recommendation.actionable) {
+          addWrapped(lines, PROVIDER_NEXT_STEPS[recommendation.name] ?? "Next step: review the provider configuration before installing this check.", width, "  ");
+        }
         lines.push("");
       }
     }
   } else {
-    lines.push("", pc.green("No recommendations."));
+    lines.push("");
+    addWrapped(lines, "No new checks are recommended. Your active coverage matches what RepNix expects for this repository.", width, pc.green(""), "  ");
   }
   return lines.join("\n").trimEnd();
 }
@@ -158,7 +174,8 @@ function statusMark(status: string, findings: number): string {
 
 export function renderHealth(run: HealthRun): string {
   const width = terminalWidth();
-  const lines = [pc.bold("Repository Health"), ""];
+  const lines = [pc.bold("Repository health check"), ""];
+  addWrapped(lines, "RepNix ran the health checks that are configured and active in this repository.", width);
   const grouped = new Map<keyof typeof CATEGORY_LABELS, typeof run.results>();
   for (const result of run.results) {
     grouped.set(result.category, [...(grouped.get(result.category) ?? []), result]);
@@ -179,8 +196,23 @@ export function renderHealth(run: HealthRun): string {
       " ".repeat(visibleLength(prefix)),
     );
   }
-  lines.push("", `${run.summary.findings} finding${run.summary.findings === 1 ? "" : "s"}`);
-  if (run.summary.findings > 0) lines.push("", `Run: ${pc.bold("repnix explain")}`);
+  lines.push("");
+  if (run.summary.errors > 0) {
+    addWrapped(lines, `${run.summary.errors} check${run.summary.errors === 1 ? "" : "s"} could not finish. This is a configuration or tool problem, not necessarily a problem in your code.`, width);
+    lines.push("", `Next: run ${pc.bold("repnix explain")} to see what happened.`);
+  } else if (run.results.length === 0 || run.results.every((result) => result.status === "skipped")) {
+    addWrapped(lines, "No applicable health checks ran for this command. This does not mean the category is covered.", width);
+    lines.push("", `Next: run ${pc.bold("repnix audit")} to see which checks apply to this repository.`);
+  } else if (run.summary.findings > 0) {
+    if (run.summary.exitCode === 0) {
+      addWrapped(lines, `${run.summary.findings} finding${run.summary.findings === 1 ? "" : "s"} were reported, but none meet the configured severity threshold.`, width);
+    } else {
+      addWrapped(lines, `${run.summary.findings} finding${run.summary.findings === 1 ? "" : "s"} need attention at the configured severity threshold.`, width);
+    }
+    lines.push("", `Next: run ${pc.bold("repnix explain")} to see what each finding means and where to start.`);
+  } else {
+    lines.push(pc.green("All configured checks passed. No action is needed right now."));
+  }
   return lines.join("\n");
 }
 
@@ -191,7 +223,9 @@ function findingLocation(finding: HealthFinding): string {
 
 export function renderExplain(run: HealthRun): string {
   const width = terminalWidth();
-  const lines: string[] = [];
+  const lines: string[] = [pc.bold("Understanding repository health findings"), ""];
+  addWrapped(lines, "A finding is a specific issue reported by a health check. A check error means the tool could not complete, so fix the setup or tool problem first.", width);
+  lines.push("");
   const groups = new Map<string, HealthFinding[]>();
   for (const result of run.results) {
     for (const finding of result.findings) {
@@ -199,19 +233,35 @@ export function renderExplain(run: HealthRun): string {
     }
     if (result.status === "error" && result.message) {
       lines.push(pc.bold(CATEGORY_LABELS[result.category]), rule(width));
-      addWrapped(lines, result.message, width, "", "  ");
+      addWrapped(lines, CATEGORY_DESCRIPTIONS[result.category], width);
+      lines.push("");
+      addWrapped(lines, "What happened: this check could not run to completion.", width);
+      addWrapped(lines, result.message, width, "  ", "  ");
+      addWrapped(lines, "Next step: check the provider installation and configuration, then run the command again.", width);
       lines.push("");
     }
   }
   for (const [category, findings] of groups) {
     lines.push(pc.bold(CATEGORY_LABELS[category as keyof typeof CATEGORY_LABELS]), rule(width));
+    addWrapped(lines, CATEGORY_DESCRIPTIONS[category as keyof typeof CATEGORY_LABELS], width);
+    lines.push("");
     for (const finding of findings) {
       const location = findingLocation(finding);
-      if (location) lines.push(pc.cyan(location));
-      addWrapped(lines, finding.message, width, "", "  ");
-      lines.push(pc.dim(`Source: ${finding.provider}`), "");
+      const severity = finding.severity === "error"
+        ? "error — fix before merging"
+        : finding.severity === "warning"
+          ? "warning — review soon"
+          : "info — worth knowing";
+      lines.push(pc.bold(`Severity: ${severity}`));
+      addWrapped(lines, "What this means:", width);
+      addWrapped(lines, finding.message, width, "  ", "  ");
+      if (location) addWrapped(lines, `Where to look: ${pc.cyan(location)}`, width);
+      addWrapped(lines, `Reported by: ${finding.provider}${PROVIDER_DESCRIPTIONS[finding.provider] ? ` — ${PROVIDER_DESCRIPTIONS[finding.provider]}` : ""}`, width);
+      lines.push("");
     }
   }
-  if (!lines.length) lines.push(pc.green("No health findings."));
+  if (!run.summary.findings && !run.summary.errors) {
+    lines.push(pc.green("No health findings. All configured checks passed."));
+  }
   return lines.join("\n").trimEnd();
 }
