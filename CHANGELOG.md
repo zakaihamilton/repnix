@@ -2,7 +2,7 @@
 
 All notable changes to RepNix are documented here. The project follows semantic versioning.
 
-## Unreleased
+## 0.3.2 - 2026-08-11
 
 - Publish new package versions automatically after pushes to `main`, while skipping versions already present on npm.
 - Add configurable command timeouts with process-group termination for repository checks and setup installation.
