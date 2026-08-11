@@ -161,6 +161,9 @@ describe("setup TUI state", () => {
     expect(model.screen).toBe("review");
     model = setupTuiReducer(model, { type: "begin-confirm" });
     expect(model.screen).toBe("confirm");
+    expect(model.confirmFocus).toBe("cancel");
+    model = setupTuiReducer(model, { type: "move-confirm", direction: "right" });
+    expect(model.confirmFocus).toBe("apply");
     model = setupTuiReducer(model, { type: "cancel-confirm" });
     expect(model.screen).toBe("review");
     model = setupTuiReducer(model, { type: "begin-confirm" });

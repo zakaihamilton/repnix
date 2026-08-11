@@ -12,6 +12,7 @@ export interface SetupTuiModel {
   cursor: number;
   reviewCursor: number;
   detailScroll: number;
+  confirmFocus: "cancel" | "apply";
   selectedProviders: SetupProviderId[];
   includeCi: boolean;
   progress?: string;
@@ -28,6 +29,7 @@ export type SetupTuiAction =
   | { type: "open-details" }
   | { type: "close-details" }
   | { type: "move-detail"; direction: "up" | "down"; lineCount: number; viewport: number }
+  | { type: "move-confirm"; direction: "left" | "right" }
   | { type: "begin-confirm" }
   | { type: "cancel-confirm" }
   | { type: "begin-applying" }
@@ -66,6 +68,7 @@ export function createSetupTuiModel(recommendations: Recommendation[]): SetupTui
     cursor: 0,
     reviewCursor: 0,
     detailScroll: 0,
+    confirmFocus: "cancel",
     selectedProviders: selectedProvidersFrom(recommendations),
     includeCi: false,
   };
@@ -101,8 +104,10 @@ export function setupTuiReducer(model: SetupTuiModel, action: SetupTuiAction): S
       return { ...model, screen: "review" };
     case "move-detail":
       return { ...model, detailScroll: moveScroll(model.detailScroll, action.direction, action.lineCount, action.viewport) };
+    case "move-confirm":
+      return { ...model, confirmFocus: action.direction === "right" ? "apply" : "cancel" };
     case "begin-confirm":
-      return { ...model, screen: "confirm" };
+      return { ...model, screen: "confirm", confirmFocus: "cancel" };
     case "cancel-confirm":
       return { ...model, screen: "review" };
     case "begin-applying":

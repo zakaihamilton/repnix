@@ -110,7 +110,7 @@ If `repnix check` says that no applicable health checks ran, RepNix did not find
 - In a capable terminal, setup opens a full-screen keyboard-driven dashboard with provider selection, a change summary, optional file details, and an explicit apply confirmation.
 - Baseline recommendations are preselected because they are useful for most JavaScript and TypeScript repositories.
 - Optional and advanced recommendations are not automatically enabled when they need project-specific rules or budgets.
-- Use **↑/↓** or **j/k** to move, **Space** to select or clear a provider, **Enter** to continue, **d** to inspect file details, **a** to begin the apply confirmation, and **Esc/q/Ctrl+C** to leave safely before applying. While changes are being applied, exit keys are disabled until the rollback-safe operation finishes.
+- Use **↑/↓** or **j/k** to move. On the selection screen, **Space** selects or clears a provider and **Enter** continues. On the review screen, **↑/↓** moves between files, **Space** inspects the focused file, and **Enter** opens confirmation. In the confirmation dialog, focus starts on **Cancel**; press **→** to focus **Apply**, then **Enter**. Use **Esc/q/Ctrl+C** to leave safely before applying. While changes are being applied, exit keys are disabled until the rollback-safe operation finishes.
 - Before confirmation, RepNix shows the packages, scripts, configuration files, and optional CI changes it plans to apply. Existing files are preserved and conflicts are shown for review.
 - Some recommendations need preparation outside RepNix: OSV-Scanner needs its binary and local vulnerability database, architecture checks need module-boundary rules, and bundle checks need an explicit size budget.
 

@@ -280,11 +280,11 @@ function Footer({ model, theme }: { model: SetupTuiModel; theme: SetupTuiTheme }
   const hints: Array<[string, string]> = model.screen === "select"
     ? [["↑↓/jk", "move"], ["Space", "toggle"], ["Enter", "review"], ["q", "quit"]]
     : model.screen === "review"
-      ? [["↑↓", "move"], ["Enter/d", "details"], ["a", "apply"], ["Esc", "back"], ["q", "quit"]]
+      ? [["↑↓", "move"], ["Space", "inspect"], ["Enter", "confirm"], ["Esc", "back"], ["q", "quit"]]
       : model.screen === "details"
         ? [["↑↓/jk", "scroll"], ["Esc", "back"], ["q", "quit"]]
         : model.screen === "confirm"
-          ? [["Enter", "apply"], ["Esc", "back"], ["q", "quit"]]
+          ? [["←→", "focus"], ["Enter", "select"], ["Esc", "back"], ["q", "quit"]]
           : model.screen === "success" || model.screen === "error"
             ? [["Enter/q", "exit"]]
             : [["…", "Please wait"]];
@@ -535,7 +535,7 @@ function ReviewView({ plan, model, theme }: { plan: InstallPlan; model: SetupTui
           <>
             <Text color={theme.muted}>{file.reason}</Text>
             <Newline />
-            <Text color={theme.info}>Press Enter or d to inspect this file.</Text>
+            <Text color={theme.info}>Press Space to inspect this file.</Text>
           </>
         ) : (
           <Text color={theme.muted}>No file changes are planned. Press Enter to continue.</Text>
@@ -564,7 +564,19 @@ function DetailsView({ plan, model, width, layout, theme }: { plan: InstallPlan;
   );
 }
 
-function ConfirmView({ plan, theme }: { plan: InstallPlan; theme: SetupTuiTheme }): React.ReactElement {
+function ConfirmButton({ label, focused, theme }: { label: string; focused: boolean; theme: SetupTuiTheme }): React.ReactElement {
+  return (
+    <Text
+      color={focused ? theme.primary : theme.muted}
+      backgroundColor={focused ? theme.active : theme.panelRaised}
+      bold={focused}
+    >
+      {` ${label} `}
+    </Text>
+  );
+}
+
+function ConfirmView({ plan, model, theme }: { plan: InstallPlan; model: SetupTuiModel; theme: SetupTuiTheme }): React.ReactElement {
   return (
     <Panel title="Confirm setup" theme={theme} borderColor={theme.warning}>
       <Text color={theme.warning} bold>◆ Apply these reviewed changes?</Text>
@@ -574,7 +586,11 @@ function ConfirmView({ plan, theme }: { plan: InstallPlan; theme: SetupTuiTheme 
       <Text color={theme.secondary} bold>REVIEW NOTES</Text>
       <ReviewNotes plan={plan} theme={theme} />
       <Newline />
-      <Text color={theme.muted}>Press Enter to apply, or Esc to return to the review.</Text>
+      <Box gap={1}>
+        <ConfirmButton label="CANCEL" focused={model.confirmFocus === "cancel"} theme={theme} />
+        <ConfirmButton label="APPLY" focused={model.confirmFocus === "apply"} theme={theme} />
+      </Box>
+      <Text color={theme.muted}>Use the arrow keys to choose an action, then press Enter.</Text>
     </Panel>
   );
 }
@@ -585,7 +601,7 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
   const { stdout } = useStdout();
   const [audit, setAudit] = useState<AuditModel>();
   const [plan, setPlan] = useState<InstallPlan>();
-  const [model, setModel] = useState<SetupTuiModel>({ screen: "loading", cursor: 0, reviewCursor: 0, detailScroll: 0, selectedProviders: [], includeCi: false });
+  const [model, setModel] = useState<SetupTuiModel>({ screen: "loading", cursor: 0, reviewCursor: 0, detailScroll: 0, confirmFocus: "cancel", selectedProviders: [], includeCi: false });
   const startedApply = useRef(false);
   const theme = useMemo(() => createSetupTuiTheme(stdout), [stdout]);
 
@@ -693,12 +709,19 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
     if (model.screen === "review") {
       if (key.upArrow || input === "k") dispatch({ type: "move-review", direction: "up", fileCount: plan?.files.length ?? 0 });
       else if (key.downArrow || input === "j") dispatch({ type: "move-review", direction: "down", fileCount: plan?.files.length ?? 0 });
-      else if (key.return || input === "d") dispatch({ type: "open-details" });
-      else if (input === "a") dispatch({ type: "begin-confirm" });
+      else if (input === " ") {
+        if (plan?.files.length) dispatch({ type: "open-details" });
+      }
+      else if (key.return) dispatch({ type: "begin-confirm" });
       return;
     }
     if (model.screen === "confirm") {
-      if (key.return) dispatch({ type: "begin-applying" });
+      if (key.rightArrow) dispatch({ type: "move-confirm", direction: "right" });
+      else if (key.leftArrow) dispatch({ type: "move-confirm", direction: "left" });
+      else if (key.return) {
+        if (model.confirmFocus === "apply") dispatch({ type: "begin-applying" });
+        else dispatch({ type: "cancel-confirm" });
+      }
       return;
     }
     if (model.screen === "details") {
@@ -718,7 +741,7 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
         {model.screen === "planning" ? <Panel title="Preparing review" theme={theme} borderColor={theme.info}><Text color={theme.info}>◌ Building a safe setup plan…</Text></Panel> : null}
         {model.screen === "review" && plan ? <ReviewView plan={plan} model={model} theme={theme} /> : null}
         {model.screen === "details" && plan ? <DetailsView plan={plan} model={model} width={width} layout={layout} theme={theme} /> : null}
-        {model.screen === "confirm" && plan ? <ConfirmView plan={plan} theme={theme} /> : null}
+        {model.screen === "confirm" && plan ? <ConfirmView plan={plan} model={model} theme={theme} /> : null}
         {model.screen === "applying" ? <Panel title="Applying safely" theme={theme} borderColor={theme.warning}><Text color={theme.warning}>◌ {model.progress ?? "Installing selected checks and writing reviewed files…"}</Text></Panel> : null}
         {model.screen === "success" ? <Panel title="Setup complete" theme={theme} borderColor={theme.success}><Text color={theme.success}>● Repository health setup completed successfully.</Text><Newline /><Text {...textColor(theme)}>Run `repnix check` to verify the new checks.</Text></Panel> : null}
         {model.screen === "error" ? <Panel title="Setup stopped" theme={theme} borderColor={theme.danger}><Text color={theme.danger}>◆ {model.error ?? "An unexpected error occurred."}</Text><Newline /><Text color={theme.muted}>No further changes will be applied.</Text></Panel> : null}
