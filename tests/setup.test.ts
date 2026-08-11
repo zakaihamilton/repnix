@@ -59,4 +59,15 @@ describe("setup planning", () => {
     expect(plan.files.find((item) => item.path === "package.json")?.after).toContain('"health:architecture": "depcruise --output-type json --config -- src"');
     expect(plan.files.find((item) => item.path === ".dependency-cruiser.cjs")?.after).toContain("no-source-to-test");
   });
+
+  it("plans complementary package-health providers without shared script conflicts", async () => {
+    const root = await copyFixture("npm-library");
+    temporary.push(root);
+    const plan = await buildInstallPlan(await detectRepository(root), ["publint", "attw"], false);
+    expect(plan.packages.map((item) => item.name)).toEqual(["repnix", "publint", "@arethetypeswrong/cli"]);
+    expect(plan.files).toHaveLength(1);
+    expect(plan.files[0]?.after).toContain('"health:package:publint": "publint"');
+    expect(plan.files[0]?.after).toContain('"health:package:types": "attw --pack ."');
+    expect(plan.conflicts).toEqual([]);
+  });
 });

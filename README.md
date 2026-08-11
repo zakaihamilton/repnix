@@ -7,7 +7,7 @@
 
 RepNix is a local-first CLI that discovers the repository health checks a JavaScript or TypeScript project already has, identifies important gaps, installs a minimal specialist tool stack, and provides one normalized command for running it.
 
-RepNix orchestrates existing tools. It does not replace TypeScript, ESLint, Oxlint, Biome, Prettier, Oxfmt, Jest, Vitest, Knip, jscpd, OSV-Scanner, dependency-cruiser, eslint-plugin-boundaries, or Size Limit.
+RepNix orchestrates existing tools. It does not replace TypeScript, ESLint, Oxlint, Biome, Prettier, Oxfmt, Jest, Vitest, Knip, jscpd, OSV-Scanner, dependency-cruiser, eslint-plugin-boundaries, Size Limit, Publint, or Are The Types Wrong?.
 
 ## Requirements
 
@@ -55,11 +55,11 @@ Detects repository type, package manager, CI, existing providers, category cover
 
 ### `repnix setup`
 
-Offers Knip and jscpd as baseline coverage when applicable. It can also offer dependency-cruiser as an optional architecture provider when lint-based boundary rules are absent. Setup preserves existing scripts and configuration, creates only minimal provider configuration when necessary, and can conservatively add a GitHub Actions health step.
+Offers Knip and jscpd as baseline coverage when applicable. Publishable packages also receive Publint and, when they expose TypeScript declarations, Are The Types Wrong? recommendations. It can offer dependency-cruiser as an optional architecture provider when lint-based boundary rules are absent. Setup preserves existing scripts and configuration, creates only minimal provider configuration when necessary, and can conservatively add a GitHub Actions health step.
 
 ### `repnix check [category]`
 
-Runs safe existing type, lint, formatting, and test commands plus active specialist providers. Phase 2 execution includes offline OSV-Scanner checks, dependency-cruiser architecture rules, eslint-plugin-boundaries through the existing lint command, and configured Size Limit budgets. Child output is captured unless `--verbose` is used.
+Runs safe existing type, lint, formatting, and test commands plus active specialist providers. Execution includes offline OSV-Scanner checks, dependency-cruiser architecture rules, eslint-plugin-boundaries through the existing lint command, configured Size Limit budgets, Publint, and Are The Types Wrong?. Child output is captured unless `--verbose` is used.
 
 Exit codes:
 
@@ -97,6 +97,12 @@ Configuration is optional. Create `repnix.config.json` at the repository root:
     },
     "size-limit": {
       "enabled": false
+    },
+    "publint": {
+      "enabled": true
+    },
+    "attw": {
+      "enabled": true
     }
   }
 }
@@ -113,11 +119,18 @@ Category modes are `required`, `optional`, and `off`. Severity thresholds are `i
 
 An installed package is not considered coverage by itself. Audit distinguishes an available provider from an actively configured capability.
 
+## Package-health providers
+
+- **Publint:** recommended for publishable npm packages. RepNix packs the working tree locally with lifecycle scripts disabled and normalizes Publint's package-manifest, exports, format, and published-file findings.
+- **Are The Types Wrong?:** additionally recommended when a publishable package exposes TypeScript declarations. RepNix analyzes the same kind of local package artifact across Node and bundler resolution modes while respecting `.attw.json` rule ignores and profiles.
+
+Both providers run with registry access disabled. Package packing uses `npm pack --ignore-scripts` in a temporary directory, and the tarball is always removed after the check. A missing build artifact therefore remains visible instead of causing RepNix to run a repository `prepack` script implicitly.
+
 ## MVP limits
 
 - Monorepos use their existing root orchestration scripts; RepNix does not independently traverse every workspace.
-- Specialist lint, type, formatting, test, eslint-plugin-boundaries, and Size Limit output is represented as a provider-attributed command finding. Knip, jscpd, OSV-Scanner, and dependency-cruiser receive detailed normalization.
-- Accessibility, monorepo-consistency, and package-publishing providers remain future adapters.
+- Specialist lint, type, formatting, test, eslint-plugin-boundaries, and Size Limit output is represented as a provider-attributed command finding. Knip, jscpd, OSV-Scanner, dependency-cruiser, Publint, and Are The Types Wrong? receive detailed normalization.
+- Accessibility and monorepo-consistency providers remain future adapters.
 
 ## Development
 
@@ -149,6 +162,12 @@ The real Phase 2 acceptance test packages RepNix, installs current dependency-cr
 
 ```bash
 pnpm test:phase2
+```
+
+The Phase 3 acceptance test installs current Publint and Are The Types Wrong? releases into a disposable typed npm library, then verifies package-health audit coverage and normalized execution:
+
+```bash
+pnpm test:phase3
 ```
 
 ## Releases

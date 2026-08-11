@@ -18,6 +18,8 @@ import type { AuditModel } from "../recommendations/recommendation-engine.js";
 import { isNonMutatingTestCommand } from "../repository/script-detection.js";
 import { normalizeDependencyCruiser } from "../providers/dependency-cruiser/normalizer.js";
 import { normalizeOsv } from "../providers/osv/normalizer.js";
+import { normalizePublint } from "../providers/publint/normalizer.js";
+import { normalizeAttw } from "../providers/attw/normalizer.js";
 import { runCommand, type CommandResult } from "./command-runner.js";
 
 export interface RunHealthOptions {
@@ -255,6 +257,52 @@ function parseJsonOutput(stdout: string): unknown {
   }
 }
 
+interface PackedPackage {
+  tarball?: string;
+  durationMs: number;
+  error?: string;
+}
+
+async function packLocalPackage(
+  context: RepositoryContext,
+  temporary: string,
+  verbose: boolean,
+): Promise<PackedPackage> {
+  const npm = process.platform === "win32" ? "npm.cmd" : "npm";
+  const result = await runCommand(
+    npm,
+    ["pack", "--json", "--ignore-scripts", "--pack-destination", temporary, "."],
+    {
+      cwd: context.root,
+      verbose,
+      env: {
+        ...HEALTH_OFFLINE_ENV,
+        npm_config_cache: path.join(temporary, "npm-cache"),
+        npm_config_ignore_scripts: "true",
+        npm_config_audit: "false",
+        npm_config_fund: "false",
+      },
+    },
+  );
+  if (result.spawnError || result.exitCode !== 0) {
+    return {
+      durationMs: result.durationMs,
+      error: `The package could not be packed locally with lifecycle scripts disabled. ${result.spawnError ?? outputExcerpt(result)}`.trim(),
+    };
+  }
+  try {
+    const report = parseJsonOutput(result.stdout);
+    if (!Array.isArray(report) || !report[0] || typeof report[0] !== "object") throw new Error("npm pack returned an unsupported report.");
+    const filename = (report[0] as Record<string, unknown>).filename;
+    if (typeof filename !== "string" || path.basename(filename) !== filename) throw new Error("npm pack returned an unsafe tarball name.");
+    const tarball = path.join(temporary, filename);
+    await access(tarball);
+    return { tarball, durationMs: result.durationMs };
+  } catch (error) {
+    return { durationMs: result.durationMs, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
 const KNIP_TYPES: Record<string, { type: string; severity: FindingSeverity; label: string }> = {
   files: { type: "unused-file", severity: "warning", label: "Unused file" },
   exports: { type: "unused-export", severity: "warning", label: "Unused export" },
@@ -420,6 +468,83 @@ export async function runSizeLimit(context: RepositoryContext, verbose: boolean)
   return { provider: "size-limit", name: "Size Limit", category: "bundle", status: "error", findings: [], durationMs: result.durationMs, message: `Size Limit could not complete its check. ${output}`.trim() };
 }
 
+const PUBLINT_EVAL = `import { readFile } from "node:fs/promises";
+const { publint } = await import("publint");
+const { formatMessage } = await import("publint/utils");
+const result = await publint({ pack: { tarball: await readFile(process.argv[1]) } });
+process.stdout.write(JSON.stringify({ messages: result.messages.map((message) => ({ ...message, formatted: formatMessage(message, result.pkg) })) }));`;
+
+export async function runPublint(context: RepositoryContext, verbose: boolean): Promise<HealthResult> {
+  const binary = await localBinary(context.root, "publint");
+  if (!binary) return { provider: "publint", name: "Publint", category: "package-health", status: "error", findings: [], durationMs: 0, message: "Publint is declared but its local binary is unavailable. Install dependencies first." };
+  const temporary = await mkdtemp(path.join(os.tmpdir(), "repnix-publint-"));
+  try {
+    const packed = await packLocalPackage(context, temporary, verbose);
+    if (!packed.tarball) return { provider: "publint", name: "Publint", category: "package-health", status: "error", findings: [], durationMs: packed.durationMs, message: packed.error ?? "The package could not be packed locally." };
+    const result = await runCommand(process.execPath, ["--input-type=module", "--eval", PUBLINT_EVAL, packed.tarball], {
+      cwd: context.root,
+      verbose,
+      env: HEALTH_OFFLINE_ENV,
+    });
+    const durationMs = packed.durationMs + result.durationMs;
+    if (result.spawnError) return { provider: "publint", name: "Publint", category: "package-health", status: "error", findings: [], durationMs, message: result.spawnError };
+    try {
+      const findings = normalizePublint(parseJsonOutput(result.stdout));
+      if (result.exitCode !== 0 && !findings.length) {
+        return { provider: "publint", name: "Publint", category: "package-health", status: "error", findings: [], durationMs, message: `Publint could not complete its analysis. ${outputExcerpt(result)}`.trim() };
+      }
+      return { provider: "publint", name: "Publint", category: "package-health", status: statusForFindings(findings), findings, durationMs };
+    } catch (error) {
+      return { provider: "publint", name: "Publint", category: "package-health", status: "error", findings: [], durationMs, message: `${error instanceof Error ? error.message : String(error)} ${outputExcerpt(result)}`.trim() };
+    }
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
+}
+
+export async function runAttw(context: RepositoryContext, verbose: boolean): Promise<HealthResult> {
+  const binary = await localBinary(context.root, "attw");
+  if (!binary) return { provider: "attw", name: "Are The Types Wrong?", category: "package-health", status: "error", findings: [], durationMs: 0, message: "Are The Types Wrong? is declared but its local binary is unavailable. Install dependencies first." };
+  const temporary = await mkdtemp(path.join(os.tmpdir(), "repnix-attw-"));
+  try {
+    const packed = await packLocalPackage(context, temporary, verbose);
+    if (!packed.tarball) return { provider: "attw", name: "Are The Types Wrong?", category: "package-health", status: "error", findings: [], durationMs: packed.durationMs, message: packed.error ?? "The package could not be packed locally." };
+    const result = await runCommand(binary, [packed.tarball, "--format", "json", "--no-definitely-typed"], {
+      cwd: context.root,
+      verbose,
+      env: HEALTH_OFFLINE_ENV,
+      maxOutputBytes: 50 * 1024 * 1024,
+    });
+    const durationMs = packed.durationMs + result.durationMs;
+    if (result.spawnError) return { provider: "attw", name: "Are The Types Wrong?", category: "package-health", status: "error", findings: [], durationMs, message: result.spawnError };
+    try {
+      const normalizationOptions: { ignoreRules?: string[]; profile?: "strict" | "node16" | "esm-only" } = {};
+      try {
+        const rawConfig = JSON.parse(await readFile(path.join(context.root, ".attw.json"), "utf8")) as Record<string, unknown>;
+        if (Array.isArray(rawConfig.ignoreRules) && rawConfig.ignoreRules.every((rule) => typeof rule === "string")) {
+          normalizationOptions.ignoreRules = rawConfig.ignoreRules as string[];
+        }
+        if (rawConfig.profile === "strict" || rawConfig.profile === "node16" || rawConfig.profile === "esm-only") {
+          normalizationOptions.profile = rawConfig.profile;
+        }
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+          // The ATTW process reports malformed configuration; its output is handled below.
+        }
+      }
+      const findings = normalizeAttw(parseJsonOutput(result.stdout), normalizationOptions);
+      if (result.exitCode !== 0 && !findings.length) {
+        return { provider: "attw", name: "Are The Types Wrong?", category: "package-health", status: "error", findings: [], durationMs, message: `Are The Types Wrong? could not complete its analysis. ${outputExcerpt(result)}`.trim() };
+      }
+      return { provider: "attw", name: "Are The Types Wrong?", category: "package-health", status: statusForFindings(findings), findings, durationMs };
+    } catch (error) {
+      return { provider: "attw", name: "Are The Types Wrong?", category: "package-health", status: "error", findings: [], durationMs, message: `${error instanceof Error ? error.message : String(error)} ${outputExcerpt(result)}`.trim() };
+    }
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
+}
+
 function severityAtLeast(severity: FindingSeverity, threshold: FindingSeverity): boolean {
   const rank: Record<FindingSeverity, number> = { info: 0, warning: 1, error: 2 };
   return rank[severity] >= rank[threshold];
@@ -490,6 +615,12 @@ export async function runHealth(
     }
     if ((!options.category || options.category === "bundle") && config.categories?.bundle !== "off" && detections.get("size-limit")?.activeCapabilities.bundleBudget && enabled("size-limit")) {
       results.push(await runSizeLimit(context, options.verbose ?? false));
+    }
+    if ((!options.category || options.category === "package-health") && config.categories?.["package-health"] !== "off" && detections.get("publint")?.activeCapabilities.packagePublishing && enabled("publint")) {
+      results.push(await runPublint(context, options.verbose ?? false));
+    }
+    if ((!options.category || options.category === "package-health") && config.categories?.["package-health"] !== "off" && detections.get("attw")?.activeCapabilities.typesCompatibility && enabled("attw")) {
+      results.push(await runAttw(context, options.verbose ?? false));
     }
   }
 

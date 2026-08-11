@@ -77,6 +77,8 @@ export interface ProviderCapabilities {
   vulnerabilities?: boolean;
   duplication?: boolean;
   bundleBudget?: boolean;
+  packagePublishing?: boolean;
+  typesCompatibility?: boolean;
 }
 
 export interface ProviderDetection {

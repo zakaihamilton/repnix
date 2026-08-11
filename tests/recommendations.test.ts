@@ -32,4 +32,30 @@ describe("recommendation engine", () => {
     expect(model.coverage.find((entry) => entry.category === "lint")?.status).toBe("covered");
     expect(model.coverage.find((entry) => entry.category === "format")?.status).toBe("covered");
   });
+
+  it("recommends complementary package-health checks for typed npm libraries", async () => {
+    const context = await detectRepository(fixturePath("npm-library"));
+    const { config } = await readConfig(context.root);
+    const model = buildAuditModel(context, await detectAllProviders(context), config);
+    expect(model.coverage.find((entry) => entry.category === "package-health")).toMatchObject({
+      status: "missing",
+      missingCapabilities: ["packagePublishing", "typesCompatibility"],
+    });
+    expect(model.recommendations.filter((item) => item.category === "package-health").map((item) => item.provider)).toEqual(["publint", "attw"]);
+    expect(model.recommendations.find((item) => item.provider === "attw")?.reason).toContain("package.json#types");
+  });
+
+  it("treats one of two typed-package capabilities as partial coverage", async () => {
+    const context = await detectRepository(fixturePath("npm-library"));
+    context.installedPackages.set("publint", "^0.3.23");
+    context.installedPackageOrigins.set("publint", ["package.json"]);
+    const { config } = await readConfig(context.root);
+    const model = buildAuditModel(context, await detectAllProviders(context), config);
+    expect(model.coverage.find((entry) => entry.category === "package-health")).toMatchObject({
+      status: "partial",
+      providers: ["Publint"],
+      missingCapabilities: ["typesCompatibility"],
+    });
+    expect(model.recommendations.filter((item) => item.category === "package-health").map((item) => item.provider)).toEqual(["attw"]);
+  });
 });

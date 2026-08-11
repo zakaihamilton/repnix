@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { normalizeDependencyCruiser } from "../src/providers/dependency-cruiser/normalizer.js";
 import { normalizeOsv } from "../src/providers/osv/normalizer.js";
+import { normalizePublint } from "../src/providers/publint/normalizer.js";
+import { normalizeAttw } from "../src/providers/attw/normalizer.js";
 import { normalizeJscpd, normalizeKnip } from "../src/runners/health-runner.js";
 
 describe("provider normalizers", () => {
@@ -30,6 +32,8 @@ describe("provider normalizers", () => {
     expect(() => normalizeJscpd({ nope: [] })).toThrow("unsupported shape");
     expect(() => normalizeOsv({ nope: [] })).toThrow("unsupported shape");
     expect(() => normalizeDependencyCruiser({ nope: [] })).toThrow("unsupported shape");
+    expect(() => normalizePublint({ nope: [] })).toThrow("unsupported shape");
+    expect(() => normalizeAttw({ nope: [] })).toThrow("unsupported shape");
   });
 
   it("normalizes OSV vulnerabilities with fixes and conservative severity", () => {
@@ -52,5 +56,49 @@ describe("provider normalizers", () => {
     });
     expect(findings[0]).toMatchObject({ type: "architecture-violation", severity: "error", file: "src/app.ts" });
     expect(findings[0]?.metadata).toMatchObject({ rule: "no-source-to-test", to: "test/helper.ts" });
+  });
+
+  it("normalizes Publint messages with their native severity and code", () => {
+    const findings = normalizePublint({
+      messages: [{ code: "FILE_DOES_NOT_EXIST", type: "error", path: ["exports", "."], args: {}, formatted: "pkg.exports[\".\"] points to a missing file." }],
+    });
+    expect(findings[0]).toMatchObject({
+      provider: "Publint",
+      category: "package-health",
+      type: "publint-file-does-not-exist",
+      severity: "error",
+      file: "package.json",
+      message: "pkg.exports[\".\"] points to a missing file.",
+    });
+  });
+
+  it("normalizes ATTW problems and packages without declarations", () => {
+    const findings = normalizeAttw({
+      analysis: {
+        types: { kind: "included" },
+        problems: [{ kind: "FalseESM", entrypoint: ".", resolutionKind: "node16-cjs" }],
+      },
+    });
+    expect(findings[0]).toMatchObject({
+      provider: "Are The Types Wrong?",
+      category: "package-health",
+      type: "attw-false-esm",
+      severity: "error",
+    });
+    expect(normalizeAttw({ analysis: { packageName: "demo", packageVersion: "1.0.0" } })[0]).toMatchObject({ type: "attw-untyped-package", severity: "error" });
+  });
+
+  it("respects ATTW rule ignores and resolution profiles", () => {
+    const report = {
+      analysis: {
+        types: { kind: "included" },
+        problems: [
+          { kind: "FalseESM", entrypoint: ".", resolutionKind: "node16-cjs" },
+          { kind: "NoResolution", entrypoint: ".", resolutionKind: "node10" },
+          { kind: "NamedExports", entrypoint: ".", resolutionKind: "bundler" },
+        ],
+      },
+    };
+    expect(normalizeAttw(report, { ignoreRules: ["named-exports"], profile: "esm-only" })).toEqual([]);
   });
 });

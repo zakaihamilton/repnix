@@ -184,6 +184,26 @@ export const PROVIDERS: ProviderDescriptor[] = [
     activeConfigPattern: /(?:limit\s*:|"limit"\s*:)/,
     requiresConfiguration: true,
   },
+  {
+    id: "publint",
+    name: "Publint",
+    category: "package-health",
+    packages: ["publint"],
+    configPatterns: [],
+    scriptPattern: /(^|\s|&&|\|)publint(?:\s|$)/,
+    capabilities: { packagePublishing: true },
+    zeroConfig: true,
+  },
+  {
+    id: "attw",
+    name: "Are The Types Wrong?",
+    category: "package-health",
+    packages: ["@arethetypeswrong/cli"],
+    configPatterns: [/(^|\/)\.attw\.json$/],
+    scriptPattern: /(^|\s|&&|\|)attw(?:\s|$)/,
+    capabilities: { typesCompatibility: true },
+    zeroConfig: true,
+  },
 ];
 
 async function executableOnPath(binary: string): Promise<string | null> {

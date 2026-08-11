@@ -4,6 +4,15 @@ All notable changes to RepNix are documented here. The project follows semantic 
 
 ## Unreleased
 
+## 0.3.0 - 2026-08-11
+
+### Added
+
+- Detect, recommend, install, and run Publint for npm package manifest and published-file validation.
+- Detect, recommend, install, and run Are The Types Wrong? for typed package consumer-resolution validation.
+- Normalize both package-health providers from machine-readable output against an offline local tarball.
+- Add packaged Phase 3 acceptance coverage for audit, category-filtered JSON checks, and provider-attributed explain output.
+
 ## 0.2.1 - 2026-08-11
 
 ### Added

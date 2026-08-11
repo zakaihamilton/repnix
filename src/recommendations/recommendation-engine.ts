@@ -22,7 +22,7 @@ const REQUIREMENTS: Record<HealthCategory, Capability[]> = {
   bundle: ["bundleBudget"],
   accessibility: [],
   monorepo: [],
-  "package-health": [],
+  "package-health": ["packagePublishing"],
 };
 
 export type CoverageStatus = "covered" | "partial" | "missing" | "not-applicable" | "off";
@@ -37,9 +37,25 @@ export interface CategoryCoverage {
 }
 
 export interface Recommendation extends ProviderRecommendation {
-  provider: "knip" | "jscpd" | "osv-scanner" | "eslint-boundaries" | "dependency-cruiser" | "size-limit";
+  provider: "knip" | "jscpd" | "osv-scanner" | "eslint-boundaries" | "dependency-cruiser" | "size-limit" | "publint" | "attw";
   name: string;
   category: HealthCategory;
+}
+
+function hasPublishedTypes(context: RepositoryContext): boolean {
+  if (typeof context.packageJson.types === "string" || typeof context.packageJson.typings === "string") return true;
+  const visit = (value: unknown): boolean => {
+    if (!value || typeof value !== "object") return false;
+    return Object.entries(value as Record<string, unknown>).some(([key, child]) => key === "types" || visit(child));
+  };
+  return visit(context.packageJson.exports);
+}
+
+function requirementsFor(category: HealthCategory, context: RepositoryContext): Capability[] {
+  if (category === "package-health" && hasPublishedTypes(context)) {
+    return ["packagePublishing", "typesCompatibility"];
+  }
+  return REQUIREMENTS[category];
 }
 
 export interface AuditModel {
@@ -78,7 +94,7 @@ function coverageFor(
   if (!isApplicable(category, context)) {
     return { category, status: "not-applicable", providers: [], capabilities: [], missingCapabilities: [] };
   }
-  const required = REQUIREMENTS[category];
+  const required = requirementsFor(category, context);
   if (required.length === 0) {
     return {
       category,
@@ -231,6 +247,39 @@ export function buildAuditModel(
       actionable: false,
       reason: "This frontend or publishable package can regress in shipped JavaScript size. Size Limit is appropriate once a real build artifact and an explicit budget are chosen; RepNix will not invent that budget.",
     });
+  }
+
+  const packageHealth = byCategory.get("package-health")!;
+  if (packageHealth.status !== "off" && packageHealth.status !== "not-applicable") {
+    const publint = detections.get("publint")!;
+    if (!publint.activeCapabilities.packagePublishing && config.providers?.publint?.enabled !== false) {
+      recommendations.push({
+        provider: "publint",
+        name: "Publint",
+        category: "package-health",
+        recommended: true,
+        priority: "baseline",
+        actionable: true,
+        reason: "This repository is publishable to npm, but no active package-manifest and published-file validation is present. Publint checks exports, module formats, entry points, and the actual package contents without overlapping source linting.",
+      });
+    }
+    const attw = detections.get("attw")!;
+    if (hasPublishedTypes(context) && !attw.activeCapabilities.typesCompatibility && config.providers?.attw?.enabled !== false) {
+      const evidence = typeof context.packageJson.types === "string"
+        ? `package.json#types points to ${context.packageJson.types}`
+        : typeof context.packageJson.typings === "string"
+          ? `package.json#typings points to ${context.packageJson.typings}`
+          : "package.json exports contains a types condition";
+      recommendations.push({
+        provider: "attw",
+        name: "Are The Types Wrong?",
+        category: "package-health",
+        recommended: true,
+        priority: "baseline",
+        actionable: true,
+        reason: `${evidence}, but TypeScript consumer resolution is not actively checked. Are The Types Wrong? validates the locally packed artifact across Node and bundler resolution modes alongside, rather than duplicating, Publint.`,
+      });
+    }
   }
 
   return { context, detections, coverage, recommendations };
