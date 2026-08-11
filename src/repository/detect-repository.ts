@@ -34,7 +34,7 @@ async function exists(file: string): Promise<boolean> {
 }
 
 async function readPackageJson(file: string): Promise<PackageJson> {
-  const raw = await readFile(file, "utf8");
+  const raw = (await readFile(file, "utf8")).replace(/^\uFEFF/, "");
   try {
     const parsed: unknown = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {

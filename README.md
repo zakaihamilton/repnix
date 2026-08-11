@@ -1,8 +1,13 @@
 # RepNix
 
+[![npm version](https://img.shields.io/npm/v/repnix.svg)](https://www.npmjs.com/package/repnix)
+[![CI](https://github.com/zakaihamilton/repnix/actions/workflows/ci.yml/badge.svg)](https://github.com/zakaihamilton/repnix/actions/workflows/ci.yml)
+[![End-to-end](https://github.com/zakaihamilton/repnix/actions/workflows/e2e.yml/badge.svg)](https://github.com/zakaihamilton/repnix/actions/workflows/e2e.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 RepNix is a local-first CLI that discovers the repository health checks a JavaScript or TypeScript project already has, identifies important gaps, installs a minimal specialist tool stack, and provides one normalized command for running it.
 
-RepNix orchestrates existing tools. It does not replace TypeScript, ESLint, Oxlint, Biome, Prettier, Jest, Vitest, Knip, jscpd, OSV-Scanner, dependency-cruiser, eslint-plugin-boundaries, or Size Limit.
+RepNix orchestrates existing tools. It does not replace TypeScript, ESLint, Oxlint, Biome, Prettier, Oxfmt, Jest, Vitest, Knip, jscpd, OSV-Scanner, dependency-cruiser, eslint-plugin-boundaries, or Size Limit.
 
 ## Requirements
 
@@ -122,6 +127,8 @@ pnpm verify
 ```
 
 The package uses Node.js ESM, strict TypeScript, and Vitest.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the provider-adapter workflow, validation requirements, and pull-request guidelines. Release history is recorded in [CHANGELOG.md](CHANGELOG.md).
 
 The end-to-end workflow also installs the packed CLI into disposable consumer repositories. It exercises interactive setup, real Knip and jscpd execution, JSON reporting, explain output, and setup idempotence across npm, pnpm, Yarn, and Bun. A separate matrix smoke-tests the published package shape and executable on Linux, macOS, and Windows.
 

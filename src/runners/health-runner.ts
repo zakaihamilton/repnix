@@ -15,6 +15,7 @@ import type {
   RepositoryContext,
 } from "../core/types.js";
 import type { AuditModel } from "../recommendations/recommendation-engine.js";
+import { isNonMutatingTestCommand } from "../repository/script-detection.js";
 import { normalizeDependencyCruiser } from "../providers/dependency-cruiser/normalizer.js";
 import { normalizeOsv } from "../providers/osv/normalizer.js";
 import { runCommand, type CommandResult } from "./command-runner.js";
@@ -79,7 +80,7 @@ function safeScript(context: RepositoryContext, names: string[], kind: "general"
     const command = context.scripts[name];
     if (!command) continue;
     if (/--fix(?:\s|$)|--write(?:\s|$)|\bwatch\b|--watch/.test(command)) continue;
-    if (kind === "test" && /no test specified/i.test(command)) continue;
+    if (kind === "test" && !isNonMutatingTestCommand(command)) continue;
     if (kind === "format" && name === "format") continue;
     return name;
   }
@@ -214,6 +215,9 @@ async function basicCommands(
     if (detections.get("prettier")?.activeCapabilities.formatting) {
       const binary = await expectedLocalBinary(context.root, "prettier");
       commands.push({ provider: "prettier", name: "Prettier", category: "format", command: binary, args: ["--check", "."] });
+    } else if (detections.get("oxfmt")?.activeCapabilities.formatting) {
+      const binary = await expectedLocalBinary(context.root, "oxfmt");
+      commands.push({ provider: "oxfmt", name: "Oxfmt", category: "format", command: binary, args: ["--check", "."] });
     } else if (detections.get("biome")?.activeCapabilities.formatting) {
       const binary = await expectedLocalBinary(context.root, "biome");
       commands.push({ provider: "biome-format", name: "Biome format", category: "format", command: binary, args: ["format", "."] });

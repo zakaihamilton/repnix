@@ -61,4 +61,40 @@ describe("repository detection", () => {
     expect(providers.get("eslint-boundaries")?.activeCapabilities.architectureRules).toBe(true);
     expect(providers.get("size-limit")?.activeCapabilities.bundleBudget).toBe(true);
   });
+
+  it("accepts UTF-8 BOM manifests and credits real test scripts conservatively", async () => {
+    const root = await copyFixture("minimal-js");
+    temporary.push(root);
+    const manifestPath = path.join(root, "package.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as { scripts: Record<string, string> };
+    manifest.scripts.test = "mocha test";
+    await writeFile(manifestPath, `\uFEFF${JSON.stringify(manifest, null, 2)}\n`);
+
+    let providers = await detectAllProviders(await detectRepository(root));
+    expect(providers.get("test-script")?.activeCapabilities.testing).toBe(true);
+    expect(providers.get("test-script")?.evidence).toContain("script:test");
+
+    manifest.scripts.test = "pnpm prettier:check";
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    providers = await detectAllProviders(await detectRepository(root));
+    expect(providers.get("test-script")?.activeCapabilities.testing).toBeUndefined();
+  });
+
+  it("detects Oxfmt and suppresses redundant generic test-script coverage", async () => {
+    const root = await copyFixture("react-eslint");
+    temporary.push(root);
+    const manifestPath = path.join(root, "package.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
+      scripts: Record<string, string>;
+      devDependencies: Record<string, string>;
+    };
+    manifest.devDependencies.oxfmt = "^0.61.0";
+    manifest.scripts.format = "oxfmt";
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+
+    const providers = await detectAllProviders(await detectRepository(root));
+    expect(providers.get("oxfmt")?.activeCapabilities.formatting).toBe(true);
+    expect(providers.get("vitest")?.activeCapabilities.testing).toBe(true);
+    expect(providers.get("test-script")?.activeCapabilities.testing).toBeUndefined();
+  });
 });
