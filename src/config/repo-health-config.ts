@@ -17,6 +17,8 @@ const schema = z
         "eslint-boundaries": providerConfig.optional(),
         "dependency-cruiser": providerConfig.optional(),
         "size-limit": providerConfig.optional(),
+        publint: providerConfig.optional(),
+        attw: providerConfig.optional(),
       })
       .strict()
       .optional(),

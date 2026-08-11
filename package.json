@@ -1,6 +1,6 @@
 {
   "name": "repnix",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Local-first repository health orchestration for JavaScript and TypeScript projects",
   "repository": {
     "type": "git",
@@ -28,6 +28,7 @@
     "test:e2e": "node scripts/e2e-consumer.mjs npm",
     "test:package": "node scripts/package-smoke.mjs",
     "test:phase2": "node scripts/e2e-phase2.mjs",
+    "test:phase3": "node scripts/e2e-phase3.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",

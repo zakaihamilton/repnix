@@ -6,7 +6,15 @@ import { installDevCommand } from "../package-manager/package-manager.js";
 import { planCiChange } from "./ci-plan.js";
 import { fileChange, readOptional } from "./file-plan.js";
 
-export type SetupProviderId = "knip" | "jscpd" | "dependency-cruiser";
+export type SetupProviderId = "knip" | "jscpd" | "dependency-cruiser" | "publint" | "attw";
+
+const PROVIDER_PACKAGES: Record<SetupProviderId, string> = {
+  knip: "knip",
+  jscpd: "jscpd",
+  "dependency-cruiser": "dependency-cruiser",
+  publint: "publint",
+  attw: "@arethetypeswrong/cli",
+};
 
 const JSCPD_IGNORES = [
   "**/node_modules/**",
@@ -46,8 +54,10 @@ export async function buildInstallPlan(
     plan.packages.push({ name: "repnix", version: `^${VERSION}`, dev: true, reason: "Keep the generated health script locally runnable" });
   }
   for (const provider of selected) {
-    if (!context.installedPackages.has(provider)) {
-      plan.packages.push({ name: provider, dev: true, reason: `Add ${provider} repository health coverage` });
+    const packageName = PROVIDER_PACKAGES[provider];
+    const installedAtRoot = context.installedPackageOrigins.get(packageName)?.includes("package.json") === true;
+    if (!installedAtRoot) {
+      plan.packages.push({ name: packageName, dev: true, reason: `Add ${provider} repository health coverage` });
     }
   }
 
@@ -63,6 +73,8 @@ export async function buildInstallPlan(
   if (selected.includes("dependency-cruiser")) {
     desiredScripts["health:architecture"] = `depcruise --output-type json --config -- ${context.sourceRoots.map(quoteScriptArg).join(" ")}`;
   }
+  if (selected.includes("publint")) desiredScripts["health:package:publint"] = "publint";
+  if (selected.includes("attw")) desiredScripts["health:package:types"] = "attw --pack .";
   for (const [name, command] of Object.entries(desiredScripts)) {
     const existing = context.scripts[name];
     if (existing && existing !== command) {

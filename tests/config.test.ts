@@ -26,6 +26,16 @@ describe("configuration", () => {
     }
   });
 
+  it("accepts package-health provider enablement", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "repnix-config-"));
+    try {
+      await writeFile(path.join(root, "repnix.config.json"), JSON.stringify({ providers: { publint: { enabled: true }, attw: { enabled: false } } }));
+      expect((await readConfig(root)).config.providers).toMatchObject({ publint: { enabled: true }, attw: { enabled: false } });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("rejects unknown configuration fields", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "repnix-config-"));
     try {

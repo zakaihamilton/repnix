@@ -23,6 +23,8 @@ describe("provider adapter contract", () => {
       "eslint-boundaries",
       "dependency-cruiser",
       "size-limit",
+      "publint",
+      "attw",
     ]);
     const eslint = providers.find((provider) => provider.id === "eslint")!;
     expect(await eslint.detect(context)).toMatchObject({ installed: true, configured: true });

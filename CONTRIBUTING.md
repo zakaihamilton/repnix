@@ -20,6 +20,7 @@ Run packaged acceptance tests before submitting changes that affect setup, execu
 pnpm test:package
 pnpm test:e2e
 pnpm test:phase2
+pnpm test:phase3
 ```
 
 These tests use disposable repositories. Registry access is limited to package installation within those fixtures.
