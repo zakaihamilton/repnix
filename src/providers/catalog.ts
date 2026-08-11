@@ -7,6 +7,7 @@ import type {
   RepositoryContext,
 } from "../core/types.js";
 import type { HealthCategory } from "../core/health-category.js";
+import { isNonMutatingTestCommand } from "../repository/script-detection.js";
 
 export interface ProviderDescriptor {
   id: string;
@@ -22,6 +23,7 @@ export interface ProviderDescriptor {
   packageJsonConfigKey?: string;
   activeConfigPattern?: RegExp;
   requiresConfiguration?: boolean;
+  scriptNames?: string[];
 }
 
 export const PROVIDERS: ProviderDescriptor[] = [
@@ -72,6 +74,16 @@ export const PROVIDERS: ProviderDescriptor[] = [
     capabilities: { formatting: true },
   },
   {
+    id: "oxfmt",
+    name: "Oxfmt",
+    category: "format",
+    packages: ["oxfmt"],
+    configPatterns: [/(^|\/)\.oxfmtrc\.json$/],
+    scriptPattern: /(^|\s|&&|\|)oxfmt(?:\s|$)/,
+    capabilities: { formatting: true },
+    zeroConfig: true,
+  },
+  {
     id: "jest",
     name: "Jest",
     category: "tests",
@@ -90,6 +102,16 @@ export const PROVIDERS: ProviderDescriptor[] = [
     scriptPattern: /(^|\s|&&|\|)vitest(?:\s|$)/,
     capabilities: { testing: true },
     zeroConfig: true,
+  },
+  {
+    id: "test-script",
+    name: "Test script",
+    category: "tests",
+    packages: [],
+    configPatterns: [],
+    scriptPattern: /$^/,
+    scriptNames: ["test", "test:run", "check:test"],
+    capabilities: { testing: true },
   },
   {
     id: "knip",
@@ -199,8 +221,10 @@ export async function detectProvider(
     }
   }
   const rootConfigFiles = configFiles.filter((file) => !file.includes("/"));
-  const scriptEntries = Object.entries(context.scripts).filter(([, command]) =>
-    descriptor.scriptPattern.test(command),
+  const scriptEntries = Object.entries(context.scripts).filter(([name, command]) =>
+    descriptor.scriptNames
+      ? descriptor.scriptNames.includes(name) && isNonMutatingTestCommand(command)
+      : descriptor.scriptPattern.test(command),
   );
   const packageConfigKey = descriptor.packageJsonConfigKey ?? descriptor.id;
   const packageJsonConfig = Object.hasOwn(context.packageJson, packageConfigKey);
@@ -235,5 +259,10 @@ export async function detectProvider(
 
 export async function detectAllProviders(context: RepositoryContext): Promise<Map<string, ProviderDetection>> {
   const detections = await Promise.all(PROVIDERS.map(async (provider) => [provider.id, await detectProvider(provider, context)] as const));
-  return new Map(detections);
+  const result = new Map(detections);
+  if (["jest", "vitest"].some((id) => result.get(id)?.activeCapabilities.testing)) {
+    const generic = result.get("test-script");
+    if (generic) result.set("test-script", { ...generic, activeCapabilities: {} });
+  }
+  return result;
 }
