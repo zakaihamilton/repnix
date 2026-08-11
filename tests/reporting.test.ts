@@ -153,11 +153,12 @@ describe("console reporting", () => {
     } as unknown as HealthRun;
 
     const output = renderExplain(run);
+    const plainOutput = stripVTControlCharacters(output);
 
-    expect(output).toContain("What this means:");
-    expect(output).toContain("Severity: warning — review soon");
-    expect(output).toContain("Where to look: src/old.ts:1");
-    expect(output).toContain("Reported by: Knip");
+    expect(plainOutput).toContain("What this means:");
+    expect(plainOutput).toContain("Severity: warning — review soon");
+    expect(plainOutput).toContain("Where to look: src/old.ts:1");
+    expect(plainOutput).toContain("Reported by: Knip");
   });
 
   it("gives a useful explanation when no findings exist", () => {
