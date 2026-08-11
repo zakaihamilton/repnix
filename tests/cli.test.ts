@@ -133,6 +133,21 @@ describe("CLI", () => {
     expect(report.summary).toMatchObject({ exitCode: 2, errors: 1 });
   });
 
+  it("fails clearly when a repository command exceeds the configured timeout", async () => {
+    const root = await copyFixture("minimal-js");
+    temporary.push(root);
+    const manifestPath = path.join(root, "package.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as { scripts: Record<string, string> };
+    manifest.scripts.test = "node -e \"setTimeout(() => {}, 1000)\"";
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+
+    const result = await runCli(root, ["check", "tests", "--json", "--timeout", "0.05"]);
+    const report = JSON.parse(result.stdout) as { summary: { exitCode: number; errors: number }; results: Array<{ status: string; message?: string }> };
+    expect(result.code).toBe(2);
+    expect(report.summary).toMatchObject({ exitCode: 2, errors: 1 });
+    expect(report.results).toEqual(expect.arrayContaining([expect.objectContaining({ status: "error", message: expect.stringContaining("timeout") })]));
+  });
+
   it("runs OSV-Scanner offline and accepts nonzero exits with valid findings", async () => {
     const root = await copyFixture("minimal-js");
     temporary.push(root);

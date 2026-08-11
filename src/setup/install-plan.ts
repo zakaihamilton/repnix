@@ -50,13 +50,13 @@ export async function buildInstallPlan(
     plan.conflicts.push("A package manager could not be resolved.");
     return plan;
   }
-  if (context.packageJson.name !== "repnix" && !context.installedPackages.has("repnix")) {
+  const installedAtRoot = (name: string) => context.installedPackageOrigins.get(name)?.includes("package.json") === true;
+  if (context.packageJson.name !== "repnix" && !installedAtRoot("repnix")) {
     plan.packages.push({ name: "repnix", version: `^${VERSION}`, dev: true, reason: "Keep the generated health script locally runnable" });
   }
   for (const provider of selected) {
     const packageName = PROVIDER_PACKAGES[provider];
-    const installedAtRoot = context.installedPackageOrigins.get(packageName)?.includes("package.json") === true;
-    if (!installedAtRoot) {
+    if (!installedAtRoot(packageName)) {
       plan.packages.push({ name: packageName, dev: true, reason: `Add ${provider} repository health coverage` });
     }
   }

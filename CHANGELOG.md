@@ -5,6 +5,10 @@ All notable changes to RepNix are documented here. The project follows semantic 
 ## Unreleased
 
 - Publish new package versions automatically after pushes to `main`, while skipping versions already present on npm.
+- Add configurable command timeouts with process-group termination for repository checks and setup installation.
+- Roll back planned files and package-manager lockfiles when setup installation fails.
+- Avoid treating workspace-only dependencies as root-installed providers and recognize CI install commands with lockfile flags.
+- Skip existing quality scripts that contain common mutating or publishing commands.
 
 ## 0.3.1 - 2026-08-11
 

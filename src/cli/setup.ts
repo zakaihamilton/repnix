@@ -50,7 +50,7 @@ export async function setupCommand(options: DiagnosticOptions = {}): Promise<num
   note(preview || "No changes", "Planned changes");
   const apply = await confirm({ message: "Apply changes?", initialValue: false });
   if (isCancel(apply) || !apply) return 0;
-  await applyInstallPlan(audit.context, plan, logger);
+  await applyInstallPlan(audit.context, plan, logger, options.timeout === undefined ? undefined : options.timeout * 1000);
   outro(pc.green("Repository health setup complete."));
   return 0;
 }
