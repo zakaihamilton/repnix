@@ -111,6 +111,20 @@ function detectSourceRoots(sourceFiles: string[]): string[] {
   return roots.size > 0 ? [...roots].sort() : ["."];
 }
 
+function workspaceRoots(manifests: WorkspaceManifest[]): string[] {
+  return [...new Set(manifests.map((manifest) => {
+    const directory = path.posix.dirname(manifest.path.replaceAll(path.sep, "/"));
+    return directory === "." ? "." : directory;
+  }))].sort();
+}
+
+function sourceFilesByWorkspace(sourceFiles: string[], roots: string[]): Record<string, string[]> {
+  return Object.fromEntries(roots.map((root) => [
+    root,
+    sourceFiles.filter((file) => root === "." || file.startsWith(`${root}/`)),
+  ]));
+}
+
 export async function detectRepository(start = process.cwd()): Promise<RepositoryContext> {
   const root = await findRoot(start);
   const packageJson = await readPackageJson(path.join(root, "package.json"));
@@ -198,6 +212,7 @@ export async function detectRepository(start = process.cwd()): Promise<Repositor
 
   const packageManager = detectPackageManager(packageJson, files);
   const githubWorkflows = [...files].some((file) => /^\.github\/workflows\/.*\.ya?ml$/.test(file));
+  const detectedWorkspaceRoots = workspaceRoots(manifests);
   const context: RepositoryContext = {
     root,
     packageManager: packageManager.packageManager,
@@ -217,6 +232,8 @@ export async function detectRepository(start = process.cwd()): Promise<Repositor
     files,
     sourceFiles,
     sourceRoots: detectSourceRoots(sourceFiles),
+    workspaceRoots: detectedWorkspaceRoots,
+    workspaceSourceFiles: sourceFilesByWorkspace(sourceFiles, detectedWorkspaceRoots),
     diagnostics: packageManager.diagnostics,
   };
   if (packageManager.evidence) context.packageManagerEvidence = packageManager.evidence;

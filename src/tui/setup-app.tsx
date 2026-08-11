@@ -4,7 +4,7 @@ import { CATEGORY_DESCRIPTIONS, CATEGORY_LABELS, PROVIDER_DESCRIPTIONS, PROVIDER
 import type { DiagnosticLogger, DiagnosticOptions } from "../cli/options.js";
 import { resolveDiagnosticLogger } from "../cli/options.js";
 import { auditRepository } from "../cli/audit.js";
-import type { AuditModel } from "../recommendations/recommendation-engine.js";
+import type { AuditModel, CoverageStatus } from "../recommendations/recommendation-engine.js";
 import type { InstallPlan, InstallProgress, RepositoryContext } from "../core/types.js";
 import { applyInstallPlan } from "../setup/apply-plan.js";
 import { buildInstallPlan } from "../setup/install-plan.js";
@@ -250,9 +250,16 @@ function Panel({
   );
 }
 
+export function setupStepIndex(screen: SetupTuiModel["screen"]): number {
+  if (screen === "loading" || screen === "audit" || screen === "empty") return 0;
+  if (screen === "select" || screen === "planning") return 1;
+  if (screen === "review" || screen === "details" || screen === "confirm") return 2;
+  return 3;
+}
+
 function Header({ model, repositoryName, packageManager, theme }: { model: SetupTuiModel; repositoryName: string; packageManager: string | null; theme: SetupTuiTheme }): React.ReactElement {
-  const steps = ["Select checks", "Review changes", "Apply safely"];
-  const active = model.screen === "loading" || model.screen === "empty" || model.screen === "select" || model.screen === "planning" ? 0 : model.screen === "review" || model.screen === "details" || model.screen === "confirm" ? 1 : 2;
+  const steps = ["Audit", "Select checks", "Review changes", "Apply safely"];
+  const active = setupStepIndex(model.screen);
   return (
     <Box flexDirection="column" marginBottom={1} flexShrink={0}>
       <Box justifyContent="space-between">
@@ -272,19 +279,83 @@ function Header({ model, repositoryName, packageManager, theme }: { model: Setup
   );
 }
 
+export function auditStatusPresentation(status: CoverageStatus, theme: SetupTuiTheme): { symbol: string; color: string } {
+  switch (status) {
+    case "covered":
+      return { symbol: "✓", color: theme.success };
+    case "partial":
+      return { symbol: "◐", color: theme.warning };
+    case "missing":
+      return { symbol: "✗", color: theme.danger };
+    case "off":
+      return { symbol: "–", color: theme.muted };
+    case "not-applicable":
+      return { symbol: "·", color: theme.muted };
+  }
+}
+
+export function auditRecommendationSummary(
+  recommendations: AuditModel["recommendations"],
+  actionableOnly = false,
+): { baseline: number; optional: number; advanced: number; total: number } {
+  const considered = actionableOnly ? recommendations.filter((recommendation) => recommendation.actionable) : recommendations;
+  const summary = { baseline: 0, optional: 0, advanced: 0, total: considered.length };
+  for (const recommendation of considered) summary[recommendation.priority] += 1;
+  return summary;
+}
+
+export function auditSetupOptions(audit: AuditModel): string[] {
+  return [
+    ...audit.recommendations.filter((recommendation) => recommendation.actionable).map((recommendation) => recommendation.name),
+    ...(audit.context.hasCI ? ["GitHub Actions health step"] : []),
+  ];
+}
+
+export function selectedSetupOptions(audit: AuditModel, model: SetupTuiModel): string[] {
+  return [
+    ...audit.recommendations
+      .filter((recommendation) => recommendation.actionable && model.selectedProviders.includes(recommendation.provider as SetupTuiModel["selectedProviders"][number]))
+      .map((recommendation) => recommendation.name),
+    ...(model.includeCi ? ["GitHub Actions health step"] : []),
+  ];
+}
+
+export interface AuditPageSummary {
+  repositoryName: string;
+  packageManager: string;
+  languages: string[];
+  frameworks: string[];
+  ci: string;
+  workspaceCount: number;
+}
+
+export function auditPageSummary(audit: AuditModel): AuditPageSummary {
+  const context = audit.context;
+  return {
+    repositoryName: context.packageJson.name ?? "unnamed",
+    packageManager: context.packageManager ?? "unresolved",
+    languages: context.languages,
+    frameworks: context.frameworks,
+    ci: context.hasCI ? "GitHub Actions" : "none detected",
+    workspaceCount: context.workspaceRoots?.filter((root) => root !== ".").length ?? Math.max(context.packageCount - 1, 0),
+  };
+}
+
 function KeyHint({ label, children, theme }: { label: string; children: React.ReactNode; theme: SetupTuiTheme }): React.ReactElement {
   return <Text><Text color={theme.primary} backgroundColor={theme.panelRaised} bold>{` ${label} `}</Text> <Text color={theme.muted}>{children}</Text></Text>;
 }
 
 function Footer({ model, theme }: { model: SetupTuiModel; theme: SetupTuiTheme }): React.ReactElement {
-  const hints: Array<[string, string]> = model.screen === "select"
-    ? [["↑↓/jk", "move"], ["Space", "toggle"], ["Enter", "review"], ["q", "quit"]]
+  const hints: Array<[string, string]> = model.screen === "audit"
+    ? [["Enter", "continue to checks"], ["q/Esc", "exit"]]
+    : model.screen === "select"
+    ? [["↑↓/jk", "move"], ["Space", "toggle"], ["Enter", "review"], ["Esc/Backspace", "back"], ["q", "quit"]]
     : model.screen === "review"
-      ? [["↑↓", "move"], ["Space", "inspect"], ["Enter", "confirm"], ["Esc", "back"], ["q", "quit"]]
+      ? [["↑↓", "move"], ["Space", "inspect"], ["Enter", "confirm"], ["Esc/Backspace", "back"], ["q", "quit"]]
       : model.screen === "details"
-        ? [["↑↓/jk", "scroll"], ["Esc", "back"], ["q", "quit"]]
+        ? [["↑↓/jk", "scroll"], ["Esc/Backspace", "back"], ["q", "quit"]]
         : model.screen === "confirm"
-          ? [["←→", "focus"], ["Enter", "select"], ["Esc", "back"], ["q", "quit"]]
+          ? [["←→", "focus"], ["Enter", "select"], ["Esc/Backspace", "back"], ["q", "quit"]]
           : model.screen === "success" || model.screen === "error"
             ? [["Enter/q", "exit"]]
             : [["…", "Please wait"]];
@@ -455,6 +526,53 @@ function CiDetailView({ context, theme }: { context: RepositoryContext; theme: S
   );
 }
 
+export const AUDIT_LABEL_COLUMN_WIDTH = 25;
+
+function auditCoverageRow(entry: AuditModel["coverage"][number], theme: SetupTuiTheme): React.ReactElement {
+  const status = auditStatusPresentation(entry.status, theme);
+  return (
+    <Box key={entry.category} flexDirection="row" overflow="hidden">
+      <Box width={2} flexShrink={0}>
+        <Text color={status.color}>{status.symbol}</Text>
+      </Box>
+      <Box width={AUDIT_LABEL_COLUMN_WIDTH} flexShrink={0}>
+        <Text {...textColor(theme)} wrap="truncate-end">{CATEGORY_LABELS[entry.category]}</Text>
+      </Box>
+      {entry.providers.length ? <Text color={status.color} wrap="truncate-end">{entry.providers.join(", ")}</Text> : null}
+    </Box>
+  );
+}
+
+function AuditView({ audit, theme }: { audit: AuditModel; theme: SetupTuiTheme }): React.ReactElement {
+  const page = auditPageSummary(audit);
+  const summary = auditRecommendationSummary(audit.recommendations, true);
+  const midpoint = Math.ceil(audit.coverage.length / 2);
+  const setupOptions = auditSetupOptions(audit);
+  const actionable = setupOptions.length > 0;
+  return (
+    <Panel title="Repository audit" theme={theme} borderColor={theme.info}>
+      <Text {...textColor(theme)}>Repository: <Text color={theme.primary}>{page.repositoryName}</Text></Text>
+      <Text {...textColor(theme)}>Package manager: <Text color={theme.primary}>{page.packageManager}</Text>  ·  CI: {page.ci}</Text>
+      <Text {...textColor(theme)} wrap="truncate-end">Languages: {page.languages.join(", ") || "none detected"}  ·  Frameworks: {page.frameworks.join(", ") || "none detected"}  ·  Workspaces: {page.workspaceCount}</Text>
+      <Newline />
+      <Text color={theme.secondary} bold>HEALTH COVERAGE</Text>
+      <Box flexDirection="row" gap={2} flexGrow={1} overflow="hidden">
+        <Box flexDirection="column" width="50%" overflow="hidden">
+          {audit.coverage.slice(0, midpoint).map((entry) => auditCoverageRow(entry, theme))}
+        </Box>
+        <Box flexDirection="column" width="50%" overflow="hidden">
+          {audit.coverage.slice(midpoint).map((entry) => auditCoverageRow(entry, theme))}
+        </Box>
+      </Box>
+      <Newline />
+      <Text color={theme.secondary} bold>NEXT STEPS</Text>
+      <Text {...textColor(theme)}>Recommendations: {summary.baseline} baseline  ·  {summary.optional} optional  ·  {summary.advanced} advanced</Text>
+      {setupOptions.length ? <Text {...textColor(theme)} wrap="wrap">Setup options: {setupOptions.join(" · ")}</Text> : null}
+      <Text color={actionable ? theme.primary : theme.success} bold>{actionable ? "Press Enter to choose checks and continue setup." : "No actionable setup changes were found. Press Enter to finish."}</Text>
+    </Panel>
+  );
+}
+
 function SelectView({ audit, model, theme }: { audit: AuditModel; model: SetupTuiModel; theme: SetupTuiTheme }): React.ReactElement {
   const items = selectionItems(audit.recommendations, audit.context.hasCI);
   const selected = providerFor(items, model);
@@ -576,12 +694,18 @@ function ConfirmButton({ label, focused, theme }: { label: string; focused: bool
   );
 }
 
-function ConfirmView({ plan, model, theme }: { plan: InstallPlan; model: SetupTuiModel; theme: SetupTuiTheme }): React.ReactElement {
+function ConfirmView({ audit, plan, model, theme }: { audit: AuditModel; plan: InstallPlan; model: SetupTuiModel; theme: SetupTuiTheme }): React.ReactElement {
+  const selectedOptions = selectedSetupOptions(audit, model);
   return (
     <Panel title="Confirm setup" theme={theme} borderColor={theme.warning}>
       <Text color={theme.warning} bold>◆ Apply these reviewed changes?</Text>
       <Newline />
       <Text color={theme.primary} bold>{planStats(plan)}</Text>
+      <Newline />
+      <Text color={theme.secondary} bold>SELECTED OPTIONS</Text>
+      {selectedOptions.length
+        ? selectedOptions.map((option) => <Text key={option} {...textColor(theme)}>  + {option}</Text>)
+        : <Text color={theme.muted}>  No setup options selected.</Text>}
       <Newline />
       <Text color={theme.secondary} bold>REVIEW NOTES</Text>
       <ReviewNotes plan={plan} theme={theme} />
@@ -614,10 +738,6 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
         setAudit(nextAudit);
         if (nextAudit.context.diagnostics.some((diagnostic) => diagnostic.severity === "error")) {
           dispatch({ type: "fail", message: "Repository detection reported an error. Run `repnix audit` for details." });
-          return;
-        }
-        if (!nextAudit.recommendations.some((recommendation) => recommendation.actionable)) {
-          setModel((current) => ({ ...current, screen: "empty" }));
           return;
         }
         setModel(createSetupTuiModel(nextAudit.recommendations));
@@ -669,11 +789,12 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
       if (!busy) leave();
       return;
     }
-    if (key.escape) {
+    if (key.escape || key.backspace) {
       if (busy) return;
       if (model.screen === "details") dispatch({ type: "close-details" });
       else if (model.screen === "confirm") dispatch({ type: "cancel-confirm" });
       else if (model.screen === "review") dispatch({ type: "back-to-select" });
+      else if (model.screen === "select") dispatch({ type: "back-to-audit" });
       else {
         result.code = model.screen === "error" ? 2 : 0;
         exit();
@@ -681,6 +802,12 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
       return;
     }
     if (model.screen === "loading" || model.screen === "planning" || model.screen === "applying") return;
+    if (model.screen === "audit") {
+      if (key.return) {
+        dispatch({ type: audit?.recommendations.some((recommendation) => recommendation.actionable) ? "begin-selection" : "show-empty" });
+      }
+      return;
+    }
     if (model.screen === "success") {
       result.code = 0;
       exit();
@@ -736,12 +863,13 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
       <Header model={model} repositoryName={audit?.context.packageJson.name ?? "repository"} packageManager={audit?.context.packageManager ?? null} theme={theme} />
       <Box flexDirection="column" flexGrow={1} flexShrink={1} minHeight={1} overflow="hidden">
         {model.screen === "loading" ? <Panel title="Scanning repository" theme={theme} borderColor={theme.info}><Text color={theme.info}>◌ Detecting checks, project structure, and recommendations…</Text></Panel> : null}
+        {model.screen === "audit" && audit ? <AuditView audit={audit} theme={theme} /> : null}
         {model.screen === "empty" ? <Panel title="Nothing to add" theme={theme} borderColor={theme.success}><Text color={theme.success}>● Your active checks already cover the gaps RepNix found.</Text></Panel> : null}
         {model.screen === "select" && audit ? <SelectView audit={audit} model={model} theme={theme} /> : null}
         {model.screen === "planning" ? <Panel title="Preparing review" theme={theme} borderColor={theme.info}><Text color={theme.info}>◌ Building a safe setup plan…</Text></Panel> : null}
         {model.screen === "review" && plan ? <ReviewView plan={plan} model={model} theme={theme} /> : null}
         {model.screen === "details" && plan ? <DetailsView plan={plan} model={model} width={width} layout={layout} theme={theme} /> : null}
-        {model.screen === "confirm" && plan ? <ConfirmView plan={plan} model={model} theme={theme} /> : null}
+        {model.screen === "confirm" && audit && plan ? <ConfirmView audit={audit} plan={plan} model={model} theme={theme} /> : null}
         {model.screen === "applying" ? <Panel title="Applying safely" theme={theme} borderColor={theme.warning}><Text color={theme.warning}>◌ {model.progress ?? "Installing selected checks and writing reviewed files…"}</Text></Panel> : null}
         {model.screen === "success" ? <Panel title="Setup complete" theme={theme} borderColor={theme.success}><Text color={theme.success}>● Repository health setup completed successfully.</Text><Newline /><Text {...textColor(theme)}>Run `repnix check` to verify the new checks.</Text></Panel> : null}
         {model.screen === "error" ? <Panel title="Setup stopped" theme={theme} borderColor={theme.danger}><Text color={theme.danger}>◆ {model.error ?? "An unexpected error occurred."}</Text><Newline /><Text color={theme.muted}>No further changes will be applied.</Text></Panel> : null}

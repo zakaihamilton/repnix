@@ -6,7 +6,7 @@ import { installDevCommand } from "../package-manager/package-manager.js";
 import { planCiChange } from "./ci-plan.js";
 import { fileChange, readOptional } from "./file-plan.js";
 
-export type SetupProviderId = "knip" | "jscpd" | "dependency-cruiser" | "publint" | "attw";
+export type SetupProviderId = "knip" | "jscpd" | "dependency-cruiser" | "publint" | "attw" | "syncpack" | "license-checker" | "markdownlint";
 
 const PROVIDER_PACKAGES: Record<SetupProviderId, string> = {
   knip: "knip",
@@ -14,6 +14,9 @@ const PROVIDER_PACKAGES: Record<SetupProviderId, string> = {
   "dependency-cruiser": "dependency-cruiser",
   publint: "publint",
   attw: "@arethetypeswrong/cli",
+  syncpack: "syncpack",
+  "license-checker": "license-checker",
+  markdownlint: "markdownlint-cli2",
 };
 
 const JSCPD_IGNORES = [
@@ -75,6 +78,9 @@ export async function buildInstallPlan(
   }
   if (selected.includes("publint")) desiredScripts["health:package:publint"] = "publint";
   if (selected.includes("attw")) desiredScripts["health:package:types"] = "attw --pack .";
+  if (selected.includes("syncpack")) desiredScripts["health:monorepo"] = "syncpack list-mismatches";
+  if (selected.includes("license-checker")) desiredScripts["health:licenses"] = "license-checker --json";
+  if (selected.includes("markdownlint")) desiredScripts["health:documentation"] = "markdownlint-cli2 \"**/*.md\"";
   for (const [name, command] of Object.entries(desiredScripts)) {
     const existing = context.scripts[name];
     if (existing && existing !== command) {

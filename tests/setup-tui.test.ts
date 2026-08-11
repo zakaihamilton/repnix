@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { createSetupTuiTheme, diffLineColor, normalizeTuiDiffLine, selectionIndicator, selectionRowPresentation, setupCheckDetails, tuiLayoutMetrics } from "../src/tui/setup-app.js";
+import { AUDIT_LABEL_COLUMN_WIDTH, auditPageSummary, auditRecommendationSummary, auditSetupOptions, auditStatusPresentation, createSetupTuiTheme, diffLineColor, normalizeTuiDiffLine, selectedSetupOptions, selectionIndicator, selectionRowPresentation, setupCheckDetails, setupStepIndex, tuiLayoutMetrics } from "../src/tui/setup-app.js";
 import { createSetupTuiModel, selectionItems, setupTuiReducer } from "../src/tui/setup-state.js";
-import type { Recommendation } from "../src/recommendations/recommendation-engine.js";
+import type { AuditModel, Recommendation } from "../src/recommendations/recommendation-engine.js";
 import type { RepositoryContext } from "../src/core/types.js";
 
 const recommendations: Recommendation[] = [
@@ -112,6 +112,46 @@ describe("setup TUI presentation", () => {
     expect(tuiLayoutMetrics(1)).toEqual({ bodyHeight: 1, detailViewport: 1 });
   });
 
+  it("summarizes the audit page facts, coverage states, and recommendation priorities", () => {
+    const audit: AuditModel = {
+      context: {
+        ...context,
+        packageJson: { name: "example-app" },
+        packageManager: "pnpm",
+        frameworks: ["React"],
+        languages: ["TypeScript"],
+        hasCI: true,
+        packageCount: 3,
+        workspaceRoots: [".", "packages/core", "packages/web"],
+      },
+      detections: new Map(),
+      coverage: [
+        { category: "types", status: "covered", providers: ["TypeScript"], capabilities: ["typeChecking"], missingCapabilities: [] },
+        { category: "security", status: "missing", providers: [], capabilities: [], missingCapabilities: ["vulnerabilities"] },
+      ],
+      recommendations,
+    };
+    expect(auditPageSummary(audit)).toMatchObject({ repositoryName: "example-app", packageManager: "pnpm", ci: "GitHub Actions", workspaceCount: 2 });
+    expect(auditRecommendationSummary(recommendations)).toEqual({ baseline: 2, optional: 1, advanced: 0, total: 3 });
+    expect(auditRecommendationSummary(recommendations, true)).toEqual({ baseline: 1, optional: 1, advanced: 0, total: 2 });
+    expect(auditSetupOptions(audit)).toEqual(["jscpd", "dependency-cruiser", "GitHub Actions health step"]);
+    const setupModel = createSetupTuiModel(recommendations);
+    setupModel.selectedProviders = ["jscpd", "dependency-cruiser"];
+    setupModel.includeCi = true;
+    expect(selectedSetupOptions(audit, setupModel)).toEqual(["jscpd", "dependency-cruiser", "GitHub Actions health step"]);
+    const theme = createSetupTuiTheme({ isTTY: false, hasColors: () => false });
+    expect(auditStatusPresentation("covered", theme)).toMatchObject({ symbol: "✓" });
+    expect(auditStatusPresentation("missing", theme)).toMatchObject({ symbol: "✗" });
+  });
+
+  it("maps the four setup steps to the correct active header step", () => {
+    expect(setupStepIndex("audit")).toBe(0);
+    expect(setupStepIndex("select")).toBe(1);
+    expect(setupStepIndex("review")).toBe(2);
+    expect(setupStepIndex("applying")).toBe(3);
+    expect(AUDIT_LABEL_COLUMN_WIDTH).toBe(25);
+  });
+
   it("builds provider-specific setup details for the selection pane", () => {
     const details = setupCheckDetails(recommendations[0]!, context);
 
@@ -134,6 +174,27 @@ describe("setup TUI presentation", () => {
 });
 
 describe("setup TUI state", () => {
+  it("starts on the audit page and advances only after an explicit transition", () => {
+    let model = createSetupTuiModel(recommendations);
+    expect(model.screen).toBe("audit");
+    model = setupTuiReducer(model, { type: "begin-selection" });
+    expect(model.screen).toBe("select");
+  });
+
+  it("shows the empty state after an audit with no actionable recommendations", () => {
+    let model = createSetupTuiModel(recommendations.map((recommendation) => ({ ...recommendation, actionable: false })));
+    expect(model.screen).toBe("audit");
+    model = setupTuiReducer(model, { type: "show-empty" });
+    expect(model.screen).toBe("empty");
+  });
+
+  it("returns from selection to audit before allowing setup to exit", () => {
+    let model = createSetupTuiModel(recommendations);
+    model = setupTuiReducer(model, { type: "begin-selection" });
+    model = setupTuiReducer(model, { type: "back-to-audit" });
+    expect(model.screen).toBe("audit");
+  });
+
   it("selects baseline actionable providers by default and appends CI when available", () => {
     const model = createSetupTuiModel(recommendations);
     const items = selectionItems(recommendations, true);

@@ -10,7 +10,7 @@ import { CATEGORY_DESCRIPTIONS, CATEGORY_LABELS, HEALTH_CATEGORIES } from "./cor
 
 const program = new Command()
   .name("repnix")
-  .description("Find missing checks and make JavaScript/TypeScript repositories safer to change")
+  .description("Find missing checks and make software repositories safer to change")
   .version(VERSION)
   .showHelpAfterError()
   .addHelpText("after", `\nStart here:\n  repnix audit   See what your repository already checks and what is missing.\n  repnix setup   Add recommended checks after reviewing a preview.\n  repnix check   Run all active checks.\n  repnix explain  Read findings in plain language.\n\nHealth categories:\n${HEALTH_CATEGORIES.map((category) => `  ${category.padEnd(16)} ${CATEGORY_LABELS[category]} — ${CATEGORY_DESCRIPTIONS[category]}`).join("\n")}\n`);

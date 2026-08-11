@@ -1,7 +1,7 @@
 import type { Recommendation } from "../recommendations/recommendation-engine.js";
 import type { SetupProviderId } from "../setup/install-plan.js";
 
-export type SetupScreen = "loading" | "empty" | "select" | "planning" | "review" | "details" | "confirm" | "applying" | "success" | "error";
+export type SetupScreen = "loading" | "audit" | "empty" | "select" | "planning" | "review" | "details" | "confirm" | "applying" | "success" | "error";
 
 export type SetupSelectionItem =
   | { kind: "provider"; provider: SetupProviderId; name: string }
@@ -22,6 +22,9 @@ export interface SetupTuiModel {
 export type SetupTuiAction =
   | { type: "move"; direction: "up" | "down"; itemCount: number }
   | { type: "toggle"; item?: SetupSelectionItem }
+  | { type: "begin-selection" }
+  | { type: "show-empty" }
+  | { type: "back-to-audit" }
   | { type: "begin-planning" }
   | { type: "planning-complete" }
   | { type: "back-to-select" }
@@ -64,7 +67,7 @@ export function selectionItems(recommendations: Recommendation[], hasCi: boolean
 
 export function createSetupTuiModel(recommendations: Recommendation[]): SetupTuiModel {
   return {
-    screen: "select",
+    screen: "audit",
     cursor: 0,
     reviewCursor: 0,
     detailScroll: 0,
@@ -90,6 +93,12 @@ export function setupTuiReducer(model: SetupTuiModel, action: SetupTuiAction): S
             : [...model.selectedProviders, item.provider],
         };
       }
+    case "begin-selection":
+      return { ...model, screen: "select", cursor: 0 };
+    case "show-empty":
+      return { ...model, screen: "empty" };
+    case "back-to-audit":
+      return { ...model, screen: "audit", cursor: 0 };
     case "begin-planning":
       return { ...model, screen: "planning" };
     case "planning-complete":
