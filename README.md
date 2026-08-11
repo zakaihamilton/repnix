@@ -107,11 +107,14 @@ If `repnix check` says that no applicable health checks ran, RepNix did not find
 
 `repnix setup` is an interactive, opt-in change flow:
 
+- In a capable terminal, setup opens a full-screen keyboard-driven dashboard with provider selection, a change summary, optional file details, and an explicit apply confirmation.
 - Baseline recommendations are preselected because they are useful for most JavaScript and TypeScript repositories.
 - Optional and advanced recommendations are not automatically enabled when they need project-specific rules or budgets.
-- Use **Space** to select or clear a provider and **Enter** to continue.
+- Use **↑/↓** or **j/k** to move, **Space** to select or clear a provider, **Enter** to continue, **d** to inspect file details, **a** to begin the apply confirmation, and **Esc/q/Ctrl+C** to leave safely before applying. While changes are being applied, exit keys are disabled until the rollback-safe operation finishes.
 - Before confirmation, RepNix shows the packages, scripts, configuration files, and optional CI changes it plans to apply. Existing files are preserved and conflicts are shown for review.
 - Some recommendations need preparation outside RepNix: OSV-Scanner needs its binary and local vulnerability database, architecture checks need module-boundary rules, and bundle checks need an explicit size budget.
+
+If the terminal is too small or does not support the full-screen dashboard, RepNix falls back to its sequential prompts. Non-interactive environments should use `repnix audit` for a read-only review.
 
 After setup completes, run `repnix check`. If it reports findings or a provider error, run `repnix explain` for the next place to look.
 

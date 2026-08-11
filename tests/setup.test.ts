@@ -1,10 +1,11 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { stripVTControlCharacters } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import { createDiagnosticLogger } from "../src/cli/options.js";
 import { detectRepository } from "../src/repository/detect-repository.js";
 import { planCiChange } from "../src/setup/ci-plan.js";
-import { fileChange, validateChanges, writeChanges } from "../src/setup/file-plan.js";
+import { fileChange, renderFileDiff, validateChanges, writeChanges } from "../src/setup/file-plan.js";
 import { buildInstallPlan } from "../src/setup/install-plan.js";
 import { applyInstallPlan } from "../src/setup/apply-plan.js";
 import { copyFixture } from "./helpers.js";
@@ -15,6 +16,19 @@ afterEach(async () => {
 });
 
 describe("setup planning", () => {
+  it("renders a compact, width-bounded diff with nearby context", () => {
+    const before = ["{", '  "scripts": {', '    "test": "vitest run",', '    "old": "remove me",', "  },", '  "name": "demo",', '  "description": "a line far from the change",', '  "keywords": ["demo"],', '  "license": "MIT",', "}"].join("\n");
+    const after = ["{", '  "scripts": {', '    "test": "vitest run",', '    "health": "repnix check",', "  },", '  "name": "demo",', '  "description": "a line far from the change",', '  "keywords": ["demo"],', '  "license": "MIT",', "}"].join("\n");
+
+    const output = renderFileDiff(fileChange("package.json", before, after, "Add health script")!, 40);
+
+    expect(output).toContain("M package.json (+1 -1)");
+    expect(output).toContain('+    "health": "repnix check",');
+    expect(output).toContain("unchanged line");
+    expect(output.split("\n").every((line) => stripVTControlCharacters(line).length <= 40)).toBe(true);
+    expect(output).not.toContain('"description": "a line far from the change"');
+  });
+
   it("previews minimal scripts/config and is file-idempotent", async () => {
     const root = await copyFixture("minimal-js");
     temporary.push(root);
@@ -94,6 +108,7 @@ describe("setup planning", () => {
     const lockfileBefore = await readFile(lockfilePath, "utf8");
     const after = `${before.trimEnd()} \n`;
     const context = await detectRepository(root);
+    const progress: string[] = [];
     const plan = {
       packages: [],
       files: [fileChange("package.json", before, after, "test rollback")!],
@@ -102,7 +117,8 @@ describe("setup planning", () => {
       conflicts: [],
     };
 
-    await expect(applyInstallPlan(context, plan, createDiagnosticLogger({ quiet: true }), 1000)).rejects.toThrow("rolled back");
+    await expect(applyInstallPlan(context, plan, createDiagnosticLogger({ quiet: true }), 1000, (event) => progress.push(event.phase))).rejects.toThrow("rolled back");
+    expect(progress).toEqual(["writing-files", "running-command", "rollback"]);
     expect(await readFile(packagePath, "utf8")).toBe(before);
     expect(await readFile(lockfilePath, "utf8")).toBe(lockfileBefore);
   });
