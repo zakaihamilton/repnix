@@ -177,10 +177,21 @@ const FOOTER_ROWS = 4;
 const DETAIL_PANEL_CHROME_ROWS = 6;
 const SIDEBAR_WIDTH = 40;
 const SIDEBAR_CONTENT_WIDTH = SIDEBAR_WIDTH - 4;
+export const COMPACT_LAYOUT_WIDTH = 100;
+export const COMPACT_LAYOUT_HEIGHT = 30;
+export const HORIZONTAL_PANE_MIN_WIDTH = 120;
+const COMPACT_LAYOUT_EXTRA_ROWS = 3;
 
-export function tuiLayoutMetrics(height: number): TuiLayoutMetrics {
+export type SetupPaneLayout = "horizontal" | "vertical" | "focused-sidebar";
+
+export function setupPaneLayout(width: number, height: number): SetupPaneLayout {
+  if (width < COMPACT_LAYOUT_WIDTH && height < COMPACT_LAYOUT_HEIGHT) return "focused-sidebar";
+  return width < HORIZONTAL_PANE_MIN_WIDTH || width < height ? "vertical" : "horizontal";
+}
+
+export function tuiLayoutMetrics(height: number, compact = false): TuiLayoutMetrics {
   const safeHeight = Math.max(height, 1);
-  const bodyHeight = Math.max(safeHeight - HEADER_ROWS - FOOTER_ROWS, 1);
+  const bodyHeight = Math.max(safeHeight - HEADER_ROWS - FOOTER_ROWS - (compact ? COMPACT_LAYOUT_EXTRA_ROWS : 0), 1);
   return {
     bodyHeight,
     detailViewport: Math.max(bodyHeight - DETAIL_PANEL_CHROME_ROWS, 1),
@@ -221,6 +232,7 @@ function Panel({
   flexShrink,
   width,
   borderColor,
+  fill = true,
 }: {
   title: string;
   children: React.ReactNode;
@@ -229,6 +241,7 @@ function Panel({
   flexShrink?: number;
   width?: string | number;
   borderColor?: string;
+  fill?: boolean;
 }): React.ReactElement {
   return (
     <Box
@@ -239,7 +252,7 @@ function Panel({
       flexGrow={flexGrow}
       flexShrink={flexShrink}
       width={width}
-      height="100%"
+      {...(fill ? { height: "100%" } : {})}
       overflow="hidden"
     >
       <Text bold color={theme.primary}>{` ${title} `}</Text>
@@ -257,14 +270,14 @@ export function setupStepIndex(screen: SetupTuiModel["screen"]): number {
   return 3;
 }
 
-function Header({ model, repositoryName, packageManager, theme }: { model: SetupTuiModel; repositoryName: string; packageManager: string | null; theme: SetupTuiTheme }): React.ReactElement {
+function Header({ model, repositoryName, packageManager, compact, theme }: { model: SetupTuiModel; repositoryName: string; packageManager: string | null; compact: boolean; theme: SetupTuiTheme }): React.ReactElement {
   const steps = ["Audit", "Select checks", "Review changes", "Apply safely"];
   const active = setupStepIndex(model.screen);
   return (
     <Box flexDirection="column" marginBottom={1} flexShrink={0}>
-      <Box justifyContent="space-between">
+      <Box flexDirection={compact ? "column" : "row"} justifyContent="space-between">
         <Text bold color={theme.primary}>◆ REP<Text color={theme.secondary}>NIX</Text> <Text color={theme.muted}>/ SETUP</Text></Text>
-        <Text color={theme.muted}><Text {...textColor(theme)}>{repositoryName}</Text>  ·  {packageManager ?? "package manager unresolved"}</Text>
+        <Text color={theme.muted} wrap="truncate-end"><Text {...textColor(theme)}>{repositoryName}</Text>  ·  {packageManager ?? "package manager unresolved"}</Text>
       </Box>
       <Box marginTop={1}>
         {steps.map((step, index) => (
@@ -345,13 +358,13 @@ function KeyHint({ label, children, theme }: { label: string; children: React.Re
   return <Text><Text color={theme.primary} backgroundColor={theme.panelRaised} bold>{` ${label} `}</Text> <Text color={theme.muted}>{children}</Text></Text>;
 }
 
-function Footer({ model, theme }: { model: SetupTuiModel; theme: SetupTuiTheme }): React.ReactElement {
+function Footer({ model, sidebarMode, theme }: { model: SetupTuiModel; sidebarMode: boolean; theme: SetupTuiTheme }): React.ReactElement {
   const hints: Array<[string, string]> = model.screen === "audit"
-    ? [["Enter", "continue to checks"], ["q/Esc", "exit"]]
+    ? [["↑↓/jk", "scroll"], ["Enter", "continue to checks"], ["q/Esc", "exit"]]
     : model.screen === "select"
-    ? [["↑↓/jk", "move"], ["Space", "toggle"], ["Enter", "review"], ["Esc/Backspace", "back"], ["q", "quit"]]
+    ? [["↑↓/jk", "move"], ["Space", "toggle"], ...(sidebarMode ? [["Tab", model.sidebarCollapsed ? "show checks" : "show details"] as [string, string]] : []), ["Enter", "review"], ["Esc/Backspace", "back"], ["q", "quit"]]
     : model.screen === "review"
-      ? [["↑↓", "move"], ["Space", "inspect"], ["Enter", "confirm"], ["Esc/Backspace", "back"], ["q", "quit"]]
+      ? [["↑↓", "move"], ["Space", "inspect"], ...(sidebarMode ? [["Tab", model.sidebarCollapsed ? "show files" : "show details"] as [string, string]] : []), ["Enter", "confirm"], ["Esc/Backspace", "back"], ["q", "quit"]]
       : model.screen === "details"
         ? [["↑↓/jk", "scroll"], ["Esc/Backspace", "back"], ["q", "quit"]]
         : model.screen === "confirm"
@@ -361,12 +374,14 @@ function Footer({ model, theme }: { model: SetupTuiModel; theme: SetupTuiTheme }
             : [["…", "Please wait"]];
   return (
     <Box borderStyle="single" borderColor={theme.borderStrong} paddingX={1} marginTop={1} flexShrink={0}>
-      {hints.map(([label, description], index) => (
-        <React.Fragment key={label}>
-          {index > 0 ? <Text color={theme.border}>  ·  </Text> : null}
-          <KeyHint label={label} theme={theme}>{description}</KeyHint>
-        </React.Fragment>
-      ))}
+      <Box flexDirection="row" flexWrap="wrap">
+        {hints.map(([label, description], index) => (
+          <Box key={label} flexDirection="row" marginRight={index < hints.length - 1 ? 2 : 0} flexShrink={0}>
+            {index > 0 ? <Text color={theme.border}>·  </Text> : null}
+            <KeyHint label={label} theme={theme}>{description}</KeyHint>
+          </Box>
+        ))}
+      </Box>
     </Box>
   );
 }
@@ -527,6 +542,16 @@ function CiDetailView({ context, theme }: { context: RepositoryContext; theme: S
 }
 
 export const AUDIT_LABEL_COLUMN_WIDTH = 25;
+export const AUDIT_TWO_COLUMN_MIN_WIDTH = 120;
+
+export function auditUsesSingleColumn(width: number): boolean {
+  return width < AUDIT_TWO_COLUMN_MIN_WIDTH;
+}
+
+export function auditContentLineCount(audit: AuditModel, singleColumn: boolean): number {
+  const coverageRows = singleColumn ? audit.coverage.length : Math.ceil(audit.coverage.length / 2);
+  return 9 + coverageRows + (auditSetupOptions(audit).length ? 1 : 0);
+}
 
 function auditCoverageRow(entry: AuditModel["coverage"][number], theme: SetupTuiTheme): React.ReactElement {
   const status = auditStatusPresentation(entry.status, theme);
@@ -543,63 +568,76 @@ function auditCoverageRow(entry: AuditModel["coverage"][number], theme: SetupTui
   );
 }
 
-function AuditView({ audit, theme }: { audit: AuditModel; theme: SetupTuiTheme }): React.ReactElement {
+function AuditView({ audit, singleColumn, scroll, viewport, theme }: { audit: AuditModel; singleColumn: boolean; scroll: number; viewport: number; theme: SetupTuiTheme }): React.ReactElement {
   const page = auditPageSummary(audit);
   const summary = auditRecommendationSummary(audit.recommendations, true);
-  const midpoint = Math.ceil(audit.coverage.length / 2);
   const setupOptions = auditSetupOptions(audit);
   const actionable = setupOptions.length > 0;
+  const coverageLines = singleColumn
+    ? audit.coverage.map((entry) => auditCoverageRow(entry, theme))
+    : Array.from({ length: Math.ceil(audit.coverage.length / 2) }, (_, index) => (
+      <Box key={`coverage-row-${index}`} flexDirection="row" gap={2} overflow="hidden">
+        <Box width="50%" flexShrink={0}>{audit.coverage[index] ? auditCoverageRow(audit.coverage[index]!, theme) : null}</Box>
+        <Box width="50%" flexShrink={0}>{audit.coverage[index + Math.ceil(audit.coverage.length / 2)] ? auditCoverageRow(audit.coverage[index + Math.ceil(audit.coverage.length / 2)]!, theme) : null}</Box>
+      </Box>
+    ));
+  const lines: React.ReactNode[] = [
+    <Text key="repository" {...textColor(theme)}>Repository: <Text color={theme.primary}>{page.repositoryName}</Text></Text>,
+    <Text key="package-manager" {...textColor(theme)}>Package manager: <Text color={theme.primary}>{page.packageManager}</Text>  ·  CI: {page.ci}</Text>,
+    <Text key="facts" {...textColor(theme)} wrap="truncate-end">Languages: {page.languages.join(", ") || "none detected"}  ·  Frameworks: {page.frameworks.join(", ") || "none detected"}  ·  Workspaces: {page.workspaceCount}</Text>,
+    <Newline key="facts-gap" />,
+    <Text key="coverage-heading" color={theme.secondary} bold>HEALTH COVERAGE</Text>,
+    ...coverageLines,
+    <Newline key="coverage-gap" />,
+    <Text key="next-steps-heading" color={theme.secondary} bold>NEXT STEPS</Text>,
+    <Text key="recommendations" {...textColor(theme)}>Recommendations: {summary.baseline} baseline  ·  {summary.optional} optional  ·  {summary.advanced} advanced</Text>,
+    ...(setupOptions.length ? [<Text key="setup-options" {...textColor(theme)} wrap="wrap">Setup options: {setupOptions.join(" · ")}</Text>] : []),
+    <Text key="prompt" color={actionable ? theme.primary : theme.success} bold>{actionable ? "Press Enter to choose checks and continue setup." : "No actionable setup changes were found. Press Enter to finish."}</Text>,
+  ];
+  const start = Math.min(Math.max(scroll, 0), Math.max(lines.length - 1, 0));
+  const visible = lines.slice(start, start + Math.max(viewport, 1));
   return (
     <Panel title="Repository audit" theme={theme} borderColor={theme.info}>
-      <Text {...textColor(theme)}>Repository: <Text color={theme.primary}>{page.repositoryName}</Text></Text>
-      <Text {...textColor(theme)}>Package manager: <Text color={theme.primary}>{page.packageManager}</Text>  ·  CI: {page.ci}</Text>
-      <Text {...textColor(theme)} wrap="truncate-end">Languages: {page.languages.join(", ") || "none detected"}  ·  Frameworks: {page.frameworks.join(", ") || "none detected"}  ·  Workspaces: {page.workspaceCount}</Text>
-      <Newline />
-      <Text color={theme.secondary} bold>HEALTH COVERAGE</Text>
-      <Box flexDirection="row" gap={2} flexGrow={1} overflow="hidden">
-        <Box flexDirection="column" width="50%" overflow="hidden">
-          {audit.coverage.slice(0, midpoint).map((entry) => auditCoverageRow(entry, theme))}
-        </Box>
-        <Box flexDirection="column" width="50%" overflow="hidden">
-          {audit.coverage.slice(midpoint).map((entry) => auditCoverageRow(entry, theme))}
-        </Box>
-      </Box>
-      <Newline />
-      <Text color={theme.secondary} bold>NEXT STEPS</Text>
-      <Text {...textColor(theme)}>Recommendations: {summary.baseline} baseline  ·  {summary.optional} optional  ·  {summary.advanced} advanced</Text>
-      {setupOptions.length ? <Text {...textColor(theme)} wrap="wrap">Setup options: {setupOptions.join(" · ")}</Text> : null}
-      <Text color={actionable ? theme.primary : theme.success} bold>{actionable ? "Press Enter to choose checks and continue setup." : "No actionable setup changes were found. Press Enter to finish."}</Text>
+      {visible}
+      {start + visible.length < lines.length ? <Text color={theme.muted}>↓ more · use ↑↓ to scroll</Text> : null}
     </Panel>
   );
 }
 
-function SelectView({ audit, model, theme }: { audit: AuditModel; model: SetupTuiModel; theme: SetupTuiTheme }): React.ReactElement {
+function SelectView({ audit, model, theme, paneLayout }: { audit: AuditModel; model: SetupTuiModel; theme: SetupTuiTheme; paneLayout: SetupPaneLayout }): React.ReactElement {
   const items = selectionItems(audit.recommendations, audit.context.hasCI);
   const selected = providerFor(items, model);
   const recommendation = selected?.kind === "provider" ? audit.recommendations.find((item) => item.provider === selected.provider) : undefined;
+  const horizontal = paneLayout === "horizontal";
+  const focusedSidebar = paneLayout === "focused-sidebar";
+  const showSidebar = !focusedSidebar || !model.sidebarCollapsed;
+  const showDetails = !focusedSidebar || model.sidebarCollapsed;
+  const sidebar = (
+    <Panel title="Recommended checks" width={horizontal ? SIDEBAR_WIDTH : "100%"} flexGrow={0} flexShrink={0} fill={horizontal} theme={theme} borderColor={theme.borderStrong}>
+      {items.map((item, index) => {
+        const checked = item.kind === "ci" ? model.includeCi : model.selectedProviders.includes(item.provider);
+        const active = index === model.cursor;
+        const itemRecommendation = item.kind === "provider" ? audit.recommendations.find((entry) => entry.provider === item.provider) : undefined;
+        const presentation = selectionRowPresentation(item.name, checked, active, itemRecommendation?.priority, theme, SIDEBAR_CONTENT_WIDTH);
+        return (
+          <Text
+            key={item.kind === "ci" ? item.name : item.provider}
+            {...foregroundColor(presentation.color)}
+            {...(presentation.backgroundColor ? { backgroundColor: presentation.backgroundColor } : {})}
+            bold={presentation.bold}
+            wrap="truncate-end"
+          >
+            {presentation.label}
+          </Text>
+        );
+      })}
+      {items.length === 0 ? <Text color={theme.success}>No setup changes are recommended.</Text> : null}
+    </Panel>
+  );
   return (
-    <Box flexDirection="row" gap={1} flexGrow={1} minHeight={1} overflow="hidden">
-      <Panel title="Recommended checks" width={SIDEBAR_WIDTH} flexGrow={0} flexShrink={0} theme={theme} borderColor={theme.borderStrong}>
-        {items.map((item, index) => {
-          const checked = item.kind === "ci" ? model.includeCi : model.selectedProviders.includes(item.provider);
-          const active = index === model.cursor;
-          const itemRecommendation = item.kind === "provider" ? audit.recommendations.find((entry) => entry.provider === item.provider) : undefined;
-          const presentation = selectionRowPresentation(item.name, checked, active, itemRecommendation?.priority, theme, SIDEBAR_CONTENT_WIDTH);
-          return (
-            <Text
-              key={item.kind === "ci" ? item.name : item.provider}
-              {...foregroundColor(presentation.color)}
-              {...(presentation.backgroundColor ? { backgroundColor: presentation.backgroundColor } : {})}
-              bold={presentation.bold}
-              wrap="truncate-end"
-            >
-              {presentation.label}
-            </Text>
-          );
-        })}
-        {items.length === 0 ? <Text color={theme.success}>No setup changes are recommended.</Text> : null}
-      </Panel>
-      <Panel title={recommendation ? `${recommendation.name} · ${CATEGORY_LABELS[recommendation.category]}` : selected?.name ?? "Setup overview"} theme={theme} borderColor={recommendation ? theme.primary : theme.border}>
+    <Box flexDirection={horizontal ? "row" : "column"} gap={horizontal ? 1 : 0} flexGrow={1} minHeight={1} overflow="hidden">
+      {showSidebar ? sidebar : null}
+      {showDetails ? <Panel width="100%" title={recommendation ? `${recommendation.name} · ${CATEGORY_LABELS[recommendation.category]}` : selected?.name ?? "Setup overview"} flexGrow={1} fill={horizontal} theme={theme} borderColor={recommendation ? theme.primary : theme.border}>
         {recommendation ? (
           <CheckDetailView recommendation={recommendation} context={audit.context} theme={theme} />
         ) : selected?.kind === "ci" ? (
@@ -607,7 +645,7 @@ function SelectView({ audit, model, theme }: { audit: AuditModel; model: SetupTu
         ) : (
           <Text color={theme.muted}>Select a check to see why it is recommended and what it will add.</Text>
         )}
-      </Panel>
+      </Panel> : null}
     </Box>
   );
 }
@@ -633,22 +671,29 @@ function ReviewNotes({ plan, theme }: { plan: InstallPlan; theme: SetupTuiTheme 
   );
 }
 
-function ReviewView({ plan, model, theme }: { plan: InstallPlan; model: SetupTuiModel; theme: SetupTuiTheme }): React.ReactElement {
+function ReviewView({ plan, model, theme, paneLayout }: { plan: InstallPlan; model: SetupTuiModel; theme: SetupTuiTheme; paneLayout: SetupPaneLayout }): React.ReactElement {
   const file = plan.files[model.reviewCursor];
+  const horizontal = paneLayout === "horizontal";
+  const focusedSidebar = paneLayout === "focused-sidebar";
+  const showSidebar = !focusedSidebar || !model.sidebarCollapsed;
+  const showDetails = !focusedSidebar || model.sidebarCollapsed;
+  const sidebar = (
+    <Panel title="Planned changes" width={horizontal ? SIDEBAR_WIDTH : "100%"} flexGrow={0} flexShrink={0} fill={horizontal} theme={theme} borderColor={theme.borderStrong}>
+      <Text color={theme.primary} bold>{planStats(plan)}</Text>
+      <Newline />
+      <Text color={theme.secondary} bold>PACKAGES</Text>
+      {plan.packages.length ? plan.packages.map((item) => <Text key={item.name} {...textColor(theme)}>  + {item.name}{item.version ? `@${item.version}` : ""}</Text>) : <Text color={theme.muted}>  none</Text>}
+      <Newline />
+      <Text color={theme.secondary} bold>FILES</Text>
+      {plan.files.length ? plan.files.map((item, index) => <Text key={item.path} {...(index === model.reviewCursor ? { color: theme.primary, backgroundColor: theme.active } : textColor(theme))} bold={index === model.reviewCursor}>{`${index === model.reviewCursor ? "▸" : " "} ${item.kind === "create" ? "A" : "M"} ${item.path}`}</Text>) : <Text color={theme.muted}>  none</Text>}
+      {plan.warnings.length ? <><Newline /><Text color={theme.warning}>◆ Warnings: {plan.warnings.length}</Text></> : null}
+      {plan.conflicts.length ? <Text color={theme.warning}>◆ Conflicts preserved: {plan.conflicts.length}</Text> : null}
+    </Panel>
+  );
   return (
-    <Box flexDirection="row" gap={1} flexGrow={1} minHeight={1} overflow="hidden">
-      <Panel title="Planned changes" width={SIDEBAR_WIDTH} flexGrow={0} flexShrink={0} theme={theme} borderColor={theme.borderStrong}>
-        <Text color={theme.primary} bold>{planStats(plan)}</Text>
-        <Newline />
-        <Text color={theme.secondary} bold>PACKAGES</Text>
-        {plan.packages.length ? plan.packages.map((item) => <Text key={item.name} {...textColor(theme)}>  + {item.name}{item.version ? `@${item.version}` : ""}</Text>) : <Text color={theme.muted}>  none</Text>}
-        <Newline />
-        <Text color={theme.secondary} bold>FILES</Text>
-        {plan.files.length ? plan.files.map((item, index) => <Text key={item.path} {...(index === model.reviewCursor ? { color: theme.primary, backgroundColor: theme.active } : textColor(theme))} bold={index === model.reviewCursor}>{`${index === model.reviewCursor ? "▸" : " "} ${item.kind === "create" ? "A" : "M"} ${item.path}`}</Text>) : <Text color={theme.muted}>  none</Text>}
-        {plan.warnings.length ? <><Newline /><Text color={theme.warning}>◆ Warnings: {plan.warnings.length}</Text></> : null}
-        {plan.conflicts.length ? <Text color={theme.warning}>◆ Conflicts preserved: {plan.conflicts.length}</Text> : null}
-      </Panel>
-      <Panel title={file ? `Detail · ${file.path}` : "Review summary"} theme={theme} borderColor={plan.warnings.length || plan.conflicts.length ? theme.warning : theme.border}>
+    <Box flexDirection={horizontal ? "row" : "column"} gap={horizontal ? 1 : 0} flexGrow={1} minHeight={1} overflow="hidden">
+      {showSidebar ? sidebar : null}
+      {showDetails ? <Panel width="100%" title={file ? `Detail · ${file.path}` : "Review summary"} flexGrow={1} fill={horizontal} theme={theme} borderColor={plan.warnings.length || plan.conflicts.length ? theme.warning : theme.border}>
         {file ? (
           <>
             <Text color={theme.muted}>{file.reason}</Text>
@@ -662,7 +707,7 @@ function ReviewView({ plan, model, theme }: { plan: InstallPlan; model: SetupTui
         <Newline />
         <Text color={theme.secondary} bold>REVIEW NOTES</Text>
         <ReviewNotes plan={plan} theme={theme} />
-      </Panel>
+      </Panel> : null}
     </Box>
   );
 }
@@ -694,7 +739,7 @@ function ConfirmButton({ label, focused, theme }: { label: string; focused: bool
   );
 }
 
-function ConfirmView({ audit, plan, model, theme }: { audit: AuditModel; plan: InstallPlan; model: SetupTuiModel; theme: SetupTuiTheme }): React.ReactElement {
+function ConfirmView({ audit, plan, model, compact, theme }: { audit: AuditModel; plan: InstallPlan; model: SetupTuiModel; compact: boolean; theme: SetupTuiTheme }): React.ReactElement {
   const selectedOptions = selectedSetupOptions(audit, model);
   return (
     <Panel title="Confirm setup" theme={theme} borderColor={theme.warning}>
@@ -710,7 +755,7 @@ function ConfirmView({ audit, plan, model, theme }: { audit: AuditModel; plan: I
       <Text color={theme.secondary} bold>REVIEW NOTES</Text>
       <ReviewNotes plan={plan} theme={theme} />
       <Newline />
-      <Box gap={1}>
+      <Box flexDirection={compact ? "column" : "row"} gap={1}>
         <ConfirmButton label="CANCEL" focused={model.confirmFocus === "cancel"} theme={theme} />
         <ConfirmButton label="APPLY" focused={model.confirmFocus === "apply"} theme={theme} />
       </Box>
@@ -725,12 +770,22 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
   const { stdout } = useStdout();
   const [audit, setAudit] = useState<AuditModel>();
   const [plan, setPlan] = useState<InstallPlan>();
-  const [model, setModel] = useState<SetupTuiModel>({ screen: "loading", cursor: 0, reviewCursor: 0, detailScroll: 0, confirmFocus: "cancel", selectedProviders: [], includeCi: false });
+  const [model, setModel] = useState<SetupTuiModel>({ screen: "loading", cursor: 0, auditScroll: 0, reviewCursor: 0, detailScroll: 0, confirmFocus: "cancel", selectedProviders: [], includeCi: false, sidebarCollapsed: false });
+  const [dimensions, setDimensions] = useState({ width: stdout.columns ?? 100, height: stdout.rows ?? 24 });
   const startedApply = useRef(false);
   const theme = useMemo(() => createSetupTuiTheme(stdout), [stdout]);
 
   const dispatch = (action: Parameters<typeof setupTuiReducer>[1]) => setModel((current) => setupTuiReducer(current, action));
   const items = useMemo(() => audit ? selectionItems(audit.recommendations, audit.context.hasCI) : [], [audit]);
+
+  useEffect(() => {
+    const handleResize = () => setDimensions({ width: stdout.columns ?? 100, height: stdout.rows ?? 24 });
+    stdout.on("resize", handleResize);
+    handleResize();
+    return () => {
+      stdout.off("resize", handleResize);
+    };
+  }, [stdout]);
 
   useEffect(() => {
     void deps.audit(process.cwd(), { ...options, logger })
@@ -769,9 +824,13 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
       .catch((error: unknown) => dispatch({ type: "fail", message: error instanceof Error ? error.message : String(error) }));
   }, [model.screen]);
 
-  const width = stdout.columns ?? 100;
-  const height = stdout.rows ?? 24;
-  const layout = tuiLayoutMetrics(height);
+  const { width, height } = dimensions;
+  const paneLayout = setupPaneLayout(width, height);
+  const compact = paneLayout !== "horizontal";
+  const sidebarMode = paneLayout === "focused-sidebar";
+  const auditSingleColumn = auditUsesSingleColumn(width);
+  const layout = tuiLayoutMetrics(height, compact);
+  const auditLineCount = audit ? auditContentLineCount(audit, auditSingleColumn) : 0;
   const detailFile = plan?.files[model.reviewCursor];
   const detailLineCount = detailFile ? renderFileDiff(detailFile, Math.max(width - 8, 32)).split("\n").length : 0;
   const busy = model.screen === "loading" || model.screen === "planning" || model.screen === "applying";
@@ -802,8 +861,18 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
       return;
     }
     if (model.screen === "loading" || model.screen === "planning" || model.screen === "applying") return;
+    if (key.tab) {
+      if (sidebarMode && (model.screen === "select" || model.screen === "review")) dispatch({ type: "toggle-sidebar" });
+      return;
+    }
     if (model.screen === "audit") {
-      if (key.return) {
+      if (key.upArrow || input === "k") {
+        dispatch({ type: "move-audit", direction: "up", lineCount: auditLineCount, viewport: layout.detailViewport });
+      }
+      else if (key.downArrow || input === "j") {
+        dispatch({ type: "move-audit", direction: "down", lineCount: auditLineCount, viewport: layout.detailViewport });
+      }
+      else if (key.return) {
         dispatch({ type: audit?.recommendations.some((recommendation) => recommendation.actionable) ? "begin-selection" : "show-empty" });
       }
       return;
@@ -824,9 +893,10 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
       return;
     }
     if (model.screen === "select") {
-      if (key.upArrow || input === "k") dispatch({ type: "move", direction: "up", itemCount: items.length });
-      else if (key.downArrow || input === "j") dispatch({ type: "move", direction: "down", itemCount: items.length });
-      else if (input === " ") {
+      const sidebarFocused = sidebarMode ? !model.sidebarCollapsed : true;
+      if (sidebarFocused && (key.upArrow || input === "k")) dispatch({ type: "move", direction: "up", itemCount: items.length });
+      else if (sidebarFocused && (key.downArrow || input === "j")) dispatch({ type: "move", direction: "down", itemCount: items.length });
+      else if (sidebarFocused && input === " ") {
         const item = providerFor(items, model);
         if (item) dispatch({ type: "toggle", item });
       }
@@ -834,9 +904,10 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
       return;
     }
     if (model.screen === "review") {
-      if (key.upArrow || input === "k") dispatch({ type: "move-review", direction: "up", fileCount: plan?.files.length ?? 0 });
-      else if (key.downArrow || input === "j") dispatch({ type: "move-review", direction: "down", fileCount: plan?.files.length ?? 0 });
-      else if (input === " ") {
+      const sidebarFocused = sidebarMode ? !model.sidebarCollapsed : true;
+      if (sidebarFocused && (key.upArrow || input === "k")) dispatch({ type: "move-review", direction: "up", fileCount: plan?.files.length ?? 0 });
+      else if (sidebarFocused && (key.downArrow || input === "j")) dispatch({ type: "move-review", direction: "down", fileCount: plan?.files.length ?? 0 });
+      else if (sidebarFocused && input === " ") {
         if (plan?.files.length) dispatch({ type: "open-details" });
       }
       else if (key.return) dispatch({ type: "begin-confirm" });
@@ -860,21 +931,21 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
 
   return (
     <Box flexDirection="column" width="100%" height={height} paddingX={1} overflow="hidden">
-      <Header model={model} repositoryName={audit?.context.packageJson.name ?? "repository"} packageManager={audit?.context.packageManager ?? null} theme={theme} />
+      <Header model={model} repositoryName={audit?.context.packageJson.name ?? "repository"} packageManager={audit?.context.packageManager ?? null} compact={compact} theme={theme} />
       <Box flexDirection="column" flexGrow={1} flexShrink={1} minHeight={1} overflow="hidden">
         {model.screen === "loading" ? <Panel title="Scanning repository" theme={theme} borderColor={theme.info}><Text color={theme.info}>◌ Detecting checks, project structure, and recommendations…</Text></Panel> : null}
-        {model.screen === "audit" && audit ? <AuditView audit={audit} theme={theme} /> : null}
+        {model.screen === "audit" && audit ? <AuditView audit={audit} singleColumn={auditSingleColumn} scroll={model.auditScroll} viewport={layout.detailViewport} theme={theme} /> : null}
         {model.screen === "empty" ? <Panel title="Nothing to add" theme={theme} borderColor={theme.success}><Text color={theme.success}>● Your active checks already cover the gaps RepNix found.</Text></Panel> : null}
-        {model.screen === "select" && audit ? <SelectView audit={audit} model={model} theme={theme} /> : null}
+        {model.screen === "select" && audit ? <SelectView audit={audit} model={model} paneLayout={paneLayout} theme={theme} /> : null}
         {model.screen === "planning" ? <Panel title="Preparing review" theme={theme} borderColor={theme.info}><Text color={theme.info}>◌ Building a safe setup plan…</Text></Panel> : null}
-        {model.screen === "review" && plan ? <ReviewView plan={plan} model={model} theme={theme} /> : null}
+        {model.screen === "review" && plan ? <ReviewView plan={plan} model={model} paneLayout={paneLayout} theme={theme} /> : null}
         {model.screen === "details" && plan ? <DetailsView plan={plan} model={model} width={width} layout={layout} theme={theme} /> : null}
-        {model.screen === "confirm" && audit && plan ? <ConfirmView audit={audit} plan={plan} model={model} theme={theme} /> : null}
+        {model.screen === "confirm" && audit && plan ? <ConfirmView audit={audit} plan={plan} model={model} compact={compact} theme={theme} /> : null}
         {model.screen === "applying" ? <Panel title="Applying safely" theme={theme} borderColor={theme.warning}><Text color={theme.warning}>◌ {model.progress ?? "Installing selected checks and writing reviewed files…"}</Text></Panel> : null}
         {model.screen === "success" ? <Panel title="Setup complete" theme={theme} borderColor={theme.success}><Text color={theme.success}>● Repository health setup completed successfully.</Text><Newline /><Text {...textColor(theme)}>Run `repnix check` to verify the new checks.</Text></Panel> : null}
         {model.screen === "error" ? <Panel title="Setup stopped" theme={theme} borderColor={theme.danger}><Text color={theme.danger}>◆ {model.error ?? "An unexpected error occurred."}</Text><Newline /><Text color={theme.muted}>No further changes will be applied.</Text></Panel> : null}
       </Box>
-      <Footer model={model} theme={theme} />
+      <Footer model={model} sidebarMode={sidebarMode} theme={theme} />
     </Box>
   );
 }

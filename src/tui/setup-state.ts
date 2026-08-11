@@ -10,11 +10,13 @@ export type SetupSelectionItem =
 export interface SetupTuiModel {
   screen: SetupScreen;
   cursor: number;
+  auditScroll: number;
   reviewCursor: number;
   detailScroll: number;
   confirmFocus: "cancel" | "apply";
   selectedProviders: SetupProviderId[];
   includeCi: boolean;
+  sidebarCollapsed: boolean;
   progress?: string;
   error?: string;
 }
@@ -22,6 +24,8 @@ export interface SetupTuiModel {
 export type SetupTuiAction =
   | { type: "move"; direction: "up" | "down"; itemCount: number }
   | { type: "toggle"; item?: SetupSelectionItem }
+  | { type: "toggle-sidebar" }
+  | { type: "move-audit"; direction: "up" | "down"; lineCount: number; viewport: number }
   | { type: "begin-selection" }
   | { type: "show-empty" }
   | { type: "back-to-audit" }
@@ -69,11 +73,13 @@ export function createSetupTuiModel(recommendations: Recommendation[]): SetupTui
   return {
     screen: "audit",
     cursor: 0,
+    auditScroll: 0,
     reviewCursor: 0,
     detailScroll: 0,
     confirmFocus: "cancel",
     selectedProviders: selectedProvidersFrom(recommendations),
     includeCi: false,
+    sidebarCollapsed: false,
   };
 }
 
@@ -93,16 +99,20 @@ export function setupTuiReducer(model: SetupTuiModel, action: SetupTuiAction): S
             : [...model.selectedProviders, item.provider],
         };
       }
+    case "toggle-sidebar":
+      return { ...model, sidebarCollapsed: !model.sidebarCollapsed };
+    case "move-audit":
+      return { ...model, auditScroll: moveScroll(model.auditScroll, action.direction, action.lineCount, action.viewport) };
     case "begin-selection":
-      return { ...model, screen: "select", cursor: 0 };
+      return { ...model, screen: "select", cursor: 0, sidebarCollapsed: false };
     case "show-empty":
       return { ...model, screen: "empty" };
     case "back-to-audit":
-      return { ...model, screen: "audit", cursor: 0 };
+      return { ...model, screen: "audit", cursor: 0, auditScroll: 0 };
     case "begin-planning":
       return { ...model, screen: "planning" };
     case "planning-complete":
-      return { ...model, screen: "review", reviewCursor: 0 };
+      return { ...model, screen: "review", reviewCursor: 0, sidebarCollapsed: false };
     case "back-to-select":
       return { ...model, screen: "select" };
     case "move-review":
