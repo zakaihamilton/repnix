@@ -57,7 +57,7 @@ def main() -> int:
         if not selected and (b"selectproviders" in prompt_text or b"choosethecheckstoadd" in prompt_text):
             os.write(terminal, b"\r")
             selected = True
-        if should_apply and not confirmed and b"applychanges?" in prompt_text:
+        if should_apply and not confirmed and (b"applychanges?" in prompt_text or b"applythesereviewedchanges?" in prompt_text):
             os.write(terminal, b"\x1b[D\r")
             confirmed = True
 
