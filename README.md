@@ -306,4 +306,4 @@ pnpm test:phase3
 
 ## Releases
 
-Tags matching `v<package-version>` trigger the release workflow. Releases are published through npm trusted publishing after the project verification and tag checks complete.
+Every push to `main` triggers the publish workflow. It runs the full project verification, checks whether the package version is already on npm, and publishes only new versions through npm trusted publishing. The workflow can also be started manually from GitHub Actions.
