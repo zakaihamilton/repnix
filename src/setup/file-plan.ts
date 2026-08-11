@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
+import pc from "picocolors";
 import type { FileChange } from "../core/types.js";
 
 export function contentHash(content: string | null): string | null {
@@ -81,11 +82,119 @@ export async function restoreChanges(root: string, changes: FileChange[]): Promi
   }
 }
 
-export function renderFileDiff(change: FileChange): string {
-  const lines = [`--- ${change.before === null ? "/dev/null" : change.path}`, `+++ ${change.path}`];
-  if (change.before !== null) {
-    for (const line of change.before.trimEnd().split("\n")) lines.push(`- ${line}`);
+type DiffLine = { kind: "context" | "add" | "remove"; text: string };
+
+const DIFF_CONTEXT_LINES = 2;
+const MAX_DIFF_CELLS = 300_000;
+
+function contentLines(content: string | null): string[] {
+  if (content === null || content.trimEnd() === "") return [];
+  return content.trimEnd().split("\n");
+}
+
+function replacementDiff(before: string[], after: string[]): DiffLine[] {
+  let prefix = 0;
+  while (prefix < before.length && prefix < after.length && before[prefix] === after[prefix]) prefix += 1;
+
+  let suffix = 0;
+  while (
+    suffix < before.length - prefix &&
+    suffix < after.length - prefix &&
+    before[before.length - 1 - suffix] === after[after.length - 1 - suffix]
+  ) {
+    suffix += 1;
   }
-  for (const line of change.after.trimEnd().split("\n")) lines.push(`+ ${line}`);
+
+  return [
+    ...before.slice(0, prefix).map((text) => ({ kind: "context" as const, text })),
+    ...before.slice(prefix, before.length - suffix).map((text) => ({ kind: "remove" as const, text })),
+    ...after.slice(prefix, after.length - suffix).map((text) => ({ kind: "add" as const, text })),
+    ...before.slice(before.length - suffix).map((text) => ({ kind: "context" as const, text })),
+  ];
+}
+
+function lineDiff(before: string[], after: string[]): DiffLine[] {
+  if (before.length * after.length > MAX_DIFF_CELLS) return replacementDiff(before, after);
+
+  const table = Array.from({ length: before.length + 1 }, () => new Uint32Array(after.length + 1));
+  for (let beforeIndex = before.length - 1; beforeIndex >= 0; beforeIndex -= 1) {
+    for (let afterIndex = after.length - 1; afterIndex >= 0; afterIndex -= 1) {
+      table[beforeIndex]![afterIndex] = before[beforeIndex] === after[afterIndex]
+        ? table[beforeIndex + 1]![afterIndex + 1]! + 1
+        : Math.max(table[beforeIndex + 1]![afterIndex]!, table[beforeIndex]![afterIndex + 1]!);
+    }
+  }
+
+  const result: DiffLine[] = [];
+  let beforeIndex = 0;
+  let afterIndex = 0;
+  while (beforeIndex < before.length && afterIndex < after.length) {
+    if (before[beforeIndex] === after[afterIndex]) {
+      result.push({ kind: "context", text: before[beforeIndex]! });
+      beforeIndex += 1;
+      afterIndex += 1;
+    } else if (table[beforeIndex + 1]![afterIndex]! >= table[beforeIndex]![afterIndex + 1]!) {
+      result.push({ kind: "remove", text: before[beforeIndex]! });
+      beforeIndex += 1;
+    } else {
+      result.push({ kind: "add", text: after[afterIndex]! });
+      afterIndex += 1;
+    }
+  }
+  while (beforeIndex < before.length) result.push({ kind: "remove", text: before[beforeIndex++]! });
+  while (afterIndex < after.length) result.push({ kind: "add", text: after[afterIndex++]! });
+  return result;
+}
+
+function wrapDiffLine(line: DiffLine, width: number | undefined): string[] {
+  const marker = line.kind === "add" ? "+" : line.kind === "remove" ? "-" : " ";
+  const color = line.kind === "add" ? pc.green : line.kind === "remove" ? pc.red : pc.dim;
+  const firstPrefix = `  ${marker}`;
+  const continuationPrefix = "    ↳ ";
+  const available = width ? Math.max(width - firstPrefix.length, 1) : undefined;
+  if (!available || line.text.length <= available) return [color(`${firstPrefix}${line.text}`)];
+
+  const chunks: string[] = [];
+  chunks.push(line.text.slice(0, available));
+  const continuationAvailable = width ? Math.max(width - continuationPrefix.length, 1) : available;
+  for (let offset = available; offset < line.text.length; offset += continuationAvailable) {
+    chunks.push(line.text.slice(offset, offset + continuationAvailable));
+  }
+  return chunks.map((chunk, index) => index === 0 ? color(`${firstPrefix}${chunk}`) : pc.dim(`${continuationPrefix}${chunk}`));
+}
+
+function omittedLines(count: number): string {
+  return pc.dim(`  … ${count} unchanged line${count === 1 ? "" : "s"} …`);
+}
+
+/** Render a review-sized diff. Large unchanged regions are collapsed and long lines are bounded for prompt boxes. */
+export function renderFileDiff(change: FileChange, width?: number): string {
+  const before = contentLines(change.before);
+  const after = contentLines(change.after);
+  const diff = lineDiff(before, after);
+  const changed = diff.flatMap((line, index) => line.kind === "context" ? [] : [index]);
+  const additions = diff.filter((line) => line.kind === "add").length;
+  const removals = diff.filter((line) => line.kind === "remove").length;
+  const kind = change.kind === "create" ? "A" : "M";
+  const lines = [`${kind} ${change.path} (+${additions} -${removals})`];
+  if (!changed.length) return lines.join("\n");
+
+  const ranges: Array<[number, number]> = [];
+  for (const index of changed) {
+    const start = Math.max(index - DIFF_CONTEXT_LINES, 0);
+    const end = Math.min(index + DIFF_CONTEXT_LINES + 1, diff.length);
+    const previous = ranges[ranges.length - 1];
+    if (previous && start <= previous[1]) previous[1] = Math.max(previous[1], end);
+    else ranges.push([start, end]);
+  }
+
+  let cursor = 0;
+  for (const [start, end] of ranges) {
+    if (start > cursor) lines.push(omittedLines(start - cursor));
+    lines.push(pc.dim(`  @@ changes near line ${start + 1} @@`));
+    for (let index = start; index < end; index += 1) lines.push(...wrapDiffLine(diff[index]!, width));
+    cursor = end;
+  }
+  if (cursor < diff.length) lines.push(omittedLines(diff.length - cursor));
   return lines.join("\n");
 }

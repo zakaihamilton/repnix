@@ -1,0 +1,186 @@
+import { describe, expect, it } from "vitest";
+import { createSetupTuiTheme, diffLineColor, normalizeTuiDiffLine, selectionIndicator, selectionRowPresentation, setupCheckDetails, tuiLayoutMetrics } from "../src/tui/setup-app.js";
+import { createSetupTuiModel, selectionItems, setupTuiReducer } from "../src/tui/setup-state.js";
+import type { Recommendation } from "../src/recommendations/recommendation-engine.js";
+import type { RepositoryContext } from "../src/core/types.js";
+
+const recommendations: Recommendation[] = [
+  {
+    provider: "jscpd",
+    name: "jscpd",
+    category: "duplication",
+    recommended: true,
+    priority: "baseline",
+    actionable: true,
+    reason: "Find repeated code.",
+  },
+  {
+    provider: "dependency-cruiser",
+    name: "dependency-cruiser",
+    category: "architecture",
+    recommended: true,
+    priority: "optional",
+    actionable: true,
+    reason: "Find dependency cycles.",
+  },
+  {
+    provider: "osv-scanner",
+    name: "OSV-Scanner",
+    category: "security",
+    recommended: true,
+    priority: "baseline",
+    actionable: false,
+    reason: "Needs manual preparation.",
+  },
+];
+
+const context: RepositoryContext = {
+  root: "/repo",
+  packageManager: "pnpm",
+  frameworks: [],
+  languages: ["TypeScript"],
+  kinds: ["typescript"],
+  isMonorepo: false,
+  packageCount: 1,
+  hasCI: true,
+  ciProvider: "github-actions",
+  packageJson: { name: "example" },
+  manifests: [],
+  installedPackages: new Map(),
+  installedPackageOrigins: new Map(),
+  scripts: {},
+  files: new Set(["src/index.ts"]),
+  sourceFiles: ["src/index.ts", "src/other.ts"],
+  sourceRoots: ["src"],
+  diagnostics: [],
+};
+
+describe("setup TUI presentation", () => {
+  it("uses filled square selection indicators", () => {
+    expect(selectionIndicator(true)).toBe("■");
+    expect(selectionIndicator(false)).toBe("□");
+  });
+
+  it("normalizes ANSI-colored diff lines before applying TUI colors", () => {
+    const theme = createSetupTuiTheme({ isTTY: false, hasColors: () => false });
+    expect(normalizeTuiDiffLine("\u001b[32m+ added line\u001b[39m")).toBe("+ added line");
+    expect(normalizeTuiDiffLine("  context line")).toBe("  context line");
+    expect(diffLineColor("\u001b[32m  + added line\u001b[39m", theme)).toBe(theme.success);
+    expect(diffLineColor("\u001b[31m  - removed line\u001b[39m", theme)).toBe(theme.danger);
+    expect(diffLineColor("  context line", theme)).toBe(theme.text);
+  });
+
+  it("gives active rows an accent treatment and inactive rows readable text", () => {
+    const theme = createSetupTuiTheme({ isTTY: false, hasColors: () => false });
+    const active = selectionRowPresentation("Vitest", true, true, "baseline", theme);
+    const inactive = selectionRowPresentation("Vitest", false, false, undefined, theme);
+
+    expect(active.label).toMatch(/^▸ ■ Vitest\s+· baseline\s*$/);
+    expect(active.label).toHaveLength(30);
+    expect(active.color).toBe(theme.primary);
+    expect(active.backgroundColor).toBe(theme.active);
+    expect(active.bold).toBe(true);
+    expect(inactive.label).toMatch(/^\s{2}□ Vitest/);
+    expect(inactive.color).toBe(theme.text);
+    expect(inactive.backgroundColor).toBeUndefined();
+    expect(inactive.bold).toBe(false);
+
+    const longRow = selectionRowPresentation("dependency-cruiser", false, true, "optional", theme, 36);
+    expect(longRow.label).toHaveLength(36);
+    expect(longRow.label).not.toContain("\n");
+
+    const baseline = selectionRowPresentation("jscpd", false, false, "baseline", theme, 36);
+    expect(baseline.label.endsWith("· baseline")).toBe(true);
+    expect(longRow.label.endsWith("· optional")).toBe(true);
+    expect(baseline.label.indexOf("· baseline")).toBe(longRow.label.indexOf("· optional"));
+  });
+
+  it("selects rich colors only when truecolor is available", () => {
+    const ansi = createSetupTuiTheme({ isTTY: false, hasColors: () => true });
+    const truecolor = createSetupTuiTheme({ isTTY: true, hasColors: () => true }, { COLORFGBG: "15;0" });
+    const light = createSetupTuiTheme({ isTTY: true, hasColors: () => true }, { COLORFGBG: "0;15" });
+
+    expect(ansi.primary).toBe("blue");
+    expect(ansi.text).toBeUndefined();
+    expect(truecolor.primary).toBe("#5eead4");
+    expect(light.primary).toBe("#0f766e");
+  });
+
+  it("reserves header and footer space for the flexible body", () => {
+    expect(tuiLayoutMetrics(24)).toEqual({ bodyHeight: 16, detailViewport: 10 });
+    expect(tuiLayoutMetrics(40)).toEqual({ bodyHeight: 32, detailViewport: 26 });
+    expect(tuiLayoutMetrics(1)).toEqual({ bodyHeight: 1, detailViewport: 1 });
+  });
+
+  it("builds provider-specific setup details for the selection pane", () => {
+    const details = setupCheckDetails(recommendations[0]!, context);
+
+    expect(details.checks[0]).toContain("Repeated code blocks");
+    expect(details.scope).toContain("2 source files under src");
+    expect(details.setup).toContain("Create .jscpd.json with safe generated/build exclusions.");
+    expect(details.command).toBe("pnpm run health:duplication");
+  });
+
+  it("explains how an existing architecture config is handled", () => {
+    const details = setupCheckDetails(recommendations[1]!, {
+      ...context,
+      files: new Set(["src/index.ts", ".dependency-cruiser.cjs"]),
+    });
+
+    expect(details.setup).toContain("Use the existing .dependency-cruiser.cjs without overwriting it.");
+    expect(details.caveat).toContain("Existing rules in .dependency-cruiser.cjs are preserved");
+    expect(details.command).toBe("pnpm run health:architecture");
+  });
+});
+
+describe("setup TUI state", () => {
+  it("selects baseline actionable providers by default and appends CI when available", () => {
+    const model = createSetupTuiModel(recommendations);
+    const items = selectionItems(recommendations, true);
+
+    expect(model.selectedProviders).toEqual(["jscpd"]);
+    expect(items.map((item) => item.name)).toEqual(["jscpd", "dependency-cruiser", "GitHub Actions health step"]);
+    expect(model.includeCi).toBe(false);
+  });
+
+  it("toggles providers and CI independently", () => {
+    const items = selectionItems(recommendations, true);
+    let model = createSetupTuiModel(recommendations);
+    model = setupTuiReducer(model, { type: "toggle", item: items[1]! });
+    model = setupTuiReducer(model, { type: "toggle", item: items[2]! });
+
+    expect(model.selectedProviders).toEqual(["jscpd", "dependency-cruiser"]);
+    expect(model.includeCi).toBe(true);
+  });
+
+  it("keeps review and apply behind explicit transitions", () => {
+    let model = createSetupTuiModel(recommendations);
+    model = setupTuiReducer(model, { type: "begin-planning" });
+    expect(model.screen).toBe("planning");
+    model = setupTuiReducer(model, { type: "planning-complete" });
+    expect(model.screen).toBe("review");
+    model = setupTuiReducer(model, { type: "begin-confirm" });
+    expect(model.screen).toBe("confirm");
+    expect(model.confirmFocus).toBe("cancel");
+    model = setupTuiReducer(model, { type: "move-confirm", direction: "right" });
+    expect(model.confirmFocus).toBe("apply");
+    model = setupTuiReducer(model, { type: "cancel-confirm" });
+    expect(model.screen).toBe("review");
+    model = setupTuiReducer(model, { type: "begin-confirm" });
+    model = setupTuiReducer(model, { type: "begin-applying" });
+    expect(model.screen).toBe("applying");
+  });
+
+  it("clamps detail scrolling instead of wrapping around", () => {
+    let model = createSetupTuiModel(recommendations);
+    model = setupTuiReducer(model, { type: "open-details" });
+    model = setupTuiReducer(model, { type: "move-detail", direction: "up", lineCount: 10, viewport: 4 });
+    expect(model.detailScroll).toBe(0);
+    model = setupTuiReducer(model, { type: "move-detail", direction: "down", lineCount: 10, viewport: 4 });
+    expect(model.detailScroll).toBe(1);
+    for (let index = 0; index < 20; index += 1) {
+      model = setupTuiReducer(model, { type: "move-detail", direction: "down", lineCount: 10, viewport: 4 });
+    }
+    expect(model.detailScroll).toBe(6);
+  });
+});

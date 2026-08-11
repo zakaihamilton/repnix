@@ -128,6 +128,13 @@ export interface InstallPlan {
   conflicts: string[];
 }
 
+export interface InstallProgress {
+  phase: "writing-files" | "running-command" | "rollback" | "complete";
+  current?: number;
+  total?: number;
+  label?: string;
+}
+
 export type FindingSeverity = "info" | "warning" | "error";
 export type HealthStatus = "pass" | "warn" | "fail" | "error" | "skipped";
 
