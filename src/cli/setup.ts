@@ -25,8 +25,7 @@ export async function setupCommand(options: DiagnosticOptions = {}): Promise<num
     message: "Select providers",
     options: setupRecommendations.map((recommendation) => ({
       value: recommendation.provider,
-      label: recommendation.name,
-      hint: recommendation.reason,
+      label: `${recommendation.name} (${recommendation.reason})`,
     })),
     initialValues: setupRecommendations.filter((recommendation) => recommendation.priority === "baseline").map((recommendation) => recommendation.provider),
     required: false,
