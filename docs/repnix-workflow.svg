@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 280" role="img" aria-labelledby="title desc">
+  <title id="title">RepNix workflow</title>
+  <desc id="desc">Five-step RepNix workflow: detect repository health, recommend missing coverage, preview setup, run checks, and explain findings.</desc>
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#64748b" flood-opacity="0.16"/>
+    </filter>
+  </defs>
+
+  <rect width="1200" height="280" rx="24" fill="#f8fafc"/>
+  <g font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" text-anchor="middle">
+    <g filter="url(#shadow)">
+      <rect x="36" y="72" width="196" height="124" rx="18" fill="#eff6ff" stroke="#bfdbfe"/>
+      <rect x="268" y="72" width="196" height="124" rx="18" fill="#f0fdf4" stroke="#bbf7d0"/>
+      <rect x="500" y="72" width="196" height="124" rx="18" fill="#fffbeb" stroke="#fde68a"/>
+      <rect x="732" y="72" width="196" height="124" rx="18" fill="#fdf4ff" stroke="#f5d0fe"/>
+      <rect x="964" y="72" width="200" height="124" rx="18" fill="#f0fdfa" stroke="#99f6e4"/>
+    </g>
+
+    <g fill="none" stroke="#94a3b8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M242 134h18"/>
+      <path d="m252 126 10 8-10 8"/>
+      <path d="M474 134h18"/>
+      <path d="m484 126 10 8-10 8"/>
+      <path d="M706 134h18"/>
+      <path d="m716 126 10 8-10 8"/>
+      <path d="M938 134h18"/>
+      <path d="m948 126 10 8-10 8"/>
+    </g>
+
+    <g font-size="14" font-weight="700" letter-spacing="1.5">
+      <text x="134" y="106" fill="#2563eb">01</text>
+      <text x="366" y="106" fill="#16a34a">02</text>
+      <text x="598" y="106" fill="#d97706">03</text>
+      <text x="830" y="106" fill="#c026d3">04</text>
+      <text x="1064" y="106" fill="#0f766e">05</text>
+    </g>
+
+    <g font-size="21" font-weight="700" fill="#0f172a">
+      <text x="134" y="143">Detect</text>
+      <text x="366" y="143">Recommend</text>
+      <text x="598" y="143">Setup</text>
+      <text x="830" y="143">Check</text>
+      <text x="1064" y="143">Explain</text>
+    </g>
+
+    <g font-size="15" fill="#475569">
+      <text x="134" y="169">Map current coverage</text>
+      <text x="366" y="169">Find useful gaps</text>
+      <text x="598" y="169">Preview changes</text>
+      <text x="830" y="169">Run one report</text>
+      <text x="1064" y="169">Inspect findings</text>
+    </g>
+
+    <text x="600" y="42" font-size="18" font-weight="600" fill="#334155">A deliberate path from repository inventory to actionable health checks</text>
+  </g>
+</svg>
