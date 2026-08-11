@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-  createSetupTuiModel,
-  selectionItems,
-  setupTuiReducer,
-} from "../src/tui/setup-state.js";
+import { createSetupTuiTheme, diffLineColor, normalizeTuiDiffLine, selectionIndicator, selectionRowPresentation, tuiLayoutMetrics } from "../src/tui/setup-app.js";
+import { createSetupTuiModel, selectionItems, setupTuiReducer } from "../src/tui/setup-state.js";
 import type { Recommendation } from "../src/recommendations/recommendation-engine.js";
 
 const recommendations: Recommendation[] = [
@@ -35,6 +32,58 @@ const recommendations: Recommendation[] = [
     reason: "Needs manual preparation.",
   },
 ];
+
+describe("setup TUI presentation", () => {
+  it("uses filled square selection indicators", () => {
+    expect(selectionIndicator(true)).toBe("■");
+    expect(selectionIndicator(false)).toBe("□");
+  });
+
+  it("normalizes ANSI-colored diff lines before applying TUI colors", () => {
+    const theme = createSetupTuiTheme({ isTTY: false, hasColors: () => false });
+    expect(normalizeTuiDiffLine("\u001b[32m+ added line\u001b[39m")).toBe("+ added line");
+    expect(normalizeTuiDiffLine("  context line")).toBe("  context line");
+    expect(diffLineColor("\u001b[32m  + added line\u001b[39m", theme)).toBe(theme.success);
+    expect(diffLineColor("\u001b[31m  - removed line\u001b[39m", theme)).toBe(theme.danger);
+    expect(diffLineColor("  context line", theme)).toBe(theme.text);
+  });
+
+  it("gives active rows an accent treatment and inactive rows readable text", () => {
+    const theme = createSetupTuiTheme({ isTTY: false, hasColors: () => false });
+    const active = selectionRowPresentation("Vitest", true, true, "baseline", theme);
+    const inactive = selectionRowPresentation("Vitest", false, false, undefined, theme);
+
+    expect(active.label).toMatch(/^▸ ■ Vitest\s{2}· baseline/);
+    expect(active.color).toBe(theme.primary);
+    expect(active.backgroundColor).toBe(theme.active);
+    expect(active.bold).toBe(true);
+    expect(inactive.label).toMatch(/^\s{2}□ Vitest/);
+    expect(inactive.color).toBe(theme.text);
+    expect(inactive.backgroundColor).toBeUndefined();
+    expect(inactive.bold).toBe(false);
+
+    const longRow = selectionRowPresentation("dependency-cruiser", false, true, "optional", theme, 36);
+    expect(longRow.label).toHaveLength(36);
+    expect(longRow.label).not.toContain("\n");
+  });
+
+  it("selects rich colors only when truecolor is available", () => {
+    const ansi = createSetupTuiTheme({ isTTY: false, hasColors: () => true });
+    const truecolor = createSetupTuiTheme({ isTTY: true, hasColors: () => true }, { COLORFGBG: "15;0" });
+    const light = createSetupTuiTheme({ isTTY: true, hasColors: () => true }, { COLORFGBG: "0;15" });
+
+    expect(ansi.primary).toBe("blue");
+    expect(ansi.text).toBeUndefined();
+    expect(truecolor.primary).toBe("#5eead4");
+    expect(light.primary).toBe("#0f766e");
+  });
+
+  it("reserves header and footer space for the flexible body", () => {
+    expect(tuiLayoutMetrics(24)).toEqual({ bodyHeight: 16, detailViewport: 10 });
+    expect(tuiLayoutMetrics(40)).toEqual({ bodyHeight: 32, detailViewport: 26 });
+    expect(tuiLayoutMetrics(1)).toEqual({ bodyHeight: 1, detailViewport: 1 });
+  });
+});
 
 describe("setup TUI state", () => {
   it("selects baseline actionable providers by default and appends CI when available", () => {

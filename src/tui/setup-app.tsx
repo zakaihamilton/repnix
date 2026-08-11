@@ -17,14 +17,170 @@ import {
   type SetupTuiModel,
 } from "./setup-state.js";
 
-const colors = {
-  accent: "cyan",
-  accent2: "magenta",
+export interface SetupTuiTheme {
+  panelRaised: string;
+  active: string;
+  border: string;
+  borderStrong: string;
+  primary: string;
+  secondary: string;
+  text?: string;
+  muted: string;
+  success: string;
+  warning: string;
+  danger: string;
+  info: string;
+}
+
+const truecolorTheme: SetupTuiTheme = {
+  panelRaised: "#1e293b",
+  active: "#134e4a",
+  border: "#334155",
+  borderStrong: "#64748b",
+  primary: "#5eead4",
+  secondary: "#a5b4fc",
+  text: "#e5e7eb",
+  muted: "#94a3b8",
+  success: "#34d399",
+  warning: "#fbbf24",
+  danger: "#fb7185",
+  info: "#60a5fa",
+};
+
+const lightTruecolorTheme: SetupTuiTheme = {
+  panelRaised: "#f1f5f9",
+  active: "#ccfbf1",
+  border: "#94a3b8",
+  borderStrong: "#64748b",
+  primary: "#0f766e",
+  secondary: "#475569",
+  text: "#0f172a",
+  muted: "#475569",
+  success: "#15803d",
+  warning: "#a16207",
+  danger: "#b91c1c",
+  info: "#2563eb",
+};
+
+const ansiDarkTheme: SetupTuiTheme = {
+  panelRaised: "blue",
+  active: "blue",
+  border: "gray",
+  borderStrong: "blackBright",
+  primary: "cyan",
+  secondary: "magenta",
+  muted: "gray",
   success: "green",
   warning: "yellow",
-  error: "red",
-  muted: "gray",
-} as const;
+  danger: "red",
+  info: "blue",
+};
+
+const ansiLightTheme: SetupTuiTheme = {
+  panelRaised: "blackBright",
+  active: "blackBright",
+  border: "gray",
+  borderStrong: "blackBright",
+  primary: "blue",
+  secondary: "blackBright",
+  muted: "blackBright",
+  success: "green",
+  warning: "yellow",
+  danger: "red",
+  info: "blue",
+};
+
+type ColorOutput = Pick<NodeJS.WriteStream, "isTTY" | "hasColors"> & { columns?: number };
+interface ThemeEnvironment {
+  COLORTERM?: string;
+  COLORFGBG?: string;
+}
+
+function supportsTruecolor(stdout: ColorOutput, environment: ThemeEnvironment): boolean {
+  return Boolean(
+    stdout.isTTY &&
+    (stdout.hasColors?.(16_777_216) || environment.COLORTERM === "truecolor" || environment.COLORTERM === "24bit"),
+  );
+}
+
+function terminalBackground(environment: ThemeEnvironment): "light" | "dark" | undefined {
+  const colorFgbg = environment.COLORFGBG?.split(";").at(-1);
+  if (colorFgbg === "7" || colorFgbg === "15") return "light";
+  if (colorFgbg !== undefined && ["0", "1", "2", "3", "4", "5", "6", "8"].includes(colorFgbg)) return "dark";
+  return undefined;
+}
+
+export function createSetupTuiTheme(stdout: ColorOutput, environment: ThemeEnvironment = process.env): SetupTuiTheme {
+  const background = terminalBackground(environment);
+  const truecolor = supportsTruecolor(stdout, environment);
+  if (background === "dark") return truecolor ? truecolorTheme : ansiDarkTheme;
+  return truecolor ? lightTruecolorTheme : ansiLightTheme;
+}
+
+function foregroundColor(color: string | undefined): { color?: string } {
+  return color === undefined ? {} : { color };
+}
+
+function textColor(theme: SetupTuiTheme): { color?: string } {
+  return foregroundColor(theme.text);
+}
+
+export function selectionIndicator(checked: boolean): string {
+  return checked ? "■" : "□";
+}
+
+const ansiEscapePattern = new RegExp(`${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`, "g");
+
+export function normalizeTuiDiffLine(line: string): string {
+  return line.replace(ansiEscapePattern, "");
+}
+
+export function diffLineColor(line: string, theme: SetupTuiTheme): string | undefined {
+  const normalized = normalizeTuiDiffLine(line);
+  if (normalized.startsWith("  +")) return theme.success;
+  if (normalized.startsWith("  -")) return theme.danger;
+  return theme.text;
+}
+
+export interface SelectionRowPresentation {
+  label: string;
+  color?: string;
+  backgroundColor?: string;
+  bold: boolean;
+}
+
+export function selectionRowPresentation(
+  name: string,
+  checked: boolean,
+  active: boolean,
+  priority: string | undefined,
+  theme: SetupTuiTheme,
+  width = 30,
+): SelectionRowPresentation {
+  const label = `${active ? "▸" : " "} ${selectionIndicator(checked)} ${name}${priority ? `  · ${priority}` : ""}`;
+  const base = { label: label.padEnd(width, " "), ... (active ? { color: theme.primary } : textColor(theme)), bold: active };
+  return active ? { ...base, backgroundColor: theme.active } : base;
+}
+
+export interface TuiLayoutMetrics {
+  bodyHeight: number;
+  detailViewport: number;
+}
+
+const HEADER_ROWS = 4;
+const FOOTER_ROWS = 4;
+const DETAIL_PANEL_CHROME_ROWS = 6;
+const SIDEBAR_WIDTH = 40;
+const SIDEBAR_CONTENT_WIDTH = SIDEBAR_WIDTH - 4;
+
+export function tuiLayoutMetrics(height: number): TuiLayoutMetrics {
+  const safeHeight = Math.max(height, 1);
+  const bodyHeight = Math.max(safeHeight - HEADER_ROWS - FOOTER_ROWS, 1);
+  return {
+    bodyHeight,
+    detailViewport: Math.max(bodyHeight - DETAIL_PANEL_CHROME_ROWS, 1),
+  };
+}
 
 export interface SetupTuiDependencies {
   audit: typeof auditRepository;
@@ -52,29 +208,57 @@ const defaultDependencies: SetupTuiDependencies = {
   applyPlan: applyInstallPlan,
 };
 
-function Panel({ title, children, flexGrow = 1, flexShrink, width }: { title: string; children: React.ReactNode; flexGrow?: number; flexShrink?: number; width?: string | number }): React.ReactElement {
+function Panel({
+  title,
+  children,
+  theme,
+  flexGrow = 1,
+  flexShrink,
+  width,
+  borderColor,
+}: {
+  title: string;
+  children: React.ReactNode;
+  theme: SetupTuiTheme;
+  flexGrow?: number;
+  flexShrink?: number;
+  width?: string | number;
+  borderColor?: string;
+}): React.ReactElement {
   return (
-    <Box borderStyle="round" borderColor={colors.muted} flexDirection="column" paddingX={1} flexGrow={flexGrow} flexShrink={flexShrink} width={width}>
-      <Text bold color={colors.accent}>{` ${title} `}</Text>
-      {children}
+    <Box
+      borderStyle="round"
+      borderColor={borderColor ?? theme.border}
+      flexDirection="column"
+      paddingX={1}
+      flexGrow={flexGrow}
+      flexShrink={flexShrink}
+      width={width}
+      height="100%"
+      overflow="hidden"
+    >
+      <Text bold color={theme.primary}>{` ${title} `}</Text>
+      <Box flexDirection="column" flexGrow={1} flexShrink={1} overflow="hidden">
+        {children}
+      </Box>
     </Box>
   );
 }
 
-function Header({ model, repositoryName, packageManager }: { model: SetupTuiModel; repositoryName: string; packageManager: string | null }): React.ReactElement {
+function Header({ model, repositoryName, packageManager, theme }: { model: SetupTuiModel; repositoryName: string; packageManager: string | null; theme: SetupTuiTheme }): React.ReactElement {
   const steps = ["Select checks", "Review changes", "Apply safely"];
   const active = model.screen === "loading" || model.screen === "empty" || model.screen === "select" || model.screen === "planning" ? 0 : model.screen === "review" || model.screen === "details" || model.screen === "confirm" ? 1 : 2;
   return (
-    <Box flexDirection="column" marginBottom={1}>
+    <Box flexDirection="column" marginBottom={1} flexShrink={0}>
       <Box justifyContent="space-between">
-        <Text bold color={colors.accent2}>RepNix <Text color={colors.muted}>/ Setup</Text></Text>
-        <Text color={colors.muted}>{repositoryName} · {packageManager ?? "package manager unresolved"}</Text>
+        <Text bold color={theme.primary}>◆ REP<Text color={theme.secondary}>NIX</Text> <Text color={theme.muted}>/ SETUP</Text></Text>
+        <Text color={theme.muted}><Text {...textColor(theme)}>{repositoryName}</Text>  ·  {packageManager ?? "package manager unresolved"}</Text>
       </Box>
       <Box marginTop={1}>
         {steps.map((step, index) => (
           <Box key={step} marginRight={2}>
-            <Text color={index === active ? colors.accent : colors.muted} bold={index === active}>
-              {index < active ? "✓ " : index === active ? "● " : "○ "}{step}
+            <Text color={index < active ? theme.success : index === active ? theme.primary : theme.muted} bold={index === active}>
+              {index < active ? "● " : index === active ? "◆ " : "○ "}{step}
             </Text>
           </Box>
         ))}
@@ -83,21 +267,30 @@ function Header({ model, repositoryName, packageManager }: { model: SetupTuiMode
   );
 }
 
-function Footer({ model }: { model: SetupTuiModel }): React.ReactElement {
-  const keys = model.screen === "select"
-    ? "↑↓/jk move   Space toggle   Enter review   q quit"
+function KeyHint({ label, children, theme }: { label: string; children: React.ReactNode; theme: SetupTuiTheme }): React.ReactElement {
+  return <Text><Text color={theme.primary} backgroundColor={theme.panelRaised} bold>{` ${label} `}</Text> <Text color={theme.muted}>{children}</Text></Text>;
+}
+
+function Footer({ model, theme }: { model: SetupTuiModel; theme: SetupTuiTheme }): React.ReactElement {
+  const hints: Array<[string, string]> = model.screen === "select"
+    ? [["↑↓/jk", "move"], ["Space", "toggle"], ["Enter", "review"], ["q", "quit"]]
     : model.screen === "review"
-      ? "↑↓ choose file   Enter/d details   a apply   Esc back   q quit"
-    : model.screen === "details"
-        ? "↑↓ scroll   Esc back   q quit"
+      ? [["↑↓", "move"], ["Enter/d", "details"], ["a", "apply"], ["Esc", "back"], ["q", "quit"]]
+      : model.screen === "details"
+        ? [["↑↓/jk", "scroll"], ["Esc", "back"], ["q", "quit"]]
         : model.screen === "confirm"
-          ? "Enter apply   Esc back   q quit"
-        : model.screen === "success" || model.screen === "error"
-          ? "Enter/q exit"
-          : "Please wait…";
+          ? [["Enter", "apply"], ["Esc", "back"], ["q", "quit"]]
+          : model.screen === "success" || model.screen === "error"
+            ? [["Enter/q", "exit"]]
+            : [["…", "Please wait"]];
   return (
-    <Box borderStyle="single" borderColor={colors.muted} paddingX={1} marginTop={1}>
-      <Text color={colors.muted}>{keys}</Text>
+    <Box borderStyle="single" borderColor={theme.borderStrong} paddingX={1} marginTop={1} flexShrink={0}>
+      {hints.map(([label, description], index) => (
+        <React.Fragment key={label}>
+          {index > 0 ? <Text color={theme.border}>  ·  </Text> : null}
+          <KeyHint label={label} theme={theme}>{description}</KeyHint>
+        </React.Fragment>
+      ))}
     </Box>
   );
 }
@@ -106,38 +299,44 @@ function providerFor(items: SetupSelectionItem[], model: SetupTuiModel): SetupSe
   return items[model.cursor];
 }
 
-function SelectView({ audit, model }: { audit: AuditModel; model: SetupTuiModel }): React.ReactElement {
+function SelectView({ audit, model, theme }: { audit: AuditModel; model: SetupTuiModel; theme: SetupTuiTheme }): React.ReactElement {
   const items = selectionItems(audit.recommendations, audit.context.hasCI);
   const selected = providerFor(items, model);
   const recommendation = selected?.kind === "provider" ? audit.recommendations.find((item) => item.provider === selected.provider) : undefined;
   return (
-    <Box flexDirection="row" gap={1} flexGrow={1}>
-      <Panel title="Recommended checks" width={34} flexGrow={0} flexShrink={0}>
+    <Box flexDirection="row" gap={1} flexGrow={1} minHeight={1} overflow="hidden">
+      <Panel title="Recommended checks" width={SIDEBAR_WIDTH} flexGrow={0} flexShrink={0} theme={theme} borderColor={theme.borderStrong}>
         {items.map((item, index) => {
           const checked = item.kind === "ci" ? model.includeCi : model.selectedProviders.includes(item.provider);
           const active = index === model.cursor;
           const itemRecommendation = item.kind === "provider" ? audit.recommendations.find((entry) => entry.provider === item.provider) : undefined;
-          const label = `${active ? "❯ " : "  "}${checked ? "[x]" : "[ ]"} ${item.name}${itemRecommendation ? `  · ${itemRecommendation.priority}` : ""}`;
+          const presentation = selectionRowPresentation(item.name, checked, active, itemRecommendation?.priority, theme, SIDEBAR_CONTENT_WIDTH);
           return (
-            <Text key={item.kind === "ci" ? item.name : item.provider} inverse={active} {...(active ? { color: colors.accent } : {})}>
-              {label}
+            <Text
+              key={item.kind === "ci" ? item.name : item.provider}
+              {...foregroundColor(presentation.color)}
+              {...(presentation.backgroundColor ? { backgroundColor: presentation.backgroundColor } : {})}
+              bold={presentation.bold}
+              wrap="truncate-end"
+            >
+              {presentation.label}
             </Text>
           );
         })}
-        {items.length === 0 ? <Text color={colors.success}>No setup changes are recommended.</Text> : null}
+        {items.length === 0 ? <Text color={theme.success}>No setup changes are recommended.</Text> : null}
       </Panel>
-      <Panel title={recommendation ? recommendation.name : selected?.name ?? "Setup overview"}>
+      <Panel title={recommendation ? recommendation.name : selected?.name ?? "Setup overview"} theme={theme} borderColor={recommendation ? theme.primary : theme.border}>
         {recommendation ? (
           <>
-            <Text color={colors.accent}>{PROVIDER_DESCRIPTIONS[recommendation.name] ?? "Repository health check"}</Text>
+            <Text color={theme.info} bold>{PROVIDER_DESCRIPTIONS[recommendation.name] ?? "Repository health check"}</Text>
             <Newline />
-            <Text>{recommendation.reason}</Text>
-            {!recommendation.actionable ? <><Newline /><Text color={colors.warning}>Manual configuration required before this check can run.</Text></> : null}
+            <Text {...textColor(theme)}>{recommendation.reason}</Text>
+            {!recommendation.actionable ? <><Newline /><Text color={theme.warning}>◆ Manual configuration required before this check can run.</Text></> : null}
           </>
         ) : selected?.kind === "ci" ? (
-          <Text>{audit.context.hasCI ? "Add the unified repository health check to the most obvious GitHub Actions job." : "No GitHub Actions workflow was detected."}</Text>
+          <Text {...textColor(theme)}>{audit.context.hasCI ? "Add the unified repository health check to the most obvious GitHub Actions job." : "No GitHub Actions workflow was detected."}</Text>
         ) : (
-          <Text color={colors.muted}>Select a check to see why it is recommended and what it will add.</Text>
+          <Text color={theme.muted}>Select a check to see why it is recommended and what it will add.</Text>
         )}
       </Panel>
     </Box>
@@ -150,82 +349,81 @@ function planStats(plan: InstallPlan): string {
   if (plan.files.length) parts.push(`${plan.files.length} file${plan.files.length === 1 ? "" : "s"}`);
   if (plan.warnings.length) parts.push(`${plan.warnings.length} warning${plan.warnings.length === 1 ? "" : "s"}`);
   if (plan.conflicts.length) parts.push(`${plan.conflicts.length} preserved conflict${plan.conflicts.length === 1 ? "" : "s"}`);
-  return parts.join(" · ") || "No changes";
+  return parts.join("  ·  ") || "No changes";
 }
 
-function ReviewNotes({ plan }: { plan: InstallPlan }): React.ReactElement {
+function ReviewNotes({ plan, theme }: { plan: InstallPlan; theme: SetupTuiTheme }): React.ReactElement {
   if (!plan.warnings.length && !plan.conflicts.length) {
-    return <Text color={colors.success}>No warnings or conflicts.</Text>;
+    return <Text color={theme.success}>● No warnings or conflicts.</Text>;
   }
   return (
     <Box flexDirection="column">
-      {plan.warnings.map((warning, index) => <Text key={`warning-${index}`} color={colors.warning}>! Warning: {warning}</Text>)}
-      {plan.conflicts.map((conflict, index) => <Text key={`conflict-${index}`} color={colors.warning}>! Preserved: {conflict}</Text>)}
+      {plan.warnings.map((warning, index) => <Text key={`warning-${index}`} color={theme.warning}>◆ Warning: {warning}</Text>)}
+      {plan.conflicts.map((conflict, index) => <Text key={`conflict-${index}`} color={theme.warning}>◆ Preserved: {conflict}</Text>)}
     </Box>
   );
 }
 
-function ReviewView({ plan, model }: { plan: InstallPlan; model: SetupTuiModel }): React.ReactElement {
+function ReviewView({ plan, model, theme }: { plan: InstallPlan; model: SetupTuiModel; theme: SetupTuiTheme }): React.ReactElement {
   const file = plan.files[model.reviewCursor];
   return (
-    <Box flexDirection="row" gap={1} flexGrow={1}>
-      <Panel title="Planned changes" width={34} flexGrow={0} flexShrink={0}>
-        <Text color={colors.accent}>{planStats(plan)}</Text>
+    <Box flexDirection="row" gap={1} flexGrow={1} minHeight={1} overflow="hidden">
+      <Panel title="Planned changes" width={SIDEBAR_WIDTH} flexGrow={0} flexShrink={0} theme={theme} borderColor={theme.borderStrong}>
+        <Text color={theme.primary} bold>{planStats(plan)}</Text>
         <Newline />
-        <Text bold>Packages</Text>
-        {plan.packages.length ? plan.packages.map((item) => <Text key={item.name}>  + {item.name}{item.version ? `@${item.version}` : ""}</Text>) : <Text color={colors.muted}>  none</Text>}
+        <Text color={theme.secondary} bold>PACKAGES</Text>
+        {plan.packages.length ? plan.packages.map((item) => <Text key={item.name} {...textColor(theme)}>  + {item.name}{item.version ? `@${item.version}` : ""}</Text>) : <Text color={theme.muted}>  none</Text>}
         <Newline />
-        <Text bold>Files</Text>
-        {plan.files.length ? plan.files.map((item, index) => <Text key={item.path} inverse={index === model.reviewCursor}>{index === model.reviewCursor ? "❯ " : "  "}{item.kind === "create" ? "A" : "M"} {item.path}</Text>) : <Text color={colors.muted}>  none</Text>}
-        {plan.warnings.length ? <><Newline /><Text color={colors.warning}>Warnings: {plan.warnings.length}</Text></> : null}
-        {plan.conflicts.length ? <Text color={colors.warning}>Conflicts preserved: {plan.conflicts.length}</Text> : null}
+        <Text color={theme.secondary} bold>FILES</Text>
+        {plan.files.length ? plan.files.map((item, index) => <Text key={item.path} {...(index === model.reviewCursor ? { color: theme.primary, backgroundColor: theme.active } : textColor(theme))} bold={index === model.reviewCursor}>{`${index === model.reviewCursor ? "▸" : " "} ${item.kind === "create" ? "A" : "M"} ${item.path}`}</Text>) : <Text color={theme.muted}>  none</Text>}
+        {plan.warnings.length ? <><Newline /><Text color={theme.warning}>◆ Warnings: {plan.warnings.length}</Text></> : null}
+        {plan.conflicts.length ? <Text color={theme.warning}>◆ Conflicts preserved: {plan.conflicts.length}</Text> : null}
       </Panel>
-      <Panel title={file ? `Detail · ${file.path}` : "Review summary"}>
+      <Panel title={file ? `Detail · ${file.path}` : "Review summary"} theme={theme} borderColor={plan.warnings.length || plan.conflicts.length ? theme.warning : theme.border}>
         {file ? (
           <>
-            <Text color={colors.muted}>{file.reason}</Text>
+            <Text color={theme.muted}>{file.reason}</Text>
             <Newline />
-            <Text color={colors.accent}>Press Enter or d to inspect this file.</Text>
+            <Text color={theme.info}>Press Enter or d to inspect this file.</Text>
           </>
         ) : (
-          <Text color={colors.muted}>No file changes are planned. Press Enter to continue.</Text>
+          <Text color={theme.muted}>No file changes are planned. Press Enter to continue.</Text>
         )}
-        {plan.commands.length ? <><Newline /><Text bold>Command</Text>{plan.commands.map((command) => <Text key={command.command}>{`  $ ${command.command} ${command.args.join(" ")}`}</Text>)}</> : null}
+        {plan.commands.length ? <><Newline /><Text color={theme.secondary} bold>COMMANDS</Text>{plan.commands.map((command) => <Text key={command.command} {...textColor(theme)}>{`  $ ${command.command} ${command.args.join(" ")}`}</Text>)}</> : null}
         <Newline />
-        <Text bold>Review notes</Text>
-        <ReviewNotes plan={plan} />
+        <Text color={theme.secondary} bold>REVIEW NOTES</Text>
+        <ReviewNotes plan={plan} theme={theme} />
       </Panel>
     </Box>
   );
 }
 
-function DetailsView({ plan, model, width, height }: { plan: InstallPlan; model: SetupTuiModel; width: number; height: number }): React.ReactElement {
+function DetailsView({ plan, model, width, layout, theme }: { plan: InstallPlan; model: SetupTuiModel; width: number; layout: TuiLayoutMetrics; theme: SetupTuiTheme }): React.ReactElement {
   const file = plan.files[model.reviewCursor];
-  if (!file) return <Panel title="Details"><Text color={colors.muted}>There are no file details to show.</Text></Panel>;
-  const diff = renderFileDiff(file, Math.max(width - 8, 32)).split("\n");
-  const visibleHeight = Math.max(height - 14, 4);
-  const visible = diff.slice(model.detailScroll, model.detailScroll + visibleHeight);
+  if (!file) return <Panel title="Details" theme={theme}><Text color={theme.muted}>There are no file details to show.</Text></Panel>;
+  const diff = renderFileDiff(file, Math.max(width - 8, 32)).split("\n").map(normalizeTuiDiffLine);
+  const visible = diff.slice(model.detailScroll, model.detailScroll + layout.detailViewport);
   return (
-    <Panel title={`File detail · ${file.path}`}>
-      <Text color={colors.muted}>{file.reason}</Text>
+    <Panel title={`File detail · ${file.path}`} theme={theme} borderColor={theme.info}>
+      <Text color={theme.muted}>{file.reason}</Text>
       <Newline />
-      {visible.map((line, index) => <Text key={`${index}-${line}`}>{line}</Text>)}
-      {model.detailScroll + visible.length < diff.length ? <Text color={colors.muted}>↓ more</Text> : null}
+      {visible.map((line, index) => <Text key={`${index}-${line}`} {...foregroundColor(diffLineColor(line, theme))}>{line}</Text>)}
+      {model.detailScroll + visible.length < diff.length ? <Text color={theme.muted}>↓ more</Text> : null}
     </Panel>
   );
 }
 
-function ConfirmView({ plan }: { plan: InstallPlan }): React.ReactElement {
+function ConfirmView({ plan, theme }: { plan: InstallPlan; theme: SetupTuiTheme }): React.ReactElement {
   return (
-    <Panel title="Confirm setup">
-      <Text color={colors.warning} bold>Apply these reviewed changes?</Text>
+    <Panel title="Confirm setup" theme={theme} borderColor={theme.warning}>
+      <Text color={theme.warning} bold>◆ Apply these reviewed changes?</Text>
       <Newline />
-      <Text>{planStats(plan)}</Text>
+      <Text color={theme.primary} bold>{planStats(plan)}</Text>
       <Newline />
-      <Text bold>Review notes</Text>
-      <ReviewNotes plan={plan} />
+      <Text color={theme.secondary} bold>REVIEW NOTES</Text>
+      <ReviewNotes plan={plan} theme={theme} />
       <Newline />
-      <Text color={colors.muted}>Press Enter to apply, or Esc to return to the review.</Text>
+      <Text color={theme.muted}>Press Enter to apply, or Esc to return to the review.</Text>
     </Panel>
   );
 }
@@ -238,6 +436,7 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
   const [plan, setPlan] = useState<InstallPlan>();
   const [model, setModel] = useState<SetupTuiModel>({ screen: "loading", cursor: 0, reviewCursor: 0, detailScroll: 0, selectedProviders: [], includeCi: false });
   const startedApply = useRef(false);
+  const theme = useMemo(() => createSetupTuiTheme(stdout), [stdout]);
 
   const dispatch = (action: Parameters<typeof setupTuiReducer>[1]) => setModel((current) => setupTuiReducer(current, action));
   const items = useMemo(() => audit ? selectionItems(audit.recommendations, audit.context.hasCI) : [], [audit]);
@@ -285,7 +484,7 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
 
   const width = stdout.columns ?? 100;
   const height = stdout.rows ?? 24;
-  const detailViewport = Math.max(height - 14, 4);
+  const layout = tuiLayoutMetrics(height);
   const detailFile = plan?.files[model.reviewCursor];
   const detailLineCount = detailFile ? renderFileDiff(detailFile, Math.max(width - 8, 32)).split("\n").length : 0;
   const busy = model.screen === "loading" || model.screen === "planning" || model.screen === "applying";
@@ -352,26 +551,28 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
       return;
     }
     if (model.screen === "details") {
-      if (key.upArrow || input === "k") dispatch({ type: "move-detail", direction: "up", lineCount: detailLineCount, viewport: detailViewport });
-      else if (key.downArrow || input === "j") dispatch({ type: "move-detail", direction: "down", lineCount: detailLineCount, viewport: detailViewport });
+      if (key.upArrow || input === "k") dispatch({ type: "move-detail", direction: "up", lineCount: detailLineCount, viewport: layout.detailViewport });
+      else if (key.downArrow || input === "j") dispatch({ type: "move-detail", direction: "down", lineCount: detailLineCount, viewport: layout.detailViewport });
       else if (key.escape) dispatch({ type: "close-details" });
     }
   });
 
   return (
-    <Box flexDirection="column" width="100%" height="100%" paddingX={1}>
-      <Header model={model} repositoryName={audit?.context.packageJson.name ?? "repository"} packageManager={audit?.context.packageManager ?? null} />
-      {model.screen === "loading" ? <Panel title="Scanning repository"><Text color={colors.accent}>⠋ Detecting checks, project structure, and recommendations…</Text></Panel> : null}
-      {model.screen === "empty" ? <Panel title="Nothing to add"><Text color={colors.success}>✓ Your active checks already cover the gaps RepNix found.</Text></Panel> : null}
-      {model.screen === "select" && audit ? <SelectView audit={audit} model={model} /> : null}
-      {model.screen === "planning" ? <Panel title="Preparing review"><Text color={colors.accent}>⠋ Building a safe setup plan…</Text></Panel> : null}
-      {model.screen === "review" && plan ? <ReviewView plan={plan} model={model} /> : null}
-      {model.screen === "details" && plan ? <DetailsView plan={plan} model={model} width={width} height={height} /> : null}
-      {model.screen === "confirm" && plan ? <ConfirmView plan={plan} /> : null}
-      {model.screen === "applying" ? <Panel title="Applying safely"><Text color={colors.accent}>⠋ {model.progress ?? "Installing selected checks and writing reviewed files…"}</Text></Panel> : null}
-      {model.screen === "success" ? <Panel title="Setup complete"><Text color={colors.success}>✓ Repository health setup completed successfully.</Text><Newline /><Text>Run `repnix check` to verify the new checks.</Text></Panel> : null}
-      {model.screen === "error" ? <Panel title="Setup stopped"><Text color={colors.error}>✗ {model.error ?? "An unexpected error occurred."}</Text><Newline /><Text color={colors.muted}>No further changes will be applied.</Text></Panel> : null}
-      <Footer model={model} />
+    <Box flexDirection="column" width="100%" height={height} paddingX={1} overflow="hidden">
+      <Header model={model} repositoryName={audit?.context.packageJson.name ?? "repository"} packageManager={audit?.context.packageManager ?? null} theme={theme} />
+      <Box flexDirection="column" flexGrow={1} flexShrink={1} minHeight={1} overflow="hidden">
+        {model.screen === "loading" ? <Panel title="Scanning repository" theme={theme} borderColor={theme.info}><Text color={theme.info}>◌ Detecting checks, project structure, and recommendations…</Text></Panel> : null}
+        {model.screen === "empty" ? <Panel title="Nothing to add" theme={theme} borderColor={theme.success}><Text color={theme.success}>● Your active checks already cover the gaps RepNix found.</Text></Panel> : null}
+        {model.screen === "select" && audit ? <SelectView audit={audit} model={model} theme={theme} /> : null}
+        {model.screen === "planning" ? <Panel title="Preparing review" theme={theme} borderColor={theme.info}><Text color={theme.info}>◌ Building a safe setup plan…</Text></Panel> : null}
+        {model.screen === "review" && plan ? <ReviewView plan={plan} model={model} theme={theme} /> : null}
+        {model.screen === "details" && plan ? <DetailsView plan={plan} model={model} width={width} layout={layout} theme={theme} /> : null}
+        {model.screen === "confirm" && plan ? <ConfirmView plan={plan} theme={theme} /> : null}
+        {model.screen === "applying" ? <Panel title="Applying safely" theme={theme} borderColor={theme.warning}><Text color={theme.warning}>◌ {model.progress ?? "Installing selected checks and writing reviewed files…"}</Text></Panel> : null}
+        {model.screen === "success" ? <Panel title="Setup complete" theme={theme} borderColor={theme.success}><Text color={theme.success}>● Repository health setup completed successfully.</Text><Newline /><Text {...textColor(theme)}>Run `repnix check` to verify the new checks.</Text></Panel> : null}
+        {model.screen === "error" ? <Panel title="Setup stopped" theme={theme} borderColor={theme.danger}><Text color={theme.danger}>◆ {model.error ?? "An unexpected error occurred."}</Text><Newline /><Text color={theme.muted}>No further changes will be applied.</Text></Panel> : null}
+      </Box>
+      <Footer model={model} theme={theme} />
     </Box>
   );
 }
