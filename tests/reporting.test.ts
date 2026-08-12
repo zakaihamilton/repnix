@@ -32,6 +32,7 @@ describe("console reporting", () => {
           packageManagerEvidence: "package-manager-evidence-that-is-long-enough-to-wrap",
           hasCI: false,
           diagnostics: [],
+          scopes: [{ path: ".", roles: ["node-app"], roleEvidence: [] }],
         },
         coverage: [{
           category: "security",
@@ -66,6 +67,7 @@ describe("console reporting", () => {
         packageManagerEvidence: "lockfile",
         hasCI: false,
         diagnostics: [],
+        scopes: [{ path: ".", roles: ["node-app"], roleEvidence: [] }],
       },
       coverage: [{
         category: "dead-code",
@@ -105,23 +107,23 @@ describe("console reporting", () => {
     const base: HealthRun = {
       schemaVersion: 1 as const,
       generatedAt: "2026-08-11T00:00:00.000Z",
-      repository: { root: "/tmp/project", packageManager: "npm" as const, kinds: ["node-application" as const], frameworks: [], languages: [] },
-      summary: { status: "healthy" as const, findings: 0, errors: 0, exitCode: 0 as const },
+      repository: { root: "/tmp/project", packageManager: "npm" as const, kinds: ["node-application" as const], frameworks: [], languages: [], scopes: [{ path: ".", roles: ["node-app"] }] },
+      summary: { status: "healthy" as const, findings: 0, newFindings: 0, existingFindings: 0, resolvedFindings: 0, errors: 0, exitCode: 0 as const },
       results: [baseResult],
     };
     expect(renderHealth(base)).toContain("All configured checks passed");
 
     const findingRun = {
       ...base,
-      summary: { status: "findings" as const, findings: 1, errors: 0, exitCode: 1 as const },
-      results: [{ ...baseResult, status: "fail" as const, findings: [{ id: "test-failure", type: "command", provider: "Test script", category: "tests" as const, severity: "error" as const, message: "A test failed." }] }],
+      summary: { status: "findings" as const, findings: 1, newFindings: 1, existingFindings: 0, resolvedFindings: 0, errors: 0, exitCode: 1 as const },
+      results: [{ ...baseResult, status: "fail" as const, findings: [{ id: "test-failure", fingerprint: "test-failure", type: "command", provider: "Test script", category: "tests" as const, severity: "error" as const, message: "A test failed." }] }],
     };
     expect(renderHealth(findingRun)).toContain("what each finding means");
 
     const belowThresholdRun = {
       ...base,
-      summary: { status: "healthy" as const, findings: 1, errors: 0, exitCode: 0 as const },
-      results: [{ ...baseResult, status: "fail" as const, findings: [{ id: "test-info", type: "command", provider: "Test script", category: "tests" as const, severity: "info" as const, message: "A test reported an informational note." }] }],
+      summary: { status: "healthy" as const, findings: 1, newFindings: 1, existingFindings: 0, resolvedFindings: 0, errors: 0, exitCode: 0 as const },
+      results: [{ ...baseResult, status: "fail" as const, findings: [{ id: "test-info", fingerprint: "test-info", type: "command", provider: "Test script", category: "tests" as const, severity: "info" as const, message: "A test reported an informational note." }] }],
     };
     expect(renderHealth(belowThresholdRun)).toContain("none meet the configured severity threshold");
 
@@ -130,7 +132,7 @@ describe("console reporting", () => {
 
     const errorRun = {
       ...base,
-      summary: { status: "error" as const, findings: 0, errors: 1, exitCode: 2 as const },
+      summary: { status: "error" as const, findings: 0, newFindings: 0, existingFindings: 0, resolvedFindings: 0, errors: 1, exitCode: 2 as const },
       results: [{ ...baseResult, status: "error" as const, message: "The test command was not found." }],
     };
     expect(renderHealth(errorRun)).toContain("not necessarily a problem in your code");

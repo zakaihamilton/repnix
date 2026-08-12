@@ -5,19 +5,9 @@ import { VERSION } from "../core/version.js";
 import { installDevCommand } from "../package-manager/package-manager.js";
 import { planCiChange } from "./ci-plan.js";
 import { fileChange, readOptional } from "./file-plan.js";
+import { createProviderRegistry, type ProviderRegistry } from "../providers/registry.js";
 
-export type SetupProviderId = "knip" | "jscpd" | "dependency-cruiser" | "publint" | "attw" | "syncpack" | "license-checker" | "markdownlint";
-
-const PROVIDER_PACKAGES: Record<SetupProviderId, string> = {
-  knip: "knip",
-  jscpd: "jscpd",
-  "dependency-cruiser": "dependency-cruiser",
-  publint: "publint",
-  attw: "@arethetypeswrong/cli",
-  syncpack: "syncpack",
-  "license-checker": "license-checker",
-  markdownlint: "markdownlint-cli2",
-};
+export type SetupProviderId = string;
 
 const JSCPD_IGNORES = [
   "**/node_modules/**",
@@ -39,26 +29,42 @@ function setJsonValue(raw: string, jsonPath: (string | number)[], value: unknown
   return applyEdits(raw, modify(raw, jsonPath, value, { formattingOptions: formattingOptions(raw) }));
 }
 
-function quoteScriptArg(value: string): string {
-  return /\s/.test(value) ? `"${value.replaceAll('"', '\\"')}"` : value;
-}
-
 export async function buildInstallPlan(
   context: RepositoryContext,
   selected: SetupProviderId[],
   includeCi: boolean,
+  registry?: ProviderRegistry,
 ): Promise<InstallPlan> {
-  const plan: InstallPlan = { packages: [], files: [], commands: [], warnings: [], conflicts: [] };
+  const plan: InstallPlan = { schemaVersion: 1, packages: [], files: [], commands: [], warnings: [], conflicts: [] };
   if (!context.packageManager) {
     plan.conflicts.push("A package manager could not be resolved.");
     return plan;
+  }
+  const providerRegistry = registry ?? await createProviderRegistry(context);
+  const customProviders = new Set<string>();
+  for (const providerId of selected) {
+    const definition = providerRegistry.get(providerId);
+    if (!definition?.planInstall) continue;
+    const customPlan = await definition.planInstall(context);
+    plan.packages.push(...customPlan.packages);
+    plan.files.push(...customPlan.files);
+    plan.commands.push(...customPlan.commands);
+    plan.warnings.push(...customPlan.warnings);
+    plan.conflicts.push(...customPlan.conflicts);
+    customProviders.add(providerId);
   }
   const installedAtRoot = (name: string) => context.installedPackageOrigins.get(name)?.includes("package.json") === true;
   if (context.packageJson.name !== "repnix" && !installedAtRoot("repnix")) {
     plan.packages.push({ name: "repnix", version: `^${VERSION}`, dev: true, reason: "Keep the generated health script locally runnable" });
   }
   for (const provider of selected) {
-    const packageName = PROVIDER_PACKAGES[provider];
+    if (customProviders.has(provider)) continue;
+    const definition = providerRegistry.get(provider);
+    if (!definition?.setup) {
+      plan.conflicts.push(`Provider '${provider}' has no safe setup recipe and was not installed.`);
+      continue;
+    }
+    const packageName = definition.setup.packageName;
     if (!installedAtRoot(packageName)) {
       plan.packages.push({ name: packageName, dev: true, reason: `Add ${provider} repository health coverage` });
     }
@@ -69,18 +75,12 @@ export async function buildInstallPlan(
   if (packageBefore === null) throw new Error("package.json disappeared while planning setup");
   let packageAfter = packageBefore;
   const desiredScripts: Record<string, string> = { health: "repnix check" };
-  if (selected.includes("knip")) desiredScripts["health:dead-code"] = "knip";
-  if (selected.includes("jscpd")) {
-    desiredScripts["health:duplication"] = `jscpd ${context.sourceRoots.map(quoteScriptArg).join(" ")}`;
+  for (const provider of selected) {
+    if (customProviders.has(provider)) continue;
+    const setup = providerRegistry.get(provider)?.setup;
+    if (!setup) continue;
+    desiredScripts[setup.scriptName] = setup.scriptCommand(context);
   }
-  if (selected.includes("dependency-cruiser")) {
-    desiredScripts["health:architecture"] = `depcruise --output-type json --config -- ${context.sourceRoots.map(quoteScriptArg).join(" ")}`;
-  }
-  if (selected.includes("publint")) desiredScripts["health:package:publint"] = "publint";
-  if (selected.includes("attw")) desiredScripts["health:package:types"] = "attw --pack .";
-  if (selected.includes("syncpack")) desiredScripts["health:monorepo"] = "syncpack list-mismatches";
-  if (selected.includes("license-checker")) desiredScripts["health:licenses"] = "license-checker --json";
-  if (selected.includes("markdownlint")) desiredScripts["health:documentation"] = "markdownlint-cli2 \"**/*.md\"";
   for (const [name, command] of Object.entries(desiredScripts)) {
     const existing = context.scripts[name];
     if (existing && existing !== command) {
@@ -91,6 +91,18 @@ export async function buildInstallPlan(
   }
   const packageChange = fileChange("package.json", packageBefore, packageAfter, "Add RepNix health scripts");
   if (packageChange) plan.files.push(packageChange);
+
+  const repnixConfigPath = path.join(context.root, "repnix.config.json");
+  const repnixConfigBefore = await readOptional(repnixConfigPath);
+  if (repnixConfigBefore === null) {
+    const repnixConfigAfter = `${JSON.stringify({
+      schemaVersion: 1,
+      severityThreshold: "warning",
+      execution: { jobs: 2, timeoutSeconds: 300 },
+    }, null, 2)}\n`;
+    const change = fileChange("repnix.config.json", null, repnixConfigAfter, "Record repository health policy and selected built-in providers");
+    if (change) plan.files.push(change);
+  }
 
   if (selected.includes("jscpd")) {
     const configFile = [".jscpd.json", "jscpd.json"].find((file) => context.files.has(file));

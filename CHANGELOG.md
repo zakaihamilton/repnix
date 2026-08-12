@@ -2,6 +2,28 @@
 
 All notable changes to RepNix are documented here. The project follows semantic versioning.
 
+## Unreleased
+
+### Added
+
+- Add evidence-backed CLI, library, web application, Node application, and tooling roles per repository scope.
+- Add stable finding fingerprints, committed debt baselines, new/existing/resolved finding counts, and fail-on-new CI policy.
+- Add JSON audit output, serializable setup plans, bounded concurrent execution, detailed remediation, and SARIF reporting.
+- Add a typed built-in provider registry that supplies setup metadata, support levels, descriptions, and documentation.
+- Add the versioned provider SDK, registry-backed categories, generic provider hooks, and external `repnix-provider-*` discovery.
+
+### Changed
+
+- Reduce the product workflow to `audit`, `setup`, and `check`; detailed findings now use `repnix check --details` without a separate rerun command.
+- Update the existing repository, audit, health, finding, result, plan, and configuration models in place without parallel version-suffixed types.
+- Limit default audit output to the three highest-priority actionable recommendations and hide categories that do not apply.
+- Make setup create an explicit repository-health configuration and re-audit coverage after applying changes.
+- Remove per-provider enablement configuration; category modes now control provider coverage policy.
+
+### Removed
+
+- Remove the standalone `repnix explain` command and the legacy `repnix check --json` shortcut in favor of `--format`.
+
 ## 0.3.2 - 2026-08-11
 
 - Publish new package versions automatically after pushes to `main`, while skipping versions already present on npm.

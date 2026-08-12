@@ -66,16 +66,16 @@ try {
   const audit = await run(bin, ["audit"], { cwd: consumer });
   assert(audit.stdout.includes("Package publishing          ✓ Publint, Are The Types Wrong?"), `Audit did not credit both package-health providers after setup.\n${audit.stdout}`);
 
-  const check = await run(bin, ["check", "package-health", "--json"], { cwd: consumer, allowExitCodes: [1], timeoutMs: 600_000 });
+  const check = await run(bin, ["check", "package-health", "--format", "json"], { cwd: consumer, allowExitCodes: [1], timeoutMs: 600_000 });
   const report = JSON.parse(check.stdout);
   assert(report.summary?.errors === 0, `Package-health execution failed: ${check.stdout}\n${check.stderr}`);
   assert(report.results?.some((result) => result.provider === "publint" && result.findings.length > 0), "Publint did not produce a normalized package finding.");
   assert(report.results?.some((result) => result.provider === "attw" && result.findings.length > 0), "Are The Types Wrong? did not produce a normalized type-resolution finding.");
   assert(report.results.every((result) => result.category === "package-health"), "Category filtering included an unrelated result.");
 
-  const explain = await run(bin, ["explain"], { cwd: consumer, allowExitCodes: [1], timeoutMs: 600_000 });
-  assert(explain.stdout.includes("Reported by: Publint"), "Explain output omitted Publint attribution.");
-  assert(explain.stdout.includes("Reported by: Are The Types Wrong?"), "Explain output omitted ATTW attribution.");
+  const details = await run(bin, ["check", "package-health", "--details"], { cwd: consumer, allowExitCodes: [1], timeoutMs: 600_000 });
+  assert(details.stdout.includes("Reported by: Publint"), "Detailed output omitted Publint attribution.");
+  assert(details.stdout.includes("Reported by: Are The Types Wrong?"), "Detailed output omitted ATTW attribution.");
 
   process.stdout.write("Phase 3 package-health acceptance test passed.\n");
 } finally {

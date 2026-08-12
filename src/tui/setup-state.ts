@@ -1,10 +1,9 @@
 import type { Recommendation } from "../recommendations/recommendation-engine.js";
-import type { SetupProviderId } from "../setup/install-plan.js";
 
 export type SetupScreen = "loading" | "audit" | "empty" | "select" | "planning" | "review" | "details" | "confirm" | "applying" | "success" | "error";
 
 export type SetupSelectionItem =
-  | { kind: "provider"; provider: SetupProviderId; name: string }
+  | { kind: "provider"; provider: string; name: string }
   | { kind: "ci"; name: string };
 
 export interface SetupTuiModel {
@@ -14,7 +13,7 @@ export interface SetupTuiModel {
   reviewCursor: number;
   detailScroll: number;
   confirmFocus: "cancel" | "apply";
-  selectedProviders: SetupProviderId[];
+  selectedProviders: string[];
   includeCi: boolean;
   sidebarCollapsed: boolean;
   progress?: string;
@@ -55,16 +54,16 @@ function moveScroll(scroll: number, direction: "up" | "down", lineCount: number,
   return Math.min(Math.max(lineCount - Math.max(viewport, 1), 0), scroll + 1);
 }
 
-function selectedProvidersFrom(recommendations: Recommendation[]): SetupProviderId[] {
+function selectedProvidersFrom(recommendations: Recommendation[]): string[] {
   return recommendations
     .filter((recommendation) => recommendation.actionable && recommendation.priority === "baseline")
-    .map((recommendation) => recommendation.provider as SetupProviderId);
+    .map((recommendation) => recommendation.provider);
 }
 
 export function selectionItems(recommendations: Recommendation[], hasCi: boolean): SetupSelectionItem[] {
   const items: SetupSelectionItem[] = recommendations
     .filter((recommendation) => recommendation.actionable)
-    .map((recommendation) => ({ kind: "provider" as const, provider: recommendation.provider as SetupProviderId, name: recommendation.name }));
+    .map((recommendation) => ({ kind: "provider" as const, provider: recommendation.provider, name: recommendation.name }));
   if (hasCi) items.push({ kind: "ci", name: "GitHub Actions health step" });
   return items;
 }

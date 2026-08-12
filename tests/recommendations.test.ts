@@ -12,7 +12,9 @@ describe("recommendation engine", () => {
     const model = buildAuditModel(context, await detectAllProviders(context), config);
     expect(model.coverage.find((entry) => entry.category === "lint")).toMatchObject({ status: "covered", providers: ["ESLint"] });
     expect(model.recommendations.filter((item) => item.actionable && item.priority === "baseline").map((item) => item.provider)).toEqual(["knip", "jscpd"]);
-    expect(model.recommendations.map((item) => item.provider)).toEqual(["knip", "jscpd", "osv-scanner", "eslint-boundaries", "size-limit", "jsx-a11y", "c8", "stryker", "gitleaks", "license-checker", "lhci"]);
+    expect(model.recommendations.map((item) => item.provider)).toEqual(["knip", "jscpd", "osv-scanner", "eslint-boundaries", "c8", "stryker", "gitleaks", "license-checker"]);
+    expect(context.scopes[0]?.roles).toEqual(["node-app"]);
+    expect(model.recommendations.some((item) => ["size-limit", "jsx-a11y", "lhci"].includes(item.provider))).toBe(false);
     expect(model.recommendations.find((item) => item.provider === "eslint-boundaries")).toMatchObject({ priority: "optional", actionable: false });
     expect(model.recommendations.every((item) => item.reason.length > 40)).toBe(true);
   });

@@ -3,11 +3,12 @@ import { access, mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import fg from "fast-glob";
-import type { RepnixConfig } from "../config/repo-health-config.js";
+import { categoryModeFor, type RepnixConfig } from "../config/repo-health-config.js";
 import { createFinding } from "../core/finding.js";
 import { HEALTH_CATEGORIES, type HealthCategory } from "../core/health-category.js";
 import type {
   FindingSeverity,
+  BaselineFile,
   HealthFinding,
   HealthResult,
   HealthRun,
@@ -23,6 +24,8 @@ import { normalizeAttw } from "../providers/attw/normalizer.js";
 import { resolveDiagnosticLogger, type DiagnosticLogger } from "../cli/options.js";
 import { runCommand, type CommandResult } from "./command-runner.js";
 import { PROVIDERS, type ProviderDescriptor } from "../providers/catalog.js";
+import { builtinProvider, builtinProviderByName } from "../providers/registry.js";
+import type { ProviderModule } from "../providers/sdk.js";
 
 export interface RunHealthOptions {
   category?: HealthCategory;
@@ -31,6 +34,9 @@ export interface RunHealthOptions {
   logLevel?: "silent" | "error" | "warn" | "info" | "debug";
   logFormat?: "text" | "json";
   timeout?: number;
+  jobs?: number;
+  baseline?: BaselineFile;
+  baselineFailOn?: "new" | "all";
   logger?: DiagnosticLogger;
 }
 
@@ -42,17 +48,8 @@ interface RunnableCommand {
   args: string[];
   env?: NodeJS.ProcessEnv;
   timeoutMs?: number;
+  scope?: string;
 }
-
-const GENERIC_SCRIPT_PROVIDERS: Array<{ id: string; category: HealthCategory; names: string[]; kind: "general" | "test" }> = [
-  { id: "c8", category: "coverage", names: ["health:coverage", "coverage", "test:coverage", "check:coverage"], kind: "test" },
-  { id: "stryker", category: "coverage", names: ["health:mutation", "mutation", "stryker"], kind: "general" },
-  { id: "syncpack", category: "monorepo", names: ["health:monorepo", "monorepo", "syncpack"], kind: "general" },
-  { id: "license-checker", category: "licenses", names: ["health:licenses", "licenses", "license-checker"], kind: "general" },
-  { id: "markdownlint", category: "documentation", names: ["health:documentation", "documentation", "docs", "markdownlint"], kind: "general" },
-  { id: "lhci", category: "performance", names: ["health:performance", "performance", "lhci"], kind: "general" },
-  { id: "changesets", category: "release", names: ["health:release", "release", "changeset:status"], kind: "general" },
-];
 
 const HEALTH_OFFLINE_ENV: NodeJS.ProcessEnv = {
   COREPACK_ENABLE_NETWORK: "0",
@@ -160,9 +157,64 @@ function commandLine(runnable: RunnableCommand): string {
   return [runnable.command, ...runnable.args].map((part) => JSON.stringify(part)).join(" ");
 }
 
+function normalizeCommandOutput(runnable: RunnableCommand, output: string): HealthFinding[] {
+  const findings: HealthFinding[] = [];
+  if (runnable.category === "types") {
+    const pattern = /^(.+?)\((\d+),(\d+)\):\s+(error|warning)\s+(TS\d+):\s+(.+)$/gm;
+    for (const match of output.matchAll(pattern)) {
+      const file = path.isAbsolute(match[1]!) ? path.relative(process.cwd(), match[1]!) : match[1]!;
+      findings.push(createFinding({
+        provider: runnable.name,
+        category: "types",
+        type: "type-error",
+        ruleId: match[5]!,
+        title: `TypeScript ${match[5]!}`,
+        severity: match[4] === "warning" ? "warning" : "error",
+        message: match[6]!,
+        remediation: `Correct the value or type reported by ${match[5]!}, then rerun the type check.`,
+        documentationUrl: "https://www.typescriptlang.org/docs/",
+        file,
+        line: Number(match[2]),
+        column: Number(match[3]),
+        metadata: { command: commandLine(runnable) },
+      }));
+    }
+  }
+  if (runnable.category === "lint") {
+    let currentFile: string | undefined;
+    for (const line of output.split("\n")) {
+      const trimmed = line.trim();
+      if (trimmed && !/^\d+:\d+\s/.test(trimmed) && /\.[cm]?[jt]sx?$/.test(trimmed)) {
+        currentFile = path.isAbsolute(trimmed) ? path.relative(process.cwd(), trimmed) : trimmed;
+        continue;
+      }
+      const match = /^(\d+):(\d+)\s+(error|warning)\s+(.+?)(?:\s{2,}|\s)([@\w/-]+)$/.exec(trimmed);
+      if (!match || !currentFile) continue;
+      findings.push(createFinding({
+        provider: runnable.name,
+        category: "lint",
+        type: "lint-error",
+        ruleId: match[5]!,
+        title: match[5]!,
+        severity: match[3] === "warning" ? "warning" : "error",
+        message: match[4]!,
+        remediation: `Correct the ${match[5]!} lint violation or configure the rule intentionally.`,
+        documentationUrl: "https://eslint.org/docs/latest/",
+        file: currentFile,
+        line: Number(match[1]),
+        column: Number(match[2]),
+        metadata: { command: commandLine(runnable) },
+      }));
+    }
+  }
+  return findings;
+}
+
 function commandResult(
   runnable: RunnableCommand,
   result: CommandResult,
+  context?: RepositoryContext,
+  normalize?: ProviderModule["normalize"],
 ): HealthResult {
   if (result.timedOut) {
     return {
@@ -210,6 +262,19 @@ function commandResult(
       findings: [],
       durationMs: result.durationMs,
       message: `${runnable.name} is configured but its executable is unavailable: ${runnable.command}. Install repository dependencies first.`,
+    };
+  }
+  const normalized = normalize && context
+    ? normalize({ output: excerpt, result, context })
+    : normalizeCommandOutput(runnable, excerpt);
+  if (normalized.length) {
+    return {
+      provider: runnable.provider,
+      name: runnable.name,
+      category: runnable.category,
+      status: statusForFindings(normalized),
+      findings: normalized,
+      durationMs: result.durationMs,
     };
   }
   return {
@@ -301,13 +366,13 @@ async function basicCommands(
       commands.push({ provider: id, name, category: "tests", command: binary, args, env: { CI: "1" }, ...(timeoutMs === undefined ? {} : { timeoutMs }) });
     }
   }
-  for (const provider of GENERIC_SCRIPT_PROVIDERS) {
-    if (!Object.keys(detections.get(provider.id)?.activeCapabilities ?? {}).length) continue;
-    const script = safeScript(context, provider.names, provider.kind);
+  for (const provider of PROVIDERS) {
+    if (!provider.scriptNames?.length || !Object.keys(detections.get(provider.id)?.activeCapabilities ?? {}).length) continue;
+    const script = safeScript(context, provider.scriptNames, provider.scriptKind === "test" ? "test" : "general");
     if (!script || commands.some((command) => command.provider === `script:${script}`)) continue;
     commands.push({
       provider: provider.id,
-      name: PROVIDERS.find((descriptor) => descriptor.id === provider.id)?.name ?? provider.id,
+      name: provider.name,
       category: provider.category,
       ...scriptCommand(context, script),
       ...(timeoutMs === undefined ? {} : { timeoutMs }),
@@ -330,6 +395,7 @@ async function basicCommands(
         provider: `workspace:${workspace}:${script}`,
         name: `${workspace} ${script}`,
         category: check.category,
+        scope: workspace,
         ...workspaceScriptCommand(context, workspace, script),
         ...(timeoutMs === undefined ? {} : { timeoutMs }),
       });
@@ -382,7 +448,27 @@ async function runGenericProvider(
     env: { ...HEALTH_OFFLINE_ENV },
     ...(timeoutMs === undefined ? {} : { timeoutMs }),
   });
-  return commandResult(runnable, result);
+  return commandResult(runnable, result, context, descriptor.normalize);
+}
+
+async function runProviderModule(context: RepositoryContext, descriptor: ProviderModule, diagnostics: DiagnosticLogger, timeoutMs?: number): Promise<HealthResult> {
+  if (descriptor.run) {
+    return descriptor.run({
+      context,
+      runtime: {
+        logger: diagnostics,
+        ...(timeoutMs === undefined ? {} : { timeoutMs }),
+        runCommand: (command, args, options = {}) => runCommand(command, args, {
+          cwd: options.cwd ?? context.root,
+          logger: diagnostics,
+          ...(options.env ? { env: options.env } : {}),
+          ...(options.maxOutputBytes === undefined ? {} : { maxOutputBytes: options.maxOutputBytes }),
+          ...(timeoutMs === undefined ? {} : { timeoutMs }),
+        }),
+      },
+    });
+  }
+  return runGenericProvider(context, descriptor, diagnostics, timeoutMs);
 }
 
 async function runCoveragePolicy(
@@ -775,8 +861,23 @@ function severityAtLeast(severity: FindingSeverity, threshold: FindingSeverity):
   return rank[severity] >= rank[threshold];
 }
 
-function categoryOrder(category: HealthCategory): number {
-  return HEALTH_CATEGORIES.indexOf(category);
+function categoryOrder(category: HealthCategory, audit: AuditModel): number {
+  const categories = audit.registry?.categories.map((entry) => entry.id) ?? HEALTH_CATEGORIES;
+  const index = categories.indexOf(category);
+  return index < 0 ? categories.length : index;
+}
+
+async function runBounded<T>(tasks: Array<() => Promise<T>>, jobs: number): Promise<T[]> {
+  const results = new Array<T>(tasks.length);
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(Math.max(jobs, 1), Math.max(tasks.length, 1)) }, async () => {
+    while (cursor < tasks.length) {
+      const index = cursor++;
+      results[index] = await tasks[index]!();
+    }
+  });
+  await Promise.all(workers);
+  return results;
 }
 
 export async function runHealth(
@@ -786,15 +887,18 @@ export async function runHealth(
 ): Promise<HealthRun> {
   const { context, detections } = audit;
   const logger = resolveDiagnosticLogger(options.logger ?? options);
-  const timeoutMs = options.timeout === undefined ? undefined : options.timeout * 1000;
+  const timeoutMs = (options.timeout ?? config.execution.timeoutSeconds) * 1000;
   const results: HealthResult[] = [];
-  const enabled = (provider: string) => (config.providers as Record<string, { enabled: boolean }> | undefined)?.[provider]?.enabled !== false;
+  const enabled = (_provider: string) => true;
+  const categoryOff = (category: HealthCategory, scope?: string) => scope === undefined
+    ? audit.coverage.find((entry) => entry.category === category)?.status === "off"
+    : categoryModeFor(config, category, scope) === "off";
   if (!context.packageManager || context.diagnostics.some((item) => item.severity === "error")) {
     results.push({ provider: "repnix", name: "RepNix configuration", category: options.category ?? "types", status: "error", findings: [], durationMs: 0, message: context.diagnostics.find((item) => item.severity === "error")?.message ?? "Package manager unresolved" });
   } else {
     const requiredMissing = audit.coverage.filter((entry) =>
       (!options.category || entry.category === options.category) &&
-      config.categories?.[entry.category] === "required" &&
+      (categoryModeFor(config, entry.category) === "required" || entry.scopes.some((scope) => categoryModeFor(config, entry.category, scope) === "required")) &&
       entry.status !== "covered",
     );
     for (const entry of requiredMissing) {
@@ -802,30 +906,36 @@ export async function runHealth(
     }
 
     const commands = await basicCommands(context, detections, timeoutMs);
-    for (const runnable of commands) {
-      if (options.category && runnable.category !== options.category) continue;
-      if (config.categories?.[runnable.category] === "off") continue;
+    const commandTasks = commands.filter((runnable) => (!options.category || runnable.category === options.category) && !categoryOff(runnable.category, runnable.scope ?? ".")).map((runnable) => async () => {
       const result = await runCommand(runnable.command, runnable.args, {
         cwd: context.root,
         logger,
         env: { ...HEALTH_OFFLINE_ENV, ...runnable.env },
         ...(runnable.timeoutMs === undefined ? {} : { timeoutMs: runnable.timeoutMs }),
       });
-      results.push(commandResult(runnable, result));
+      return commandResult(runnable, result);
+    });
+    results.push(...await runBounded(commandTasks, options.jobs ?? config.execution.jobs));
+    const providerTasks: Array<() => Promise<HealthResult>> = [];
+    const scheduledProviders = new Set(results.map((result) => result.provider));
+    const schedule = (provider: string, task: () => Promise<HealthResult>) => {
+      if (scheduledProviders.has(provider)) return;
+      scheduledProviders.add(provider);
+      providerTasks.push(task);
+    };
+    if ((!options.category || options.category === "dead-code") && !categoryOff("dead-code") && detections.get("knip")?.installed && enabled("knip")) {
+      schedule("knip", () => runKnip(context, logger, timeoutMs));
     }
-    if ((!options.category || options.category === "dead-code") && config.categories?.["dead-code"] !== "off" && detections.get("knip")?.installed && config.providers?.knip?.enabled !== false) {
-      results.push(await runKnip(context, logger, timeoutMs));
+    if ((!options.category || options.category === "duplication") && !categoryOff("duplication") && detections.get("jscpd")?.installed && enabled("jscpd")) {
+      schedule("jscpd", () => runJscpd(context, logger, timeoutMs));
     }
-    if ((!options.category || options.category === "duplication") && config.categories?.duplication !== "off" && detections.get("jscpd")?.installed && config.providers?.jscpd?.enabled !== false) {
-      results.push(await runJscpd(context, logger, timeoutMs));
+    if ((!options.category || options.category === "security") && !categoryOff("security") && detections.get("osv-scanner")?.activeCapabilities.vulnerabilities && enabled("osv-scanner")) {
+      schedule("osv-scanner", () => runOsvScanner(context, logger, timeoutMs));
     }
-    if ((!options.category || options.category === "security") && config.categories?.security !== "off" && detections.get("osv-scanner")?.activeCapabilities.vulnerabilities && enabled("osv-scanner")) {
-      results.push(await runOsvScanner(context, logger, timeoutMs));
+    if ((!options.category || options.category === "architecture") && !categoryOff("architecture") && detections.get("dependency-cruiser")?.activeCapabilities.architectureRules && enabled("dependency-cruiser")) {
+      schedule("dependency-cruiser", () => runDependencyCruiser(context, logger, timeoutMs));
     }
-    if ((!options.category || options.category === "architecture") && config.categories?.architecture !== "off" && detections.get("dependency-cruiser")?.activeCapabilities.architectureRules && enabled("dependency-cruiser")) {
-      results.push(await runDependencyCruiser(context, logger, timeoutMs));
-    }
-    if ((!options.category || options.category === "architecture") && config.categories?.architecture !== "off" && detections.get("eslint-boundaries")?.activeCapabilities.architectureRules && enabled("eslint-boundaries")) {
+    if ((!options.category || options.category === "architecture") && !categoryOff("architecture") && detections.get("eslint-boundaries")?.activeCapabilities.architectureRules && enabled("eslint-boundaries")) {
       if (options.category === "architecture" || !results.some((result) => result.category === "lint")) {
         results.push(await runEslintBoundaries(context, logger, timeoutMs));
       } else {
@@ -841,16 +951,16 @@ export async function runHealth(
         });
       }
     }
-    if ((!options.category || options.category === "bundle") && config.categories?.bundle !== "off" && detections.get("size-limit")?.activeCapabilities.bundleBudget && enabled("size-limit")) {
-      results.push(await runSizeLimit(context, logger, timeoutMs));
+    if ((!options.category || options.category === "bundle") && !categoryOff("bundle") && detections.get("size-limit")?.activeCapabilities.bundleBudget && enabled("size-limit")) {
+      schedule("size-limit", () => runSizeLimit(context, logger, timeoutMs));
     }
-    if ((!options.category || options.category === "package-health") && config.categories?.["package-health"] !== "off" && detections.get("publint")?.activeCapabilities.packagePublishing && enabled("publint")) {
-      results.push(await runPublint(context, logger, timeoutMs));
+    if ((!options.category || options.category === "package-health") && !categoryOff("package-health") && detections.get("publint")?.activeCapabilities.packagePublishing && enabled("publint")) {
+      schedule("publint", () => runPublint(context, logger, timeoutMs));
     }
-    if ((!options.category || options.category === "package-health") && config.categories?.["package-health"] !== "off" && detections.get("attw")?.activeCapabilities.typesCompatibility && enabled("attw")) {
-      results.push(await runAttw(context, logger, timeoutMs));
+    if ((!options.category || options.category === "package-health") && !categoryOff("package-health") && detections.get("attw")?.activeCapabilities.typesCompatibility && enabled("attw")) {
+      schedule("attw", () => runAttw(context, logger, timeoutMs));
     }
-    if ((!options.category || options.category === "accessibility") && config.categories?.accessibility !== "off" && detections.get("jsx-a11y")?.activeCapabilities.accessibilityRules && enabled("jsx-a11y")) {
+    if ((!options.category || options.category === "accessibility") && !categoryOff("accessibility") && detections.get("jsx-a11y")?.activeCapabilities.accessibilityRules && enabled("jsx-a11y")) {
       const lint = results.find((result) => result.category === "lint");
       results.push({
         provider: "jsx-a11y",
@@ -862,25 +972,47 @@ export async function runHealth(
         ...(lint && lint.status !== "pass" ? { message: "Accessibility rules ran through the existing lint command; see the lint result." } : {}),
       });
     }
-    for (const descriptor of PROVIDERS) {
-      if (!descriptor.command || !Object.keys(detections.get(descriptor.id)?.activeCapabilities ?? {}).length) continue;
+    for (const descriptor of audit.registry?.providers ?? PROVIDERS) {
+      if ((!descriptor.command && !descriptor.run) || !Object.keys(detections.get(descriptor.id)?.activeCapabilities ?? {}).length) continue;
       if (options.category && descriptor.category !== options.category) continue;
-      if (config.categories?.[descriptor.category] === "off" || !enabled(descriptor.id)) continue;
-      if (results.some((result) => result.provider === descriptor.id)) continue;
+      if (categoryOff(descriptor.category) || !enabled(descriptor.id)) continue;
+      if (scheduledProviders.has(descriptor.id)) continue;
       if (["osv-scanner", "dependency-cruiser", "size-limit", "publint", "attw"].includes(descriptor.id)) continue;
-      results.push(descriptor.id === "license-checker"
-        ? await runLicensePolicy(context, config, logger, timeoutMs)
-        : await runGenericProvider(context, descriptor, logger, timeoutMs));
+      schedule(descriptor.id, descriptor.run
+        ? () => runProviderModule(context, descriptor, logger, timeoutMs)
+        : descriptor.id === "license-checker"
+          ? () => runLicensePolicy(context, config, logger, timeoutMs)
+          : () => runGenericProvider(context, descriptor, logger, timeoutMs));
     }
-    if ((!options.category || options.category === "coverage") && config.categories?.coverage !== "off" && detections.get("c8")?.activeCapabilities.testCoverage && enabled("c8") && !results.some((result) => result.provider === "c8")) {
-      results.push(await runCoveragePolicy(context, config, logger, timeoutMs));
+    if ((!options.category || options.category === "coverage") && !categoryOff("coverage") && detections.get("c8")?.activeCapabilities.testCoverage && enabled("c8") && !scheduledProviders.has("c8")) {
+      schedule("c8", () => runCoveragePolicy(context, config, logger, timeoutMs));
     }
+    results.push(...await runBounded(providerTasks, options.jobs ?? config.execution.jobs));
   }
 
-  results.sort((a, b) => categoryOrder(a.category) - categoryOrder(b.category) || a.name.localeCompare(b.name));
+  results.sort((a, b) => categoryOrder(a.category, audit) - categoryOrder(b.category, audit) || a.name.localeCompare(b.name));
+  for (const result of results) {
+    if (!result.scope && result.provider.startsWith("workspace:")) result.scope = result.provider.split(":").slice(1, -1).join(":");
+  }
   const findings = results.flatMap((result) => result.findings);
+  for (const result of results) {
+    const definition = builtinProvider(result.provider) ?? builtinProviderByName(result.name);
+    for (const finding of result.findings) {
+      finding.ruleId ??= `${result.provider}/${finding.type}`;
+      finding.title ??= finding.type.replaceAll("-", " ");
+      finding.scope ??= result.scope ?? ".";
+      finding.remediation ??= definition?.nextStep ?? `Review the ${result.name} output and correct the reported ${finding.type.replaceAll("-", " ")}.`;
+      if (definition?.documentationUrl) finding.documentationUrl ??= definition.documentationUrl;
+    }
+  }
+  const baselineFingerprints = new Set(options.baseline?.entries.map((entry) => entry.fingerprint) ?? []);
+  for (const finding of findings) finding.baselineState = baselineFingerprints.has(finding.fingerprint) ? "existing" : "new";
+  const currentFingerprints = new Set(findings.map((finding) => finding.fingerprint));
+  const resolvedFindings = options.baseline?.entries.filter((entry) => !currentFingerprints.has(entry.fingerprint)).length ?? 0;
+  const newFindings = findings.filter((finding) => finding.baselineState === "new").length;
+  const existingFindings = findings.length - newFindings;
   const errors = results.filter((result) => result.status === "error").length;
-  const thresholdMatches = findings.filter((finding) => severityAtLeast(finding.severity, config.severityThreshold)).length;
+  const thresholdMatches = findings.filter((finding) => severityAtLeast(finding.severity, config.severityThreshold) && (options.baselineFailOn === "all" || finding.baselineState === "new")).length;
   const exitCode: 0 | 1 | 2 = errors > 0 ? 2 : thresholdMatches > 0 ? 1 : 0;
   for (const result of results) {
     if (result.status === "error") logger.error("health.provider.error", result.message ?? `${result.name} could not complete.`, { provider: result.provider, category: result.category });
@@ -897,10 +1029,15 @@ export async function runHealth(
       frameworks: context.frameworks,
       languages: context.languages,
       ...(context.workspaceRoots ? { workspaces: context.workspaceRoots } : {}),
+      scopes: context.scopes.map((scope) => ({ path: scope.path, roles: scope.roles })),
+      ...(audit.registry ? { categories: audit.registry.categories.map((category) => ({ id: category.id, label: category.label, description: category.description })) } : {}),
     },
     summary: {
       status: exitCode === 2 ? "error" : exitCode === 1 ? "findings" : "healthy",
       findings: findings.length,
+      newFindings,
+      existingFindings,
+      resolvedFindings,
       errors,
       exitCode,
     },

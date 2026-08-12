@@ -52,6 +52,7 @@ const context: RepositoryContext = {
   files: new Set(["src/index.ts"]),
   sourceFiles: ["src/index.ts", "src/other.ts"],
   sourceRoots: ["src"],
+  scopes: [{ path: ".", manifestPath: "package.json", packageJson: { name: "example" }, roles: ["node-app"], roleEvidence: [{ role: "node-app", confidence: "medium", signals: ["test"] }], frameworks: [], languages: ["TypeScript"], sourceFiles: ["src/index.ts", "src/other.ts"], sourceRoots: ["src"] }],
   diagnostics: [],
 };
 
@@ -126,8 +127,8 @@ describe("setup TUI presentation", () => {
       },
       detections: new Map(),
       coverage: [
-        { category: "types", status: "covered", providers: ["TypeScript"], capabilities: ["typeChecking"], missingCapabilities: [] },
-        { category: "security", status: "missing", providers: [], capabilities: [], missingCapabilities: ["vulnerabilities"] },
+        { category: "types", status: "covered", providers: ["TypeScript"], capabilities: ["typeChecking"], missingCapabilities: [], scopes: ["."], evidence: ["TypeScript source"] },
+        { category: "security", status: "missing", providers: [], capabilities: [], missingCapabilities: ["vulnerabilities"], scopes: ["."], evidence: ["source"] },
       ],
       recommendations,
     };

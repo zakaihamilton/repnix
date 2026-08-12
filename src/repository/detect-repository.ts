@@ -6,6 +6,9 @@ import type {
   PackageJson,
   RepositoryContext,
   RepositoryKind,
+  RepositoryRole,
+  RepositoryScope,
+  RoleEvidence,
   WorkspaceManifest,
 } from "../core/types.js";
 import { detectPackageManager } from "./detect-package-manager.js";
@@ -108,7 +111,10 @@ function detectSourceRoots(sourceFiles: string[]): string[] {
     const sourceIndex = parts.findIndex((part) => ["src", "app", "pages"].includes(part));
     if (sourceIndex >= 0) roots.add(parts.slice(0, sourceIndex + 1).join("/"));
   }
-  return roots.size > 0 ? [...roots].sort() : ["."];
+  if (!roots.size) return ["."];
+  const sorted = [...roots].sort();
+  const primary = sorted.filter((root) => !/^(?:fixtures?|examples?|tests?)(?:\/|$)/.test(root));
+  return primary.length > 0 ? primary : sorted;
 }
 
 function workspaceRoots(manifests: WorkspaceManifest[]): string[] {
@@ -123,6 +129,82 @@ function sourceFilesByWorkspace(sourceFiles: string[], roots: string[]): Record<
     root,
     sourceFiles.filter((file) => root === "." || file.startsWith(`${root}/`)),
   ]));
+}
+
+function scopeFiles(files: string[], scope: string): string[] {
+  return scope === "." ? files : files.filter((file) => file.startsWith(`${scope}/`));
+}
+
+function inferScope(
+  manifest: WorkspaceManifest,
+  allFiles: string[],
+  allSourceFiles: string[],
+  isMonorepo: boolean,
+): RepositoryScope {
+  const scope = path.posix.dirname(manifest.path.replaceAll(path.sep, "/"));
+  const scopePath = scope === "." ? "." : scope;
+  const files = scopeFiles(allFiles, scopePath);
+  const sourceFiles = scopeFiles(allSourceFiles, scopePath);
+  const dependencies = allDependencies(manifest.packageJson);
+  const scripts = manifest.packageJson.scripts ?? {};
+  const scriptText = Object.values(scripts).join(" ");
+  const evidence: RoleEvidence[] = [];
+  const addRole = (role: RepositoryRole, confidence: RoleEvidence["confidence"], signals: string[]) => {
+    if (!evidence.some((entry) => entry.role === role)) evidence.push({ role, confidence, signals });
+  };
+
+  if (manifest.packageJson.bin) addRole("cli", "high", ["package.json#bin"]);
+
+  const publishSignals = [
+    manifest.packageJson.main,
+    manifest.packageJson.module,
+    manifest.packageJson.types,
+    manifest.packageJson.typings,
+    manifest.packageJson.exports,
+    manifest.packageJson.files,
+    manifest.packageJson.publishConfig,
+  ].some(Boolean);
+  if (manifest.packageJson.private !== true && publishSignals) {
+    addRole("library", "high", ["publishable package entry points"]);
+  }
+
+  const next = dependencies.next !== undefined;
+  const browserBuild = /(?:^|\s|&&|\|)(?:next|vite|react-scripts|astro|remix)(?:\s|$)/.test(scriptText);
+  const browserEntry = files.some((file) => /(^|\/)(?:index\.html|pages\/|app\/).+/.test(file));
+  const jsx = sourceFiles.some((file) => /\.[jt]sx$/.test(file));
+  if (next) {
+    addRole("web-app", "high", ["Next.js dependency"]);
+  } else if (!manifest.packageJson.bin && jsx && (browserBuild || browserEntry)) {
+    addRole("web-app", "medium", [browserBuild ? "browser build script" : "browser application entry", "JSX/TSX source"]);
+  }
+
+  const serverScript = Object.entries(scripts).some(([name, command]) =>
+    /^(?:start|serve|dev)$/.test(name) && /(?:node|tsx|ts-node|express|fastify|nest)(?:\s|$)/.test(command),
+  );
+  if (serverScript) addRole("node-app", "medium", ["Node server script"]);
+
+  if (!evidence.length) {
+    if (isMonorepo && scopePath === "." && sourceFiles.length === 0) addRole("tooling", "high", ["workspace root without application source"]);
+    else addRole("node-app", "medium", ["JavaScript/TypeScript executable project"]);
+  }
+
+  const frameworks = [
+    next ? "Next.js" : null,
+    dependencies.react !== undefined ? "React" : null,
+  ].filter((item): item is string => Boolean(item));
+  const hasTypeScript = dependencies.typescript !== undefined || sourceFiles.some((file) => /\.[cm]?tsx?$/.test(file));
+  const hasJavaScript = sourceFiles.some((file) => /\.[cm]?jsx?$/.test(file));
+  return {
+    path: scopePath,
+    manifestPath: manifest.path,
+    packageJson: manifest.packageJson,
+    roles: evidence.map((entry) => entry.role),
+    roleEvidence: evidence,
+    frameworks,
+    languages: [hasTypeScript ? "TypeScript" : null, hasJavaScript ? "JavaScript" : null].filter((item): item is string => Boolean(item)),
+    sourceFiles,
+    sourceRoots: detectSourceRoots(sourceFiles),
+  };
 }
 
 export async function detectRepository(start = process.cwd()): Promise<RepositoryContext> {
@@ -213,6 +295,7 @@ export async function detectRepository(start = process.cwd()): Promise<Repositor
   const packageManager = detectPackageManager(packageJson, files);
   const githubWorkflows = [...files].some((file) => /^\.github\/workflows\/.*\.ya?ml$/.test(file));
   const detectedWorkspaceRoots = workspaceRoots(manifests);
+  const scopes = manifests.map((manifest) => inferScope(manifest, [...files], sourceFiles, isMonorepo));
   const context: RepositoryContext = {
     root,
     packageManager: packageManager.packageManager,
@@ -234,6 +317,7 @@ export async function detectRepository(start = process.cwd()): Promise<Repositor
     sourceRoots: detectSourceRoots(sourceFiles),
     workspaceRoots: detectedWorkspaceRoots,
     workspaceSourceFiles: sourceFilesByWorkspace(sourceFiles, detectedWorkspaceRoots),
+    scopes,
     diagnostics: packageManager.diagnostics,
   };
   if (packageManager.evidence) context.packageManagerEvidence = packageManager.evidence;

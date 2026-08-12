@@ -35,7 +35,7 @@ describe("setup planning", () => {
     const context = await detectRepository(root);
     const plan = await buildInstallPlan(context, ["knip", "jscpd"], false);
     expect(plan.packages.map((item) => item.name)).toEqual(["repnix", "knip", "jscpd"]);
-    expect(plan.files.map((item) => item.path)).toEqual(["package.json", ".jscpd.json"]);
+    expect(plan.files.map((item) => item.path)).toEqual(["package.json", "repnix.config.json", ".jscpd.json"]);
     await validateChanges(root, plan.files);
     await writeChanges(root, plan.files);
     const packageJson = JSON.parse(await readFile(path.join(root, "package.json"), "utf8")) as { scripts: Record<string, string> };
@@ -145,7 +145,7 @@ describe("setup planning", () => {
     temporary.push(root);
     const plan = await buildInstallPlan(await detectRepository(root), ["dependency-cruiser"], false);
     expect(plan.packages.map((item) => item.name)).toEqual(["repnix", "dependency-cruiser"]);
-    expect(plan.files.map((item) => item.path)).toEqual(["package.json", ".dependency-cruiser.cjs"]);
+    expect(plan.files.map((item) => item.path)).toEqual(["package.json", "repnix.config.json", ".dependency-cruiser.cjs"]);
     expect(plan.files.find((item) => item.path === "package.json")?.after).toContain('"health:architecture": "depcruise --output-type json --config -- src"');
     expect(plan.files.find((item) => item.path === ".dependency-cruiser.cjs")?.after).toContain("no-source-to-test");
   });
@@ -155,9 +155,9 @@ describe("setup planning", () => {
     temporary.push(root);
     const plan = await buildInstallPlan(await detectRepository(root), ["publint", "attw"], false);
     expect(plan.packages.map((item) => item.name)).toEqual(["repnix", "publint", "@arethetypeswrong/cli"]);
-    expect(plan.files).toHaveLength(1);
-    expect(plan.files[0]?.after).toContain('"health:package:publint": "publint"');
-    expect(plan.files[0]?.after).toContain('"health:package:types": "attw --pack ."');
+    expect(plan.files).toHaveLength(2);
+    expect(plan.files.find((item) => item.path === "package.json")?.after).toContain('"health:package:publint": "publint"');
+    expect(plan.files.find((item) => item.path === "package.json")?.after).toContain('"health:package:types": "attw --pack ."');
     expect(plan.conflicts).toEqual([]);
   });
 
@@ -184,6 +184,7 @@ describe("setup planning", () => {
     const context = await detectRepository(root);
     const progress: string[] = [];
     const plan = {
+      schemaVersion: 1 as const,
       packages: [],
       files: [fileChange("package.json", before, after, "test rollback")!],
       commands: [{ command: process.execPath, args: ["-e", "require('node:fs').writeFileSync('package-lock.json', 'changed'); process.exit(1)"], reason: "test failure" }],

@@ -28,7 +28,7 @@ const installArgs = {
 };
 
 async function runInteractiveSetup(bin, expectNoChanges = false) {
-  const useExpect = process.platform === "darwin" && process.env.REPNIX_E2E_PTY !== "python";
+  const useExpect = process.platform === "darwin" && process.env.REPNIX_E2E_PTY === "expect";
   const expectProgram = expectNoChanges
     ? `set timeout 600\nlog_user 1\nspawn $env(REPNIX_E2E_BIN) setup\nexpect "Choose the checks to add"\nsend "\\r"\nexpect eof\ncatch wait result\nexit [lindex $result 3]`
     : `set timeout 600\nlog_user 1\nspawn $env(REPNIX_E2E_BIN) setup\nexpect "Choose the checks to add"\nsend "\\r"\nexpect "Press Space to inspect this file."\nsend "\\r"\nexpect "Apply these reviewed changes?"\nsend "\\033\\[C\\r"\nexpect eof\ncatch wait result\nexit [lindex $result 3]`;
@@ -103,14 +103,14 @@ try {
   assert(manifest.devDependencies?.jscpd, "Setup did not install jscpd.");
   await readFile(path.join(consumer, ".jscpd.json"), "utf8");
 
-  const check = await run(bin, ["check", "--json"], { cwd: consumer, allowExitCodes: [0, 1], timeoutMs: 600_000 });
+  const check = await run(bin, ["check", "--format", "json"], { cwd: consumer, allowExitCodes: [0, 1], timeoutMs: 600_000 });
   const report = JSON.parse(check.stdout);
-  assert(report.schemaVersion === 1, "check --json did not emit schema version 1.");
+  assert(report.schemaVersion === 1, "check --format json did not emit schema version 1.");
   assert(report.summary?.errors === 0, `Health check contained execution errors: ${check.stdout}`);
   assert(report.results?.some((result) => result.provider === "knip"), "Health check did not run Knip.");
   assert(report.results?.some((result) => result.provider === "jscpd"), "Health check did not run jscpd.");
 
-  const explanation = await run(bin, ["explain"], { cwd: consumer, allowExitCodes: [0, 1], timeoutMs: 600_000 });
+  const explanation = await run(bin, ["check", "--details"], { cwd: consumer, allowExitCodes: [0, 1], timeoutMs: 600_000 });
   assert(explanation.stdout.includes("Knip") || explanation.stdout.includes("jscpd"), "Explain omitted provider attribution.");
 
   const trackedFiles = ["package.json", ".jscpd.json", "package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock", "bun.lockb"];
