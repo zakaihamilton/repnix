@@ -1,4 +1,4 @@
-import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { stripVTControlCharacters } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
@@ -9,9 +9,10 @@ import { buildAuditModel } from "../src/recommendations/recommendation-engine.js
 import { detectRepository } from "../src/repository/detect-repository.js";
 import { runHealth } from "../src/runners/health-runner.js";
 import { planCiChange } from "../src/setup/ci-plan.js";
-import { fileChange, renderFileDiff, validateChanges, writeChanges } from "../src/setup/file-plan.js";
+import { fileChange, renderFileDiff, resolveRepositoryPath, validateChanges, writeChanges } from "../src/setup/file-plan.js";
 import { buildInstallPlan } from "../src/setup/install-plan.js";
 import { applyInstallPlan } from "../src/setup/apply-plan.js";
+import { assertSavedPlanMatches, parseSavedInstallPlan, serializeInstallPlan } from "../src/setup/saved-plan.js";
 import { copyFixture } from "./helpers.js";
 
 const temporary: string[] = [];
@@ -31,6 +32,36 @@ describe("setup planning", () => {
     expect(output).toContain("unchanged line");
     expect(output.split("\n").every((line) => stripVTControlCharacters(line).length <= 40)).toBe(true);
     expect(output).not.toContain('"description": "a line far from the change"');
+  });
+
+  it("rejects planned file paths outside the repository", () => {
+    expect(() => resolveRepositoryPath("/tmp/repository", "../outside.txt")).toThrow("must stay inside the repository");
+    expect(() => resolveRepositoryPath("/tmp/repository", "/tmp/outside.txt")).toThrow("must stay inside the repository");
+    expect(resolveRepositoryPath("/tmp/repository", "nested/file.txt")).toBe(path.join("/tmp/repository", "nested/file.txt"));
+  });
+
+  it("rejects planned writes through a symbolic-link directory", async () => {
+    const root = await copyFixture("minimal-js");
+    temporary.push(root);
+    const outside = await copyFixture("minimal-js");
+    temporary.push(outside);
+    await symlink(outside, path.join(root, "linked-directory"));
+    const change = fileChange("linked-directory/escape.json", null, "{}\n", "test symlink containment")!;
+
+    await expect(validateChanges(root, [change])).rejects.toThrow("symbolic link");
+    await expect(writeChanges(root, [change])).rejects.toThrow("symbolic link");
+  });
+
+  it("requires saved setup plans to match a regenerated plan exactly", async () => {
+    const root = await copyFixture("minimal-js");
+    temporary.push(root);
+    const plan = await buildInstallPlan(await detectRepository(root), ["knip"], false);
+    const saved = serializeInstallPlan(plan, { providers: ["knip"], includeCi: false });
+    expect(parseSavedInstallPlan(saved)).toEqual(saved);
+    assertSavedPlanMatches(saved, plan);
+
+    const tampered = { ...saved, commands: [{ command: process.execPath, args: ["-e", "process.exit(99)"], reason: "tampered" }] };
+    expect(() => assertSavedPlanMatches(parseSavedInstallPlan(tampered), plan)).toThrow("no longer matches");
   });
 
   it("previews minimal scripts/config and is file-idempotent", async () => {
