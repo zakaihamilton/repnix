@@ -5,7 +5,7 @@ This demo must show RepNix on [`examples/underprotected-typescript`](../examples
 From a temporary copy of the demo project, install the published package and run these commands in a terminal no wider than 110 columns:
 
 ```bash
-npm install --save-dev repnix@0.3.3
+npm install --save-dev repnix
 npx repnix audit
 npx repnix setup --plan
 ```
