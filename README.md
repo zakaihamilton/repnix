@@ -5,9 +5,11 @@
 [![End-to-end](https://github.com/zakaihamilton/repnix/actions/workflows/e2e.yml/badge.svg)](https://github.com/zakaihamilton/repnix/actions/workflows/e2e.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**Discover and run the checks that keep your software repository safe to change.**
+**Keep your JavaScript and TypeScript repositories from missing the guardrails you meant to add.**
 
-RepNix is a local-first CLI that explains the guardrails you already have, identifies useful gaps, and helps you add a focused set of complementary tools. It supports JavaScript and TypeScript repositories first, while also covering workspace consistency, documentation, supply-chain policy, CI workflows, release readiness, and frontend performance.
+RepNix is a local-first CLI that inventories the checks already protecting a repository, identifies useful gaps without duplicating your tooling, and helps you safely add a focused set of complementary tools. It supports JavaScript and TypeScript repositories first, while also covering workspace consistency, documentation, supply-chain policy, CI workflows, release readiness, and frontend performance.
+
+It is for maintainers with existing repositories who want consistent guardrails without maintaining a personal checklist of packages, scripts, configuration, and CI changes for every project.
 
 If terms such as “dead code,” “dependency security,” or “package health” are new to you, start with `repnix audit`. It explains each category in plain language before recommending anything.
 
