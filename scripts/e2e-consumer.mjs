@@ -102,6 +102,7 @@ try {
   assert(manifest.devDependencies?.knip, "Setup did not install Knip.");
   assert(manifest.devDependencies?.jscpd, "Setup did not install jscpd.");
   await readFile(path.join(consumer, ".jscpd.json"), "utf8");
+  assert((await readFile(path.join(consumer, ".gitignore"), "utf8")).includes(".repnix/"), "Setup did not ignore generated RepNix reports.");
 
   const check = await run(bin, ["check", "--format", "json"], { cwd: consumer, allowExitCodes: [0, 1], timeoutMs: 600_000 });
   const report = JSON.parse(check.stdout);
