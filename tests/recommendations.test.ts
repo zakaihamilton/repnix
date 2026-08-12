@@ -11,7 +11,7 @@ describe("recommendation engine", () => {
     const { config } = await readConfig(context.root);
     const model = buildAuditModel(context, await detectAllProviders(context), config);
     expect(model.coverage.find((entry) => entry.category === "lint")).toMatchObject({ status: "covered", providers: ["ESLint"] });
-    expect(model.recommendations.filter((item) => item.actionable && item.priority === "baseline").map((item) => item.provider)).toEqual(["knip", "jscpd"]);
+    expect(model.recommendations.filter((item) => item.actionable && item.priority === "baseline").map((item) => item.provider)).toEqual(["knip", "jscpd", "c8"]);
     expect(model.recommendations.map((item) => item.provider)).toEqual(["knip", "jscpd", "osv-scanner", "eslint-boundaries", "c8", "stryker", "gitleaks", "license-checker"]);
     expect(context.scopes[0]?.roles).toEqual(["node-app"]);
     expect(model.recommendations.some((item) => ["size-limit", "jsx-a11y", "lhci"].includes(item.provider))).toBe(false);
@@ -59,5 +59,16 @@ describe("recommendation engine", () => {
       missingCapabilities: ["typesCompatibility"],
     });
     expect(model.recommendations.filter((item) => item.category === "package-health").map((item) => item.provider)).toEqual(["attw"]);
+  });
+
+  it("only automates Changesets when the Git remote default branch is known", async () => {
+    const context = await detectRepository(fixturePath("npm-library"));
+    const { config } = await readConfig(context.root);
+    let model = buildAuditModel(context, await detectAllProviders(context), config);
+    expect(model.recommendations.find((item) => item.provider === "changesets")).toMatchObject({ actionable: false });
+
+    context.gitDefaultBranch = "main";
+    model = buildAuditModel(context, await detectAllProviders(context), config);
+    expect(model.recommendations.find((item) => item.provider === "changesets")).toMatchObject({ actionable: true, priority: "optional" });
   });
 });

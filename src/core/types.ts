@@ -73,6 +73,10 @@ export interface RepositoryContext {
   packageCount: number;
   hasCI: boolean;
   ciProvider?: "github-actions";
+  /** Default branch advertised by the origin remote, when Git can resolve it locally. */
+  gitDefaultBranch?: string;
+  /** True when the root legacy ESLint JSON configuration can be safely extended. */
+  editableLegacyEslintConfig?: boolean;
   packageJson: PackageJson;
   manifests: WorkspaceManifest[];
   installedPackages: Map<string, string>;

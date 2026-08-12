@@ -1,6 +1,9 @@
 import { access, readFile } from "node:fs/promises";
+import { execFile as execFileCallback } from "node:child_process";
 import path from "node:path";
+import { promisify } from "node:util";
 import fg from "fast-glob";
+import { parse as parseJsonc, type ParseError } from "jsonc-parser";
 import { parse as parseYaml } from "yaml";
 import type {
   PackageJson,
@@ -26,11 +29,43 @@ const IGNORES = [
 ];
 
 const SOURCE_PATTERN = "**/*.{js,jsx,mjs,cjs,ts,tsx,mts,cts}";
+const execFile = promisify(execFileCallback);
 
 async function exists(file: string): Promise<boolean> {
   try {
     await access(file);
     return true;
+  } catch {
+    return false;
+  }
+}
+
+async function gitDefaultBranch(root: string): Promise<string | undefined> {
+  try {
+    const { stdout: worktree } = await execFile("git", ["rev-parse", "--show-toplevel"], { cwd: root, timeout: 1_000 });
+    if (path.resolve(worktree.trim()) !== path.resolve(root)) return undefined;
+    const { stdout } = await execFile("git", ["symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"], {
+      cwd: root,
+      timeout: 1_000,
+    });
+    const match = /^refs\/remotes\/origin\/(.+)$/.exec(stdout.trim());
+    return match?.[1] || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function hasStringList(value: unknown): boolean {
+  return value === undefined || typeof value === "string" || (Array.isArray(value) && value.every((item) => typeof item === "string"));
+}
+
+async function hasEditableLegacyEslintConfig(root: string, files: Set<string>): Promise<boolean> {
+  if (!files.has(".eslintrc.json")) return false;
+  if ([...files].some((file) => /(^|\/)eslint\.config\.[cm]?[jt]s$/.test(file))) return false;
+  try {
+    const errors: ParseError[] = [];
+    const parsed = parseJsonc(await readFile(path.join(root, ".eslintrc.json"), "utf8"), errors, { allowTrailingComma: true, disallowComments: false });
+    return errors.length === 0 && Boolean(parsed) && typeof parsed === "object" && !Array.isArray(parsed) && hasStringList((parsed as Record<string, unknown>).plugins) && hasStringList((parsed as Record<string, unknown>).extends);
   } catch {
     return false;
   }
@@ -322,5 +357,8 @@ export async function detectRepository(start = process.cwd()): Promise<Repositor
   };
   if (packageManager.evidence) context.packageManagerEvidence = packageManager.evidence;
   if (githubWorkflows) context.ciProvider = "github-actions";
+  if (await hasEditableLegacyEslintConfig(root, files)) context.editableLegacyEslintConfig = true;
+  const defaultBranch = await gitDefaultBranch(root);
+  if (defaultBranch) context.gitDefaultBranch = defaultBranch;
   return context;
 }

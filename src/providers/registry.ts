@@ -5,6 +5,7 @@ import { PROVIDER_DESCRIPTIONS, PROVIDER_NEXT_STEPS } from "../core/health-categ
 import { BUILTIN_CATEGORY_DEFINITIONS, createCategoryRegistry, type CategoryDefinition } from "../core/category-registry.js";
 import { PROVIDERS } from "./catalog.js";
 import type { RepositoryContext } from "../core/types.js";
+import { safeTestScript } from "../repository/script-detection.js";
 import { definePlugin, PROVIDER_API_VERSION, type CategoryModule, type ProviderModule, type RepnixProviderPlugin } from "./sdk.js";
 
 export type ProviderSupport = "detectable" | "runnable" | "installable";
@@ -16,7 +17,7 @@ export interface BuiltinProviderDefinition extends ProviderModule {
   support: ProviderSupport[];
 }
 
-export const INSTALLABLE_PROVIDER_IDS = ["knip", "jscpd", "dependency-cruiser", "publint", "attw", "syncpack", "license-checker", "markdownlint"] as const;
+export const INSTALLABLE_PROVIDER_IDS = ["c8", "knip", "jscpd", "dependency-cruiser", "publint", "attw", "syncpack", "license-checker", "markdownlint", "changesets"] as const;
 export type SetupProviderId = (typeof INSTALLABLE_PROVIDER_IDS)[number];
 
 const INSTALLABLE = new Set<string>(INSTALLABLE_PROVIDER_IDS);
@@ -27,7 +28,12 @@ const DOCUMENTATION: Record<string, string> = {
   publint: "https://publint.dev/", attw: "https://github.com/arethetypeswrong/arethetypeswrong.github.io",
 };
 const quoteScriptArg = (value: string) => /\s/.test(value) ? `"${value.replaceAll('"', '\\"')}"` : value;
+function packageManagerRun(context: RepositoryContext, script: string): string {
+  if (!context.packageManager) return `run ${script}`;
+  return context.packageManager === "yarn" ? `${context.packageManager} ${script}` : `${context.packageManager} run ${script}`;
+}
 const SETUP: Record<SetupProviderId, NonNullable<BuiltinProviderDefinition["setup"]>> = {
+  c8: { packageName: "c8", scriptName: "health:coverage", scriptCommand: (context) => `c8 --all --reporter=text ${packageManagerRun(context, safeTestScript(context.scripts) ?? "test")}`, checks: ["Test coverage reported for the repository's safe test command."] },
   knip: { packageName: "knip", scriptName: "health:dead-code", scriptCommand: () => "knip", checks: ["Unused files, exports, and dependencies not reachable from project entry points."] },
   jscpd: { packageName: "jscpd", scriptName: "health:duplication", scriptCommand: (context) => `jscpd ${context.sourceRoots.map(quoteScriptArg).join(" ")}`, checks: ["Repeated code blocks across detected source roots."] },
   "dependency-cruiser": { packageName: "dependency-cruiser", scriptName: "health:architecture", scriptCommand: (context) => `depcruise --output-type json --config -- ${context.sourceRoots.map(quoteScriptArg).join(" ")}`, checks: ["Circular dependencies and configured module-boundary violations."] },
@@ -36,6 +42,7 @@ const SETUP: Record<SetupProviderId, NonNullable<BuiltinProviderDefinition["setu
   syncpack: { packageName: "syncpack", scriptName: "health:monorepo", scriptCommand: () => "syncpack list-mismatches", checks: ["Dependency version and package metadata consistency across workspaces."] },
   "license-checker": { packageName: "license-checker", scriptName: "health:licenses", scriptCommand: () => "license-checker --json", checks: ["Declared dependency licenses against repository policy."] },
   markdownlint: { packageName: "markdownlint-cli2", scriptName: "health:documentation", scriptCommand: () => "markdownlint-cli2 \"**/*.md\"", checks: ["Markdown structure and style consistency."] },
+  changesets: { packageName: "@changesets/cli", scriptName: "health:release", scriptCommand: () => "changeset status", checks: ["Pending release metadata and package versioning intent."] },
 };
 
 export const BUILTIN_PROVIDERS: BuiltinProviderDefinition[] = PROVIDERS.map((descriptor) => {

@@ -104,7 +104,6 @@ export const PROVIDERS: ProviderDescriptor[] = [
     scriptNames: ["health:coverage", "coverage", "test:coverage", "check:coverage"],
     scriptKind: "test",
     capabilities: { testCoverage: true },
-    zeroConfig: true,
   },
   {
     id: "stryker",
