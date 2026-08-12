@@ -4,6 +4,8 @@ import { pathToFileURL } from "node:url";
 import { PROVIDER_DESCRIPTIONS, PROVIDER_NEXT_STEPS } from "../core/health-category.js";
 import { BUILTIN_CATEGORY_DEFINITIONS, createCategoryRegistry, type CategoryDefinition } from "../core/category-registry.js";
 import { PROVIDERS } from "./catalog.js";
+import { markdownlintScriptCommand } from "./markdownlint/command.js";
+import { PROVIDER_RECOMMENDATIONS } from "./recommend.js";
 import type { RepositoryContext } from "../core/types.js";
 import { safeTestScript } from "../repository/script-detection.js";
 import { definePlugin, PROVIDER_API_VERSION, type CategoryModule, type ProviderModule, type RepnixProviderPlugin } from "./sdk.js";
@@ -26,6 +28,7 @@ const DOCUMENTATION: Record<string, string> = {
   vitest: "https://vitest.dev/guide/", jest: "https://jestjs.io/docs/getting-started", knip: "https://knip.dev/", jscpd: "https://github.com/kucherenko/jscpd",
   "osv-scanner": "https://google.github.io/osv-scanner/", "dependency-cruiser": "https://github.com/sverweij/dependency-cruiser", "size-limit": "https://github.com/ai/size-limit",
   publint: "https://publint.dev/", attw: "https://github.com/arethetypeswrong/arethetypeswrong.github.io",
+  markdownlint: "https://github.com/DavidAnson/markdownlint",
 };
 const quoteScriptArg = (value: string) => /\s/.test(value) ? `"${value.replaceAll('"', '\\"')}"` : value;
 function packageManagerRun(context: RepositoryContext, script: string): string {
@@ -41,7 +44,7 @@ const SETUP: Record<SetupProviderId, NonNullable<BuiltinProviderDefinition["setu
   attw: { packageName: "@arethetypeswrong/cli", scriptName: "health:package:types", scriptCommand: () => "attw --pack .", checks: ["TypeScript consumer resolution across Node and bundler modes."] },
   syncpack: { packageName: "syncpack", scriptName: "health:monorepo", scriptCommand: () => "syncpack list-mismatches", checks: ["Dependency version and package metadata consistency across workspaces."] },
   "license-checker": { packageName: "license-checker", scriptName: "health:licenses", scriptCommand: () => "license-checker --json", checks: ["Declared dependency licenses against repository policy."] },
-  markdownlint: { packageName: "markdownlint-cli2", scriptName: "health:documentation", scriptCommand: () => "markdownlint-cli2 \"**/*.md\" \"#node_modules\"", checks: ["Markdown structure and style consistency."] },
+  markdownlint: { packageName: "markdownlint-cli2", scriptName: "health:documentation", scriptCommand: () => markdownlintScriptCommand(), checks: ["Markdown structure and style consistency."] },
   changesets: { packageName: "@changesets/cli", scriptName: "health:release", scriptCommand: () => "changeset status", checks: ["Pending release metadata and package versioning intent."] },
 };
 
@@ -49,12 +52,14 @@ export const BUILTIN_PROVIDERS: BuiltinProviderDefinition[] = PROVIDERS.map((des
   const nextStep = PROVIDER_NEXT_STEPS[descriptor.name];
   const setup = INSTALLABLE.has(descriptor.id) ? SETUP[descriptor.id as SetupProviderId] : undefined;
   const documentationUrl = DOCUMENTATION[descriptor.id];
+  const recommendation = PROVIDER_RECOMMENDATIONS[descriptor.id];
   return {
     ...descriptor,
     description: PROVIDER_DESCRIPTIONS[descriptor.name] ?? `Runs ${descriptor.name} as a repository health check.`,
     ...(documentationUrl ? { documentationUrl } : {}),
     ...(nextStep ? { nextStep } : {}),
     ...(setup ? { setup } : {}),
+    ...(recommendation ? { recommend: recommendation.recommend, recommendOrder: recommendation.order } : {}),
     support: ["detectable", ...(descriptor.command || descriptor.runnable ? ["runnable" as const] : []), ...(INSTALLABLE.has(descriptor.id) ? ["installable" as const] : [])],
   };
 });

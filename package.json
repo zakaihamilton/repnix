@@ -1,6 +1,6 @@
 {
   "name": "repnix",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "description": "Local-first repository health orchestration for JavaScript and TypeScript projects",
   "repository": {
     "type": "git",
@@ -44,6 +44,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
+    "health": "node dist/cli.js check",
     "verify": "pnpm lint && pnpm typecheck && pnpm build && pnpm test:run && pnpm test:compatibility"
   },
   "engines": {

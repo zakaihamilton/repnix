@@ -35,7 +35,7 @@ The provider must expose all descriptor fields, use a stable lowercase ID, and r
 Use hooks only when the generic behavior is insufficient:
 
 - `detect(context)` for non-standard configuration or activation rules;
-- `recommend(context)` for repository-specific setup recommendations;
+- `recommend(context, helpers?)` for repository-specific setup recommendations. `helpers.detections` is the current provider detection map; `helpers.coverageStatus` is the category coverage. Built-in providers use this hook; omit it when the provider should not be recommended;
 - `planInstall(context)` for a custom safe setup plan;
 - `run({ context, runtime })` for multi-command or policy-driven checks;
 - `normalize({ output, result, context })` for machine-readable or provider-specific output;

@@ -6,6 +6,16 @@ All notable changes to RepNix are documented here. The project follows semantic 
 
 _No unreleased changes._
 
+## 0.3.7 - 2026-08-12
+
+### Changed
+
+- Move built-in setup recommendations onto the provider `recommend` hook so plugins and built-ins share the same audit path.
+
+### Fixed
+
+- Parse markdownlint-cli2 violations into per-file findings instead of a generic command failure, and ignore generated Markdown such as Playwright reports.
+
 ## 0.3.6 - 2026-08-12
 
 ### Fixed

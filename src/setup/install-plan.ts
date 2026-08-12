@@ -5,6 +5,7 @@ import { VERSION } from "../core/version.js";
 import { installDevCommand } from "../package-manager/package-manager.js";
 import { planCiChange } from "./ci-plan.js";
 import { fileChange, readOptional } from "./file-plan.js";
+import { markdownlintScriptCommand } from "../providers/markdownlint/command.js";
 import { createProviderRegistry, type ProviderRegistry } from "../providers/registry.js";
 
 export type SetupProviderId = string;
@@ -20,9 +21,11 @@ const JSCPD_IGNORES = [
   "**/*.generated.*",
 ];
 
+const MARKDOWNLINT_SCRIPT = markdownlintScriptCommand();
 const GENERATED_SCRIPT_MIGRATIONS: Record<string, Record<string, string>> = {
   "health:documentation": {
-    "markdownlint-cli2 \"**/*.md\"": "markdownlint-cli2 \"**/*.md\" \"#node_modules\"",
+    "markdownlint-cli2 \"**/*.md\"": MARKDOWNLINT_SCRIPT,
+    "markdownlint-cli2 \"**/*.md\" \"#node_modules\"": MARKDOWNLINT_SCRIPT,
   },
 };
 

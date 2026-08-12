@@ -3,6 +3,8 @@ import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 import type { ProviderDetection, RepositoryContext } from "../core/types.js";
 import { isNonMutatingQualityCommand, isNonMutatingTestCommand } from "../repository/script-detection.js";
+import { MARKDOWNLINT_CLI_ARGS } from "./markdownlint/command.js";
+import { normalizeMarkdownlintResult } from "./markdownlint/normalizer.js";
 import type { ProviderModule } from "./sdk.js";
 
 export type ProviderDescriptor = ProviderModule;
@@ -252,7 +254,8 @@ export const PROVIDERS: ProviderDescriptor[] = [
     scriptPattern: /(^|\s|&&|\|)markdownlint(?:-cli2)?(?:\s|$)/,
     scriptNames: ["health:documentation", "documentation", "docs", "markdownlint"],
     capabilities: { documentation: true },
-    command: { binary: "markdownlint-cli2", args: ["**/*.md", "#node_modules"] },
+    command: { binary: "markdownlint-cli2", args: [...MARKDOWNLINT_CLI_ARGS] },
+    normalize: normalizeMarkdownlintResult,
     zeroConfig: true,
   },
   {

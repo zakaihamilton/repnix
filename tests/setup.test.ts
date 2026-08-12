@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createDiagnosticLogger } from "../src/cli/options.js";
 import { readConfig } from "../src/config/repo-health-config.js";
 import { detectAllProviders } from "../src/providers/catalog.js";
+import { markdownlintScriptCommand } from "../src/providers/markdownlint/command.js";
 import { buildAuditModel } from "../src/recommendations/recommendation-engine.js";
 import { detectRepository } from "../src/repository/detect-repository.js";
 import { runHealth } from "../src/runners/health-runner.js";
@@ -107,28 +108,33 @@ describe("setup planning", () => {
     expect(plan.files.find((item) => item.path === "repnix.config.json")).toBeDefined();
   });
 
-  it("excludes dependency documentation from generated Markdown checks", async () => {
+  it("excludes dependency and generated Markdown from documentation checks", async () => {
     const root = await copyFixture("minimal-js");
     temporary.push(root);
     const plan = await buildInstallPlan(await detectRepository(root), ["markdownlint"], false);
     const packageChange = plan.files.find((item) => item.path === "package.json");
     expect(packageChange).toBeDefined();
     const packageJson = JSON.parse(packageChange!.after) as { scripts: Record<string, string> };
-    expect(packageJson.scripts["health:documentation"]).toBe("markdownlint-cli2 \"**/*.md\" \"#node_modules\"");
+    expect(packageJson.scripts["health:documentation"]).toBe(markdownlintScriptCommand());
+    expect(packageJson.scripts["health:documentation"]).toContain("#node_modules");
+    expect(packageJson.scripts["health:documentation"]).toContain("#playwright-report");
   });
 
-  it("upgrades the previous generated Markdown script without replacing custom scripts", async () => {
+  it("upgrades previous generated Markdown scripts without replacing custom scripts", async () => {
     const root = await copyFixture("minimal-js");
     temporary.push(root);
     const manifestPath = path.join(root, "package.json");
-    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as { scripts: Record<string, string> };
-    manifest.scripts["health:documentation"] = "markdownlint-cli2 \"**/*.md\"";
-    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    const expected = markdownlintScriptCommand();
+    for (const previous of ["markdownlint-cli2 \"**/*.md\"", "markdownlint-cli2 \"**/*.md\" \"#node_modules\""]) {
+      const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as { scripts: Record<string, string> };
+      manifest.scripts["health:documentation"] = previous;
+      await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 
-    const plan = await buildInstallPlan(await detectRepository(root), ["markdownlint"], false);
-    const packageJson = JSON.parse(plan.files.find((item) => item.path === "package.json")!.after) as { scripts: Record<string, string> };
-    expect(packageJson.scripts["health:documentation"]).toBe("markdownlint-cli2 \"**/*.md\" \"#node_modules\"");
-    expect(plan.conflicts).not.toContain("package.json script 'health:documentation' already exists and was preserved.");
+      const plan = await buildInstallPlan(await detectRepository(root), ["markdownlint"], false);
+      const packageJson = JSON.parse(plan.files.find((item) => item.path === "package.json")!.after) as { scripts: Record<string, string> };
+      expect(packageJson.scripts["health:documentation"]).toBe(expected);
+      expect(plan.conflicts).not.toContain("package.json script 'health:documentation' already exists and was preserved.");
+    }
   });
 
   it("runs report-only c8 and adds configured thresholds when a policy exists", async () => {
