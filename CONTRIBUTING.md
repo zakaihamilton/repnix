@@ -21,9 +21,16 @@ pnpm test:package
 pnpm test:e2e
 pnpm test:phase2
 pnpm test:phase3
+pnpm test:compatibility
 ```
 
-These tests use disposable repositories. Registry access is limited to package installation within those fixtures.
+These tests use disposable repositories. Registry access is limited to package installation within those fixtures. The compatibility suite is read-only: it verifies `audit` and `setup --plan` against the checked-in pilot corpus without installing a provider or changing a fixture.
+
+## Compatibility pilots
+
+The compatibility corpus in [`fixtures/`](fixtures) represents the repository shapes RepNix supports today: JavaScript CLI/Node applications, TypeScript Node applications, npm libraries, React applications, Next.js web applications, and pnpm workspaces. Each checked-in pilot has explicit assertions for repository detection, recommendations, and the non-interactive setup plan. The scheduled public-OSS pilots in [`fixtures/oss-pilots.json`](fixtures/oss-pilots.json) validate the same commands against pinned third-party repositories.
+
+When correcting a compatibility issue, update the smallest representative pilot or add a new focused fixture. Record why the shape matters and make the expected audit and setup-plan result explicit in [`scripts/compatibility-pilot.mjs`](scripts/compatibility-pilot.mjs). For a public pilot, pin a full commit ID and preserve the audit output needed to review a changed result. Do not loosen an assertion merely to accept an unsafe or irrelevant recommendation; either fix it or add clear unsupported-case guidance.
 
 ## Provider changes
 

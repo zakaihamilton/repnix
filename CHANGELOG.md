@@ -6,6 +6,7 @@ All notable changes to RepNix are documented here. The project follows semantic 
 
 ### Added
 
+- Add reproducible checked-in and public-OSS compatibility-pilot corpora for CLI, Node, library, React, Next.js, and pnpm-workspace repository shapes. Audit and read-only setup plans are asserted for both the built and packed CLI; a scheduled workflow validates pinned third-party repositories.
 - Add evidence-backed CLI, library, web application, Node application, and tooling roles per repository scope.
 - Add stable finding fingerprints, committed debt baselines, new/existing/resolved finding counts, and fail-on-new CI policy.
 - Add JSON audit output, serializable setup plans, bounded concurrent execution, detailed remediation, and SARIF reporting.

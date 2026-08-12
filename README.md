@@ -82,6 +82,10 @@ RepNix gives you a clear inventory and a deliberate next step:
 - **Scales across workspaces.** Root and workspace quality scripts can run as separate, attributed results instead of hiding failures behind one aggregate command.
 - **Supports explicit policy.** License and coverage thresholds can be recorded in `repnix.config.json`.
 
+## Compatibility
+
+RepNix continuously validates its first-run workflow against a checked-in compatibility corpus covering CLI/Node applications, TypeScript projects, npm libraries, React and Next.js web applications, and pnpm workspaces. Each pilot must complete `audit` and read-only `setup --plan` with an expected result; the packaged CLI runs the same corpus on every supported operating system. See [the compatibility guide](docs/compatibility.md) for the supported shapes and how to report a mismatch.
+
 ## The workflow
 
 ```text
