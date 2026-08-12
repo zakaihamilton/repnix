@@ -39,10 +39,12 @@
     "test:package": "node scripts/package-smoke.mjs",
     "test:phase2": "node scripts/e2e-phase2.mjs",
     "test:phase3": "node scripts/e2e-phase3.mjs",
+    "test:compatibility": "node scripts/compatibility-pilot.mjs",
+    "test:compatibility:oss": "node scripts/oss-compatibility-pilot.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
-    "verify": "pnpm lint && pnpm typecheck && pnpm build && pnpm test:run"
+    "verify": "pnpm lint && pnpm typecheck && pnpm build && pnpm test:run && pnpm test:compatibility"
   },
   "engines": {
     "node": ">=20"

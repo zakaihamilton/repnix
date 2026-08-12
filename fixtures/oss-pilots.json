@@ -1,0 +1,26 @@
+[
+  {
+    "id": "p-queue",
+    "repository": "https://github.com/sindresorhus/p-queue.git",
+    "revision": "180ab9e25cd10b6f548767d7176076b50d25e188",
+    "packageManager": "npm"
+  },
+  {
+    "id": "vite",
+    "repository": "https://github.com/vitejs/vite.git",
+    "revision": "b4d66fee14d970f45b8a6f3d7d6aee73ca9b88ab",
+    "packageManager": "pnpm"
+  },
+  {
+    "id": "create-t3-turbo",
+    "repository": "https://github.com/t3-oss/create-t3-turbo.git",
+    "revision": "8f945b7bb3bfb3ca8358d48b1ff0214079bc11ee",
+    "packageManager": "pnpm"
+  },
+  {
+    "id": "next.js",
+    "repository": "https://github.com/vercel/next.js.git",
+    "revision": "cb36e1d5946eb3bf6473b535e9537a54f257ba27",
+    "packageManager": "pnpm"
+  }
+]

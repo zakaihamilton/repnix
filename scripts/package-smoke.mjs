@@ -29,7 +29,12 @@ try {
   assert(audit.stdout.includes("Repository"), "Packaged CLI audit did not render repository metadata.");
   assert(audit.stdout.includes("Knip"), "Packaged CLI audit did not recommend Knip.");
 
-  process.stdout.write(`Packaged CLI smoke test passed on ${process.platform}.\n`);
+  await run("node", [path.join(projectRoot, "scripts", "compatibility-pilot.mjs"), "--cli", bin], {
+    cwd: projectRoot,
+    timeoutMs: 600_000,
+  });
+
+  process.stdout.write(`Packaged CLI smoke and compatibility tests passed on ${process.platform}.\n`);
 } finally {
   await removeTemporary(temporary);
 }
