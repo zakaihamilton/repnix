@@ -217,5 +217,5 @@ export async function runSetupTui(options: DiagnosticOptions = {}): Promise<numb
 export { supportsTui, createSetupTuiTheme, diffLineColor, normalizeTuiDiffLine, selectionIndicator, selectionRowPresentation, setupPaneLayout, setupStepIndex, tuiLayoutMetrics, clampTuiScroll, auditContentLineCount, auditPageSummary, auditRecommendationSummary, auditSetupOptions, auditStatusPresentation, manualContentLineCount, manualRecommendationLines, manualRecommendationSteps, manualRecommendationViewport, selectedSetupOptions, setupCheckDetails };
 export type { AuditPageSummary, SetupCheckDetails, ColorOutput, SetupPaneLayout, SetupTuiTheme, ThemeEnvironment, TuiLayoutMetrics };
 export { AUDIT_LABEL_COLUMN_WIDTH, AUDIT_TWO_COLUMN_MIN_WIDTH, auditUsesSingleColumn };
-export { setupCheckOutputLines, setupCheckRows } from "./setup-views.js";
+export { setupCheckActions, setupCheckOutputLines, setupCheckRows } from "./setup-views.js";
 export { COMPACT_LAYOUT_HEIGHT, COMPACT_LAYOUT_WIDTH, HORIZONTAL_PANE_MIN_WIDTH } from "./setup-theme.js";

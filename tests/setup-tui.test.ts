@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AUDIT_LABEL_COLUMN_WIDTH, AUDIT_TWO_COLUMN_MIN_WIDTH, COMPACT_LAYOUT_HEIGHT, COMPACT_LAYOUT_WIDTH, HORIZONTAL_PANE_MIN_WIDTH, auditContentLineCount, auditPageSummary, auditRecommendationSummary, auditSetupOptions, auditStatusPresentation, auditUsesSingleColumn, clampTuiScroll, createSetupTuiTheme, diffLineColor, manualContentLineCount, manualRecommendationLines, manualRecommendationSteps, manualRecommendationViewport, normalizeTuiDiffLine, selectedSetupOptions, selectionIndicator, selectionRowPresentation, setupCheckDetails, setupCheckOutputLines, setupCheckRows, setupPaneLayout, setupStepIndex, tuiLayoutMetrics } from "../src/tui/setup-app.js";
+import { AUDIT_LABEL_COLUMN_WIDTH, AUDIT_TWO_COLUMN_MIN_WIDTH, COMPACT_LAYOUT_HEIGHT, COMPACT_LAYOUT_WIDTH, HORIZONTAL_PANE_MIN_WIDTH, auditContentLineCount, auditPageSummary, auditRecommendationSummary, auditSetupOptions, auditStatusPresentation, auditUsesSingleColumn, clampTuiScroll, createSetupTuiTheme, diffLineColor, manualContentLineCount, manualRecommendationLines, manualRecommendationSteps, manualRecommendationViewport, normalizeTuiDiffLine, selectedSetupOptions, selectionIndicator, selectionRowPresentation, setupCheckActions, setupCheckDetails, setupCheckOutputLines, setupCheckRows, setupPaneLayout, setupStepIndex, tuiLayoutMetrics } from "../src/tui/setup-app.js";
 import { createSetupTuiModel, selectionItems, setupTuiReducer } from "../src/tui/setup-state.js";
 import type { AuditModel, Recommendation } from "../src/recommendations/recommendation-engine.js";
 import type { RepositoryContext } from "../src/core/types.js";
@@ -229,6 +229,22 @@ describe("setup TUI presentation", () => {
     expect(setupCheckRows(output)).toEqual([
       { category: "Type safety", status: "pass", result: "Passed", providers: "TypeScript" },
       { category: "Test coverage", status: "error", result: "Setup needed", providers: "c8" },
+    ]);
+  });
+
+  it("orders setup work before findings and gives each item a command", () => {
+    const output = JSON.stringify({
+      repository: { packageManager: "yarn", categories: [] },
+      results: [
+        { provider: "markdownlint", name: "markdownlint", category: "documentation", status: "error", findings: [], message: "Command output exceeded 10485760 bytes" },
+        { provider: "script:format:check", name: "script:format:check", category: "format", status: "warn", findings: [{}] },
+        { provider: "jscpd", name: "jscpd", category: "duplication", status: "warn", findings: [{}, {}] },
+      ],
+    });
+    expect(setupCheckActions(output)).toEqual([
+      expect.objectContaining({ kind: "setup", title: "Set up Documentation", command: "yarn run health:documentation" }),
+      expect.objectContaining({ kind: "review", title: "Review Duplication (2 findings)", command: "yarn run health:duplication" }),
+      expect.objectContaining({ kind: "review", title: "Review Formatting (1 finding)", command: "yarn run format:check" }),
     ]);
   });
 });
