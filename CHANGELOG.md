@@ -12,6 +12,7 @@ All notable changes to RepNix are documented here. The project follows semantic 
 - Add JSON audit output, serializable setup plans, bounded concurrent execution, detailed remediation, and SARIF reporting.
 - Add a typed built-in provider registry that supplies setup metadata, support levels, descriptions, and documentation.
 - Add the versioned provider SDK, registry-backed categories, generic provider hooks, and external `repnix-provider-*` discovery.
+- Add detection and guided setup for committed CodeQL, Semgrep, Socket, SonarQube Cloud, and Dependabot integrations, with code-security, supply-chain, and dependency-update coverage categories.
 
 ### Changed
 

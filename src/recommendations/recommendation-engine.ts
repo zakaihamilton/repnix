@@ -289,6 +289,67 @@ export function buildAuditModel(
       ? "This UI repository uses JSX, but no active accessibility rules were detected. RepNix can safely add jsx-a11y’s recommended rules to the root legacy JSON ESLint configuration."
       : "This UI repository uses JSX, but no active accessibility rules were detected. Enable jsx-a11y’s recommended rules in the existing ESLint configuration.");
   }
+  const codeSecurity = byCategory.get("code-security");
+  if (codeSecurity && context.hasCI && codeSecurity.status !== "off" && codeSecurity.status !== "not-applicable") {
+    addMissing("codeql", "CodeQL", "code-security", "baseline", false, "This repository uses GitHub Actions but has no committed CodeQL workflow. CodeQL adds source-code vulnerability scanning and publishes findings in GitHub code scanning without changing the repository's normal build commands.");
+    const semgrep = detections.get("semgrep-code");
+    if (!semgrep?.activeCapabilities.codeSecurity) {
+      recommendations.push({
+        provider: "semgrep-code",
+        name: "Semgrep Code",
+        category: "code-security",
+        recommended: true,
+        priority: "optional",
+        actionable: false,
+        reason: "Semgrep can complement GitHub code scanning with organization-managed rules and developer-focused findings. Connect its GitHub integration and store its token only as a GitHub Actions secret.",
+      });
+    }
+    const sonar = detections.get("sonarqube-cloud");
+    if (!sonar?.activeCapabilities.codeSecurity) {
+      recommendations.push({
+        provider: "sonarqube-cloud",
+        name: "SonarQube Cloud",
+        category: "code-security",
+        recommended: true,
+        priority: "optional",
+        actionable: false,
+        reason: "SonarQube Cloud adds hosted quality gates and code-quality history. Bind the GitHub repository in SonarQube Cloud and keep its analysis token in GitHub Actions secrets.",
+      });
+    }
+  }
+  const supplyChain = byCategory.get("supply-chain");
+  if (supplyChain && supplyChain.status !== "off" && supplyChain.status !== "not-applicable") {
+    const socket = detections.get("socket");
+    if (!socket?.configured) {
+      addMissing("socket", "Socket", "supply-chain", "baseline", false, "Dependency manifests are present, but no committed Socket configuration was found. Socket reviews dependency changes for malicious packages and other supply-chain risks beyond known vulnerabilities.");
+    } else if (!socket.activeCapabilities.supplyChainRisk) {
+      recommendations.push({
+        provider: "socket",
+        name: "Socket",
+        category: "supply-chain",
+        recommended: true,
+        priority: "baseline",
+        actionable: false,
+        reason: "socket.yml is configured, but RepNix cannot verify that the Socket GitHub App is installed and enabled from local files. Install the App and confirm its first pull-request check before treating supply-chain coverage as enforced.",
+      });
+    }
+    const semgrepSupplyChain = detections.get("semgrep-supply-chain");
+    if (!semgrepSupplyChain?.activeCapabilities.supplyChainRisk) {
+      recommendations.push({
+        provider: "semgrep-supply-chain",
+        name: "Semgrep Supply Chain",
+        category: "supply-chain",
+        recommended: true,
+        priority: "optional",
+        actionable: false,
+        reason: "Semgrep Supply Chain can provide a second, organization-managed view of dependency risk. Enable the product in Semgrep before treating its GitHub workflow as required.",
+      });
+    }
+  }
+  const dependencyUpdates = byCategory.get("dependency-updates");
+  if (dependencyUpdates && context.hasCI && dependencyUpdates.status !== "off" && dependencyUpdates.status !== "not-applicable") {
+    addMissing("dependabot", "Dependabot", "dependency-updates", "baseline", false, "This GitHub repository has npm dependencies but no Dependabot configuration. Dependabot can propose routine and security updates before dependencies become stale.");
+  }
   if (context.isMonorepo) {
     addMissing("syncpack", "syncpack", "monorepo", "baseline", true, "This repository contains multiple workspaces, but dependency versions and package metadata are not being checked for consistency.");
   }

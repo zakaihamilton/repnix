@@ -1,0 +1,8 @@
+version: 2
+triggerPaths:
+  - package.json
+  - pnpm-lock.yaml
+githubApp:
+  enabled: true
+  dependencyOverviewEnabled: true
+  disableCommentsAndCheckRuns: false

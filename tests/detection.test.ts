@@ -1,4 +1,4 @@
-import { readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { detectAllProviders } from "../src/providers/catalog.js";
@@ -130,5 +130,58 @@ describe("repository detection", () => {
     monorepo.installedPackages.set("syncpack", "^14.0.0");
     monorepo.installedPackageOrigins.set("syncpack", ["package.json"]);
     expect((await detectAllProviders(monorepo)).get("syncpack")?.activeCapabilities.workspaceConsistency).toBe(true);
+  });
+
+  it("detects committed hosted-security and dependency-update integrations without running them", async () => {
+    const root = await copyFixture("minimal-js");
+    temporary.push(root);
+    const workflowDirectory = path.join(root, ".github", "workflows");
+    await mkdir(workflowDirectory, { recursive: true });
+    await writeFile(path.join(workflowDirectory, "codeql.yml"), "steps:\n  - uses: github/codeql-action/init@v4\n  - uses: github/codeql-action/analyze@v4\n");
+    await writeFile(path.join(workflowDirectory, "semgrep.yml"), "steps:\n  - run: semgrep ci\n  - run: semgrep ci --secrets\n  - run: semgrep ci --supply-chain\n");
+    await writeFile(path.join(workflowDirectory, "sonar.yml"), "steps:\n  - uses: SonarSource/sonarqube-scan-action@v7\n");
+    await writeFile(path.join(root, "sonar-project.properties"), "sonar.projectKey=demo\n");
+    await writeFile(path.join(root, "socket.yml"), "version: 2\n");
+    await writeFile(path.join(root, ".github", "dependabot.yml"), "version: 2\nupdates:\n  - package-ecosystem: npm\n    directory: /\n    schedule:\n      interval: weekly\n");
+
+    const providers = await detectAllProviders(await detectRepository(root));
+    expect(providers.get("codeql")?.activeCapabilities.codeSecurity).toBe(true);
+    expect(providers.get("semgrep-code")?.activeCapabilities.codeSecurity).toBe(true);
+    expect(providers.get("semgrep-supply-chain")?.activeCapabilities.supplyChainRisk).toBe(true);
+    expect(providers.get("semgrep-secrets")?.activeCapabilities.secrets).toBe(true);
+    expect(providers.get("socket")).toMatchObject({ configured: true, activeCapabilities: {} });
+    expect(providers.get("sonarqube-cloud")?.activeCapabilities.codeSecurity).toBe(true);
+    expect(providers.get("dependabot")?.activeCapabilities.dependencyUpdates).toBe(true);
+  });
+
+  it("does not credit incomplete hosted configuration", async () => {
+    const root = await copyFixture("minimal-js");
+    temporary.push(root);
+    await mkdir(path.join(root, ".github", "workflows"), { recursive: true });
+    await writeFile(path.join(root, "sonar-project.properties"), "sonar.projectKey=demo\n");
+    await writeFile(path.join(root, ".github", "dependabot.yml"), "version: 2\nupdates: []\n");
+
+    const providers = await detectAllProviders(await detectRepository(root));
+    expect(providers.get("sonarqube-cloud")).toMatchObject({ configured: true, activeCapabilities: {} });
+    expect(providers.get("dependabot")).toMatchObject({ configured: true, activeCapabilities: {} });
+    expect(providers.get("codeql")?.activeCapabilities).toEqual({});
+    expect(providers.get("socket")?.activeCapabilities).toEqual({});
+  });
+
+  it("requires complete CodeQL, product-specific Semgrep, and valid Dependabot configuration", async () => {
+    const root = await copyFixture("minimal-js");
+    temporary.push(root);
+    const workflowDirectory = path.join(root, ".github", "workflows");
+    await mkdir(workflowDirectory, { recursive: true });
+    await writeFile(path.join(workflowDirectory, "codeql.yml"), "steps:\n  - uses: github/codeql-action/init@v4\n");
+    await writeFile(path.join(workflowDirectory, "semgrep.yml"), "steps:\n  - run: semgrep ci\n");
+    await writeFile(path.join(root, ".github", "dependabot.yml"), "version: 2\nupdates:\n  - package-ecosystem: npm\n");
+
+    const providers = await detectAllProviders(await detectRepository(root));
+    expect(providers.get("codeql")).toMatchObject({ configured: true, activeCapabilities: {} });
+    expect(providers.get("semgrep-code")?.activeCapabilities.codeSecurity).toBe(true);
+    expect(providers.get("semgrep-secrets")?.activeCapabilities).toEqual({});
+    expect(providers.get("semgrep-supply-chain")?.activeCapabilities).toEqual({});
+    expect(providers.get("dependabot")).toMatchObject({ configured: true, activeCapabilities: {} });
   });
 });

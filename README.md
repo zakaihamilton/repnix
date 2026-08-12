@@ -242,6 +242,8 @@ RepNix separates repository health into categories so each capability has a clea
 | `dead-code` — Dead code | Finds unused files, exports, and dependencies. | Knip |
 | `duplication` — Duplication | Finds repeated code that can drift apart. | jscpd |
 | `security` — Dependency security | Finds known vulnerabilities in dependencies. | OSV-Scanner |
+| `code-security` — Code security | Finds security vulnerabilities in source code. | CodeQL, Semgrep Code, SonarQube Cloud |
+| `supply-chain` — Supply-chain risk | Finds malicious or risky dependency behavior beyond known CVEs. | Socket, Semgrep Supply Chain |
 | `architecture` — Architecture boundaries | Protects allowed relationships between modules. | dependency-cruiser, `eslint-plugin-boundaries` |
 | `bundle` — Bundle regression | Protects shipped JavaScript size. | Size Limit |
 | `accessibility` — Accessibility | Checks whether user interfaces can be used by people with different abilities. | eslint-plugin-jsx-a11y |
@@ -252,6 +254,7 @@ RepNix separates repository health into categories so each capability has a clea
 | `performance` — Performance budgets | Protects configured web or build performance budgets. | Lighthouse CI, Size Limit |
 | `release` — Release readiness | Checks release metadata and package change intent. | Changesets |
 | `ci` — CI workflow health | Checks GitHub Actions workflow syntax and common mistakes. | actionlint |
+| `dependency-updates` — Dependency updates | Checks that automated update pull requests are configured. | Dependabot |
 | `package-health` — Package publishing | Checks what npm consumers receive. | Publint, Are The Types Wrong? |
 
 ### Existing project checks
@@ -271,6 +274,9 @@ RepNix detects and runs the safe commands your repository already uses for:
 - Performance — Lighthouse CI or existing performance scripts with an explicit configuration.
 - Release readiness — Changesets and its configuration.
 - CI workflow health — actionlint for GitHub Actions workflows.
+- Code security — committed CodeQL, Semgrep, and SonarQube Cloud workflows.
+- Supply-chain risk — a committed Socket GitHub App configuration or Semgrep workflow.
+- Dependency updates — a committed Dependabot configuration.
 
 ### Specialist checks
 
@@ -279,6 +285,9 @@ When the repository needs additional coverage, RepNix can recommend and orchestr
 - **Dead code:** Knip for unused files, exports, and dependencies.
 - **Duplication:** jscpd for copy/paste drift.
 - **Dependency security:** OSV-Scanner using its offline vulnerability database.
+- **Code security:** CodeQL, Semgrep Code, and SonarQube Cloud from committed GitHub Actions configuration.
+- **Supply-chain risk:** Socket and Semgrep Supply Chain from committed configuration.
+- **Dependency updates:** Dependabot from `.github/dependabot.yml`.
 - **Architecture:** dependency-cruiser or active `eslint-plugin-boundaries` rules.
 - **Bundle size:** Size Limit when an explicit budget already exists.
 - **Accessibility:** eslint-plugin-jsx-a11y through an existing ESLint setup.
@@ -299,6 +308,18 @@ Publishable npm packages can also use:
 - **Are The Types Wrong?** for TypeScript consumer compatibility across Node and bundler resolution modes.
 
 Package-health checks analyze a local packed artifact with lifecycle scripts disabled. They do not implicitly run a repository `prepack` script or fetch registry data.
+
+### Hosted security integrations
+
+RepNix detects committed configuration for CodeQL, Semgrep, Socket, SonarQube Cloud, and Dependabot so audit output can show their coverage without connecting to their services or reading credentials. It does not run their hosted scanners locally.
+
+- **CodeQL:** commit a GitHub Actions workflow and enable GitHub code scanning.
+- **Semgrep:** connect the repository in Semgrep and store `SEMGREP_APP_TOKEN` only in GitHub Actions secrets. Set `SEMGREP_ENABLED=true` as a repository variable only after the token and products are ready. Keep fork pull requests on `pull_request`; never switch to `pull_request_target` merely to expose the token.
+- **Socket:** install the Socket GitHub App, review its permissions, and commit root `socket.yml` when you want RepNix to recognize the integration. Because the App is external, RepNix records this as configured but does not credit it as active coverage from local files alone.
+- **SonarQube Cloud:** import and bind the GitHub repository, then store `SONAR_TOKEN` only in GitHub Actions secrets and set `SONARQUBE_CLOUD_ENABLED=true` as a repository variable. `sonar-project.properties` contains identifiers and scan paths, never credentials.
+- **Dependabot:** commit `.github/dependabot.yml` and enable Dependabot alerts and security updates in GitHub settings.
+
+Start hosted scans in advisory mode, resolve or triage their first findings, then make their reliable status checks required in branch protection. Verify fork pull-request behavior before requiring any check that needs a hosted-service token.
 
 ## Configuration
 
@@ -420,6 +441,7 @@ The audit and reporting pipeline is designed to be safe to run locally and in CI
 - Setup applies planned files atomically and restores planned files plus package-manager lockfiles if dependency installation fails. Package-manager lifecycle scripts can still run during a normal dependency installation.
 - Specialist lint, type, formatting, test, `eslint-plugin-boundaries`, and Size Limit output is represented as a provider-attributed command finding. Knip, jscpd, OSV-Scanner, dependency-cruiser, Publint, and Are The Types Wrong? receive detailed normalization.
 - Accessibility, workspace consistency, coverage, secret scanning, license policy, documentation, release, performance, and CI workflow providers are available when their provider is installed and configured. Setup can add report-only c8 coverage, compatible legacy JSX accessibility rules, and Changesets configuration when its base branch is known. Other providers intentionally remain manual because they need project-specific URLs, budgets, binaries, or policy rules.
+- CodeQL, Semgrep, Socket, SonarQube Cloud, and Dependabot are detection-and-guidance integrations. RepNix reads committed workflow/configuration evidence only; account enrollment, GitHub Apps, cloud tokens, and hosted findings remain in their respective services.
 - OSV-Scanner must be installed separately with its local vulnerability database prepared before security coverage can be required.
 - Architecture rules and bundle budgets are repository-specific. RepNix does not invent boundary policies or size budgets.
 

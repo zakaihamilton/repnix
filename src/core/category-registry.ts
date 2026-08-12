@@ -27,6 +27,11 @@ function sourceScopes(context: RepositoryContext): CategoryApplicability {
   return matchingScopes(context, (scope) => scope.sourceFiles.length > 0, (scope) => `${scope.path} contains source files`);
 }
 
+function dependencyScopes(context: RepositoryContext): CategoryApplicability {
+  const hasManifest = context.files.has("package.json") || context.files.has("pnpm-lock.yaml") || context.files.has("package-lock.json") || context.files.has("yarn.lock") || context.files.has("bun.lock") || context.files.has("bun.lockb");
+  return { applicable: hasManifest, scopes: hasManifest ? ["."] : [], evidence: hasManifest ? ["dependency manifest or lockfile detected"] : [] };
+}
+
 const builtinDefinitions: Omit<CategoryDefinition, "label" | "description">[] = [
   { id: "types", requiredCapabilities: ["typeChecking"], applicable: (context) => matchingScopes(context, (scope) => scope.languages.includes("TypeScript"), (scope) => `${scope.path} contains TypeScript`) },
   { id: "lint", requiredCapabilities: ["linting"], applicable: sourceScopes },
@@ -36,6 +41,8 @@ const builtinDefinitions: Omit<CategoryDefinition, "label" | "description">[] = 
   { id: "dead-code", requiredCapabilities: ["unusedFiles", "unusedExports", "unusedDependencies"], applicable: sourceScopes },
   { id: "duplication", requiredCapabilities: ["duplication"], applicable: (context) => matchingScopes(context, (scope) => scope.sourceFiles.length >= 2, (scope) => `${scope.path} contains multiple source files`) },
   { id: "security", requiredCapabilities: ["vulnerabilities"], applicable: sourceScopes },
+  { id: "code-security", requiredCapabilities: ["codeSecurity"], applicable: sourceScopes },
+  { id: "supply-chain", requiredCapabilities: ["supplyChainRisk"], applicable: dependencyScopes },
   { id: "architecture", requiredCapabilities: ["architectureRules"], applicable: (context) => matchingScopes(context, (scope) => scope.sourceFiles.length >= 2, (scope) => `${scope.path} contains a module graph`) },
   { id: "bundle", requiredCapabilities: ["bundleBudget"], applicable: (context) => matchingScopes(context, (scope) => scope.roles.includes("web-app"), (scope) => `${scope.path} is a web application`) },
   { id: "accessibility", requiredCapabilities: ["accessibilityRules"], applicable: (context) => matchingScopes(context, (scope) => scope.roles.includes("web-app") && scope.sourceFiles.some((file) => /\.[jt]sx$/.test(file)), (scope) => `${scope.path} is a JSX/TSX web application`) },
@@ -46,6 +53,7 @@ const builtinDefinitions: Omit<CategoryDefinition, "label" | "description">[] = 
   { id: "performance", requiredCapabilities: ["performance"], applicable: (context) => matchingScopes(context, (scope) => scope.roles.includes("web-app"), (scope) => `${scope.path} is a web application`) },
   { id: "release", requiredCapabilities: ["release"], applicable: (context) => matchingScopes(context, (scope) => scope.roles.includes("library"), (scope) => `${scope.path} is a published library`) },
   { id: "ci", requiredCapabilities: ["ciWorkflow"], applicable: (context) => ({ applicable: context.hasCI, scopes: context.hasCI ? ["."] : [], evidence: context.hasCI ? ["GitHub Actions workflows detected"] : [] }) },
+  { id: "dependency-updates", requiredCapabilities: ["dependencyUpdates"], applicable: dependencyScopes },
   { id: "package-health", requiredCapabilities: ["packagePublishing"], applicable: (context) => matchingScopes(context, (scope) => scope.roles.includes("library"), (scope) => `${scope.path} is a published library`) },
 ];
 

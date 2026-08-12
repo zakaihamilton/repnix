@@ -53,6 +53,8 @@ External providers are loaded only from direct `dependencies`, `devDependencies`
 
 Provider IDs and category IDs must be unique. Invalid exports, duplicate IDs, unsupported API versions, or missing exports stop audit with an actionable error instead of silently omitting a provider.
 
+Hosted integrations should use a detection-only provider when their execution needs service credentials or a GitHub App. Detect committed workflow/configuration evidence, provide clear setup guidance, and do not read tokens or invoke networked service CLIs during `audit` or `check` unless the user explicitly adds a provider that supports that behavior.
+
 ## Categories
 
 Plugins may register categories with a label, description, required capability IDs, ordering, and an applicability function. Category modes remain the configuration boundary: use `required`, `optional`, or `off`. Per-provider enablement is intentionally not supported.

@@ -107,6 +107,7 @@ export interface ProviderCapabilities {
   dependencyCycles?: boolean;
   architectureRules?: boolean;
   vulnerabilities?: boolean;
+  supplyChainRisk?: boolean;
   duplication?: boolean;
   bundleBudget?: boolean;
   packagePublishing?: boolean;
@@ -118,6 +119,7 @@ export interface ProviderCapabilities {
   release?: boolean;
   ciWorkflow?: boolean;
   codeSecurity?: boolean;
+  dependencyUpdates?: boolean;
 }
 
 export interface ProviderDetection {

@@ -1,11 +1,98 @@
 import { constants } from "node:fs";
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
+import { parse as parseYaml } from "yaml";
 import type { ProviderDetection, RepositoryContext } from "../core/types.js";
 import { isNonMutatingQualityCommand, isNonMutatingTestCommand } from "../repository/script-detection.js";
 import type { ProviderModule } from "./sdk.js";
 
 export type ProviderDescriptor = ProviderModule;
+
+function committedIntegration(
+  configFiles: string[],
+  capabilities: ProviderDetection["availableCapabilities"],
+  active: boolean,
+): ProviderDetection {
+  const configured = configFiles.length > 0;
+  return {
+    installed: configured,
+    configured,
+    configFiles,
+    evidence: [...configFiles],
+    availableCapabilities: configured ? capabilities : {},
+    activeCapabilities: active ? capabilities : {},
+  };
+}
+
+async function workflowFiles(context: RepositoryContext, pattern: RegExp): Promise<Array<{ path: string; content: string }>> {
+  const files = [...context.files].filter((file) => /^\.github\/workflows\/[^/]+\.ya?ml$/.test(file));
+  const matching: Array<{ path: string; content: string }> = [];
+  for (const file of files) {
+    try {
+      const content = await readFile(path.join(context.root, file), "utf8");
+      if (pattern.test(content)) matching.push({ path: file, content });
+    } catch {
+      // Unreadable workflow files remain inactive; GitHub Actions will surface their own diagnostics.
+    }
+  }
+  return matching;
+}
+
+async function detectCodeql(context: RepositoryContext): Promise<ProviderDetection> {
+  const workflows = await workflowFiles(context, /github\/codeql-action\//);
+  const active = workflows.some((file) => /github\/codeql-action\/init@/.test(file.content) && /github\/codeql-action\/analyze@/.test(file.content));
+  return committedIntegration(workflows.map((file) => file.path), { codeSecurity: true }, active);
+}
+
+type SemgrepProduct = "code" | "supply-chain" | "secrets";
+
+function semgrepProductEnabled(content: string, product: SemgrepProduct): boolean {
+  const commands = [...content.matchAll(/^\s*-\s+run:\s+(.+)$/gm)].map((match) => match[1] ?? "");
+  return commands.some((command) => {
+    if (!/\bsemgrep\s+ci\b/.test(command)) return false;
+    if (product === "supply-chain") return /--supply-chain\b/.test(command);
+    if (product === "secrets") return /--secrets\b/.test(command);
+    return !/--(?:supply-chain|secrets)\b/.test(command);
+  });
+}
+
+async function detectSemgrep(context: RepositoryContext, product: SemgrepProduct, capabilities: ProviderDetection["availableCapabilities"]): Promise<ProviderDetection> {
+  const workflows = await workflowFiles(context, /\bsemgrep\s+ci\b/);
+  const configs = [...context.files].filter((file) => /(?:^|\/)semgrep(?:\.config)?\.ya?ml$/.test(file));
+  return committedIntegration([...new Set([...workflows.map((file) => file.path), ...configs])], capabilities, workflows.some((file) => semgrepProductEnabled(file.content, product)));
+}
+
+async function detectSocket(context: RepositoryContext): Promise<ProviderDetection> {
+  const config = context.files.has("socket.yml") ? "socket.yml" : context.files.has("socket.yaml") ? "socket.yaml" : undefined;
+  // socket.yml controls an installed GitHub App, but local repository files cannot prove that the App is installed or enabled.
+  return committedIntegration(config ? [config] : [], { supplyChainRisk: true }, false);
+}
+
+async function detectSonarqubeCloud(context: RepositoryContext): Promise<ProviderDetection> {
+  const workflows = await workflowFiles(context, /SonarSource\/(?:sonarqube-scan-action|sonarcloud-github-action)@/);
+  const project = context.files.has("sonar-project.properties") ? ["sonar-project.properties"] : [];
+  return committedIntegration([...workflows.map((file) => file.path), ...project], { codeSecurity: true }, workflows.length > 0 && project.length > 0);
+}
+
+async function detectDependabot(context: RepositoryContext): Promise<ProviderDetection> {
+  const config = context.files.has(".github/dependabot.yml") ? ".github/dependabot.yml" : context.files.has(".github/dependabot.yaml") ? ".github/dependabot.yaml" : undefined;
+  if (!config) return committedIntegration([], { dependencyUpdates: true }, false);
+  try {
+    const parsed: unknown = parseYaml(await readFile(path.join(context.root, config), "utf8"));
+    const updates = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as { version?: unknown; updates?: unknown }).updates : undefined;
+    const active = (parsed as { version?: unknown } | null)?.version === 2 && Array.isArray(updates) && updates.some((entry) => {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) return false;
+      const update = entry as { "package-ecosystem"?: unknown; directory?: unknown; directories?: unknown; schedule?: unknown };
+      const ecosystem = update["package-ecosystem"];
+      const hasDirectory = typeof update.directory === "string" || (Array.isArray(update.directories) && update.directories.some((directory) => typeof directory === "string"));
+      const interval = update.schedule && typeof update.schedule === "object" && !Array.isArray(update.schedule) ? (update.schedule as { interval?: unknown }).interval : undefined;
+      return (ecosystem === "npm" || ecosystem === "github-actions") && hasDirectory && typeof interval === "string";
+    });
+    return committedIntegration([config], { dependencyUpdates: true }, active);
+  } catch {
+    return committedIntegration([config], { dependencyUpdates: true }, false);
+  }
+}
 
 export const PROVIDERS: ProviderDescriptor[] = [
   {
@@ -156,6 +243,83 @@ export const PROVIDERS: ProviderDescriptor[] = [
     binary: "osv-scanner",
     searchPath: true,
     zeroConfig: true,
+  },
+  {
+    id: "codeql",
+    name: "CodeQL",
+    category: "code-security",
+    packages: [],
+    configPatterns: [/^\.github\/workflows\/[^/]+\.ya?ml$/],
+    scriptPattern: /$^/,
+    capabilities: { codeSecurity: true },
+    detect: detectCodeql,
+    documentationUrl: "https://docs.github.com/en/code-security/concepts/code-scanning/codeql/codeql-code-scanning",
+  },
+  {
+    id: "semgrep-code",
+    name: "Semgrep Code",
+    category: "code-security",
+    packages: [],
+    configPatterns: [/^\.github\/workflows\/[^/]+\.ya?ml$/, /(?:^|\/)semgrep(?:\.config)?\.ya?ml$/],
+    scriptPattern: /$^/,
+    capabilities: { codeSecurity: true },
+    detect: (context) => detectSemgrep(context, "code", { codeSecurity: true }),
+    documentationUrl: "https://semgrep.dev/docs/semgrep-ci/sample-ci-configs",
+  },
+  {
+    id: "semgrep-supply-chain",
+    name: "Semgrep Supply Chain",
+    category: "supply-chain",
+    packages: [],
+    configPatterns: [/^\.github\/workflows\/[^/]+\.ya?ml$/, /(?:^|\/)semgrep(?:\.config)?\.ya?ml$/],
+    scriptPattern: /$^/,
+    capabilities: { supplyChainRisk: true },
+    detect: (context) => detectSemgrep(context, "supply-chain", { supplyChainRisk: true }),
+    documentationUrl: "https://semgrep.dev/products/semgrep-supply-chain/",
+  },
+  {
+    id: "semgrep-secrets",
+    name: "Semgrep Secrets",
+    category: "secrets",
+    packages: [],
+    configPatterns: [/^\.github\/workflows\/[^/]+\.ya?ml$/, /(?:^|\/)semgrep(?:\.config)?\.ya?ml$/],
+    scriptPattern: /$^/,
+    capabilities: { secrets: true },
+    detect: (context) => detectSemgrep(context, "secrets", { secrets: true }),
+    documentationUrl: "https://semgrep.dev/docs/semgrep-ci/sample-ci-configs",
+  },
+  {
+    id: "socket",
+    name: "Socket",
+    category: "supply-chain",
+    packages: [],
+    configPatterns: [/^socket\.ya?ml$/],
+    scriptPattern: /$^/,
+    capabilities: { supplyChainRisk: true },
+    detect: detectSocket,
+    documentationUrl: "https://docs.socket.dev/docs/socket-for-github-installation",
+  },
+  {
+    id: "sonarqube-cloud",
+    name: "SonarQube Cloud",
+    category: "code-security",
+    packages: [],
+    configPatterns: [/^sonar-project\.properties$/, /^\.github\/workflows\/[^/]+\.ya?ml$/],
+    scriptPattern: /$^/,
+    capabilities: { codeSecurity: true },
+    detect: detectSonarqubeCloud,
+    documentationUrl: "https://docs.sonarsource.com/sonarqube-cloud/advanced-setup/ci-based-analysis/github-actions-for-sonarcloud",
+  },
+  {
+    id: "dependabot",
+    name: "Dependabot",
+    category: "dependency-updates",
+    packages: [],
+    configPatterns: [/^\.github\/dependabot\.ya?ml$/],
+    scriptPattern: /$^/,
+    capabilities: { dependencyUpdates: true },
+    detect: detectDependabot,
+    documentationUrl: "https://docs.github.com/en/code-security/concepts/supply-chain-security/about-the-dependabot-yml-file",
   },
   {
     id: "jsx-a11y",

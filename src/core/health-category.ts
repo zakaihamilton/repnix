@@ -7,6 +7,8 @@ export const HEALTH_CATEGORIES: string[] = [
   "dead-code",
   "duplication",
   "security",
+  "code-security",
+  "supply-chain",
   "architecture",
   "bundle",
   "accessibility",
@@ -17,6 +19,7 @@ export const HEALTH_CATEGORIES: string[] = [
   "performance",
   "release",
   "ci",
+  "dependency-updates",
   "package-health",
 ] as const;
 
@@ -32,6 +35,8 @@ export const CATEGORY_LABELS: Record<string, string> = {
   "dead-code": "Dead code",
   duplication: "Duplication",
   security: "Dependency security",
+  "code-security": "Code security",
+  "supply-chain": "Supply-chain risk",
   architecture: "Architecture boundaries",
   bundle: "Bundle regression",
   accessibility: "Accessibility",
@@ -42,6 +47,7 @@ export const CATEGORY_LABELS: Record<string, string> = {
   performance: "Performance budgets",
   release: "Release readiness",
   ci: "CI workflow health",
+  "dependency-updates": "Dependency updates",
   "package-health": "Package publishing",
 };
 
@@ -55,6 +61,8 @@ export const CATEGORY_DESCRIPTIONS: Record<string, string> = {
   "dead-code": "Finds files, exports, and dependencies that nothing in the project uses.",
   duplication: "Finds repeated code that can drift apart when one copy changes.",
   security: "Checks third-party dependencies for publicly known security vulnerabilities.",
+  "code-security": "Finds security vulnerabilities and risky patterns in the source code you write.",
+  "supply-chain": "Checks dependencies for malicious behavior and other supply-chain risks beyond known vulnerabilities.",
   architecture: "Checks whether modules depend on the parts of the application they are allowed to use.",
   bundle: "Checks that shipped JavaScript stays within a deliberate size budget.",
   accessibility: "Checks whether user interfaces can be used by people with different abilities.",
@@ -65,6 +73,7 @@ export const CATEGORY_DESCRIPTIONS: Record<string, string> = {
   performance: "Protects web and build performance with explicit budgets.",
   release: "Checks versioning, changelog, and release metadata before publishing.",
   ci: "Checks CI workflows for syntax errors and unsafe automation patterns.",
+  "dependency-updates": "Checks that dependency updates are proposed automatically before versions become stale.",
   "package-health": "Checks what consumers receive when an npm package is published.",
 };
 
@@ -96,6 +105,13 @@ export const PROVIDER_DESCRIPTIONS: Record<string, string> = {
   "Lighthouse CI": "Checks configured web performance budgets.",
   Changesets: "Checks release metadata and pending package changes.",
   actionlint: "Checks GitHub Actions workflow syntax and common mistakes.",
+  CodeQL: "Finds security vulnerabilities and errors in source code through GitHub code scanning.",
+  "Semgrep Code": "Scans source code for security issues using the configured Semgrep platform rules.",
+  "Semgrep Supply Chain": "Scans dependencies for supply-chain risks using the configured Semgrep platform rules.",
+  "Semgrep Secrets": "Scans source code and configuration for exposed credentials using the configured Semgrep platform rules.",
+  Socket: "Reviews dependency changes for malicious packages and supply-chain risks.",
+  "SonarQube Cloud": "Applies hosted code-quality and security analysis with a configured quality gate.",
+  Dependabot: "Creates pull requests that keep package and GitHub Actions dependencies current.",
 };
 
 export const PROVIDER_NEXT_STEPS: Record<string, string> = {
@@ -105,4 +121,11 @@ export const PROVIDER_NEXT_STEPS: Record<string, string> = {
   "eslint-plugin-jsx-a11y": "Next step: enable the plugin’s recommended rules in the existing ESLint configuration.",
   Gitleaks: "Next step: install the Gitleaks binary or make it available in CI.",
   actionlint: "Next step: install actionlint or add it to the CI image.",
+  CodeQL: "Next step: enable the CodeQL workflow in GitHub Actions and resolve its initial alerts before requiring the check.",
+  "Semgrep Code": "Next step: connect Semgrep to the repository and add SEMGREP_APP_TOKEN as a GitHub Actions secret.",
+  "Semgrep Supply Chain": "Next step: enable Supply Chain scanning in Semgrep and review its initial dependency findings.",
+  "Semgrep Secrets": "Next step: enable Secrets scanning in Semgrep and rotate any real credentials it finds.",
+  Socket: "Next step: install the Socket GitHub App for the repository; the committed socket.yml controls its behavior.",
+  "SonarQube Cloud": "Next step: bind the repository in SonarQube Cloud and add SONAR_TOKEN as a GitHub Actions secret.",
+  Dependabot: "Next step: enable Dependabot alerts and security updates in the repository's GitHub security settings.",
 };

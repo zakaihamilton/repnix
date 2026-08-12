@@ -108,6 +108,41 @@ const MANUAL_GUIDANCE: Record<string, string[]> = {
     "Decide which package changes require a changeset and document the expected release workflow.",
     "Add a status check to CI and use the generated version/changelog flow when publishing.",
   ],
+  codeql: [
+    "Create a committed CodeQL workflow that scans the repository on pull requests, mainline changes, and a schedule.",
+    "Enable GitHub code scanning and review the initial alerts before making the check required.",
+    "Use pull_request rather than pull_request_target so untrusted fork code never receives elevated credentials.",
+  ],
+  "semgrep-code": [
+    "Connect the repository to Semgrep and enable Code scanning in the Semgrep project.",
+    "Add SEMGREP_APP_TOKEN as a GitHub Actions secret; never commit it to a workflow or repository config file.",
+    "Set the SEMGREP_ENABLED repository variable to true only after the token and enabled products are ready, then run the workflow in advisory mode first.",
+  ],
+  "semgrep-supply-chain": [
+    "Enable Supply Chain scanning for the repository in Semgrep.",
+    "Use the existing Semgrep GitHub Actions secret and workflow rather than adding a dependency-install command to RepNix.",
+    "Review dependency findings before making this complementary scanner required in pull requests.",
+  ],
+  "semgrep-secrets": [
+    "Enable Secrets scanning for the repository in Semgrep.",
+    "Rotate real credentials immediately and add only narrow, reviewed suppressions for false positives.",
+    "Keep all Semgrep credentials in GitHub Actions secrets rather than repository files.",
+  ],
+  socket: [
+    "Install the Socket GitHub App for the repository and review its requested permissions with an administrator.",
+    "Commit socket.yml to make dependency-manifest trigger paths and pull-request behavior visible to reviewers.",
+    "Review initial dependency-risk alerts before requiring Socket status checks in branch protection.",
+  ],
+  "sonarqube-cloud": [
+    "Import and bind the GitHub repository in SonarQube Cloud, then set the project key and organization in sonar-project.properties.",
+    "Add SONAR_TOKEN as a GitHub Actions secret; do not place tokens in sonar-project.properties or workflow files.",
+    "Set the SONARQUBE_CLOUD_ENABLED repository variable to true only after onboarding, then start with the hosted quality gate advisory.",
+  ],
+  dependabot: [
+    "Create .github/dependabot.yml for the package ecosystems and directories the repository uses.",
+    "Enable Dependabot alerts and security updates in the repository's GitHub security settings.",
+    "Group only routine version updates; review major and security updates separately.",
+  ],
 };
 
 function packageManagerRun(context: RepositoryContext, script: string): string { return context.packageManager ? `${context.packageManager} run ${script}` : `run ${script}`; }
@@ -176,6 +211,13 @@ export function setupCheckDetails(recommendation: AuditModel["recommendations"][
     case "jsx-a11y": return { checks: ["Common JSX accessibility issues, using eslint-plugin-jsx-a11y's recommended rules."], scope: "The existing root .eslintrc.json configuration and the repository's normal ESLint command.", setup: ["Install eslint-plugin-jsx-a11y as a development dependency.", "Add the plugin and its recommended preset to .eslintrc.json without changing existing rules."], command: packageManagerRun(context, "lint") };
     case "publint": return { checks: ["Package exports, entry points, metadata, and the files consumers receive from npm."], scope: `${context.packageJson.name ?? "the package"} package manifest and its publishable file layout.`, setup: ["Install Publint as a development dependency.", "Add the health:package:publint script to package.json."], command: packageManagerRun(context, "health:package:publint") };
     case "attw": return { checks: ["Whether TypeScript types resolve correctly for consumers using Node and bundler-style package entry points."], scope: `${context.packageJson.name ?? "the package"} after it is packed, including its published type declarations.`, setup: ["Install Are The Types Wrong? as a development dependency.", "Add the health:package:types script to package.json."], command: packageManagerRun(context, "health:package:types") };
+    case "codeql": return { checks: ["Source-code vulnerabilities and errors through GitHub code scanning."], scope: "GitHub Actions workflows and the repository's source files.", setup: ["Create a committed CodeQL workflow.", "Enable GitHub code scanning and review the initial alerts."], command: "GitHub Actions: CodeQL workflow" };
+    case "semgrep-code": return { checks: ["Configured Semgrep code-security findings."], scope: "The Semgrep GitHub Actions workflow and Semgrep project configuration.", setup: ["Connect the repository in Semgrep.", "Store SEMGREP_APP_TOKEN as a GitHub Actions secret."], command: "GitHub Actions: Semgrep workflow" };
+    case "semgrep-supply-chain": return { checks: ["Configured Semgrep dependency supply-chain findings."], scope: "The Semgrep GitHub Actions workflow and Semgrep project configuration.", setup: ["Enable Supply Chain scanning in Semgrep.", "Use the existing Semgrep GitHub Actions workflow."], command: "GitHub Actions: Semgrep workflow" };
+    case "semgrep-secrets": return { checks: ["Configured Semgrep secret-scanning findings."], scope: "The Semgrep GitHub Actions workflow and Semgrep project configuration.", setup: ["Enable Secrets scanning in Semgrep.", "Use the existing Semgrep GitHub Actions workflow."], command: "GitHub Actions: Semgrep workflow" };
+    case "socket": return { checks: ["Dependency changes for malicious-package and supply-chain-risk signals."], scope: "Dependency manifests selected by socket.yml and the Socket GitHub App.", setup: ["Install the Socket GitHub App.", "Commit socket.yml with repository-specific trigger paths."], command: "GitHub: Socket App" };
+    case "sonarqube-cloud": return { checks: ["Hosted code-quality and security analysis with a configured quality gate."], scope: "sonar-project.properties and the SonarQube Cloud GitHub Actions workflow.", setup: ["Bind the repository in SonarQube Cloud.", "Store SONAR_TOKEN as a GitHub Actions secret."], command: "GitHub Actions: SonarQube Cloud workflow" };
+    case "dependabot": return { checks: ["Automated package and GitHub Actions dependency update pull requests."], scope: ".github/dependabot.yml and the repository's dependency manifests.", setup: ["Create .github/dependabot.yml.", "Enable Dependabot alerts and security updates in GitHub."], command: "GitHub: Dependabot" };
     default: {
       const caveat = provider?.setup?.details?.caveat?.(context) ?? provider?.nextStep;
       return { checks: provider?.setup?.details?.checks ?? provider?.setup?.checks ?? [provider?.description ?? "The recommended repository health check."], scope: provider?.setup?.details?.scope?.(context) ?? scope, setup: provider?.setup ? [`Install ${provider.setup.packageName} as a development dependency.`, `Add the ${provider.setup.scriptName} script to package.json.`] : ["Follow the provider preparation recipe."], command: packageManagerRun(context, provider?.setup?.scriptName ?? `health:${recommendation.category}`), ...(caveat ? { caveat } : {}) };

@@ -1,0 +1,28 @@
+name: SonarQube Cloud
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "11 1 * * 6"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: SonarQube Cloud analysis
+    # GitHub does not expose SONAR_TOKEN to fork pull requests. Keep those pull
+    # requests safe by skipping this hosted scan rather than using pull_request_target.
+    if: vars.SONARQUBE_CLOUD_ENABLED == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: SonarSource/sonarqube-scan-action@v7
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

@@ -12,7 +12,7 @@ describe("recommendation engine", () => {
     const model = buildAuditModel(context, await detectAllProviders(context), config);
     expect(model.coverage.find((entry) => entry.category === "lint")).toMatchObject({ status: "covered", providers: ["ESLint"] });
     expect(model.recommendations.filter((item) => item.actionable && item.priority === "baseline").map((item) => item.provider)).toEqual(["knip", "jscpd", "c8"]);
-    expect(model.recommendations.map((item) => item.provider)).toEqual(["knip", "jscpd", "osv-scanner", "eslint-boundaries", "c8", "stryker", "gitleaks", "license-checker"]);
+    expect(model.recommendations.map((item) => item.provider)).toEqual(["knip", "jscpd", "osv-scanner", "eslint-boundaries", "socket", "semgrep-supply-chain", "c8", "stryker", "gitleaks", "license-checker"]);
     expect(context.scopes[0]?.roles).toEqual(["node-app"]);
     expect(model.recommendations.some((item) => ["size-limit", "jsx-a11y", "lhci"].includes(item.provider))).toBe(false);
     expect(model.recommendations.find((item) => item.provider === "eslint-boundaries")).toMatchObject({ priority: "optional", actionable: false });
@@ -70,5 +70,18 @@ describe("recommendation engine", () => {
     context.gitDefaultBranch = "main";
     model = buildAuditModel(context, await detectAllProviders(context), config);
     expect(model.recommendations.find((item) => item.provider === "changesets")).toMatchObject({ actionable: true, priority: "optional" });
+  });
+
+  it("recommends GitHub security and dependency-update coverage when Actions are present", async () => {
+    const context = await detectRepository(fixturePath("minimal-js"));
+    context.hasCI = true;
+    const { config } = await readConfig(context.root);
+    const model = buildAuditModel(context, await detectAllProviders(context), config);
+    expect(model.recommendations).toEqual(expect.arrayContaining([
+      expect.objectContaining({ provider: "codeql", category: "code-security", priority: "baseline" }),
+      expect.objectContaining({ provider: "semgrep-code", category: "code-security", priority: "optional" }),
+      expect.objectContaining({ provider: "sonarqube-cloud", category: "code-security", priority: "optional" }),
+      expect.objectContaining({ provider: "dependabot", category: "dependency-updates", priority: "baseline" }),
+    ]));
   });
 });
