@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { AUDIT_LABEL_COLUMN_WIDTH, AUDIT_TWO_COLUMN_MIN_WIDTH, COMPACT_LAYOUT_HEIGHT, COMPACT_LAYOUT_WIDTH, HORIZONTAL_PANE_MIN_WIDTH, auditContentLineCount, auditPageSummary, auditRecommendationSummary, auditSetupOptions, auditStatusPresentation, auditUsesSingleColumn, clampTuiScroll, createSetupTuiTheme, diffLineColor, manualContentLineCount, manualRecommendationLines, manualRecommendationSteps, manualRecommendationViewport, normalizeTuiDiffLine, saveSetupCheckReport, selectedSetupOptions, selectionIndicator, selectionRowPresentation, setupCheckActions, setupCheckDetails, setupCheckOutputLines, setupCheckRows, setupPaneLayout, setupStepIndex, tuiLayoutMetrics } from "../src/tui/setup-app.js";
+import { AUDIT_LABEL_COLUMN_WIDTH, AUDIT_TWO_COLUMN_MIN_WIDTH, COMPACT_LAYOUT_HEIGHT, COMPACT_LAYOUT_WIDTH, HORIZONTAL_PANE_MIN_WIDTH, auditContentLineCount, auditPageSummary, auditRecommendationSummary, auditSetupOptions, auditStatusPresentation, auditUsesSingleColumn, clampTuiScroll, createSetupTuiTheme, diffLineColor, manualContentLineCount, manualRecommendationLines, manualRecommendationSteps, manualRecommendationViewport, normalizeTuiDiffLine, renderSetupCheckSummary, saveSetupCheckReports, selectedSetupOptions, selectionIndicator, selectionRowPresentation, setupCheckActions, setupCheckDetails, setupCheckOutputLines, setupCheckRows, setupPaneLayout, setupStepIndex, tuiLayoutMetrics } from "../src/tui/setup-app.js";
 import { createSetupTuiModel, selectionItems, setupTuiReducer } from "../src/tui/setup-state.js";
 import type { AuditModel, Recommendation } from "../src/recommendations/recommendation-engine.js";
 import type { RepositoryContext } from "../src/core/types.js";
@@ -235,15 +235,27 @@ describe("setup TUI presentation", () => {
     ]);
   });
 
-  it("automatically saves a structured check report in the repository", async () => {
+  it("automatically saves structured results and a runnable check summary in the repository", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "repnix-setup-report-"));
+    const output = JSON.stringify({ repository: { packageManager: "yarn", categories: [] }, results: [{ provider: "jscpd", name: "jscpd", category: "duplication", status: "warn", findings: [{}, {}] }] });
     try {
-      const reportPath = await saveSetupCheckReport(root, JSON.stringify({ results: [] }));
-      expect(reportPath).toBe(".repnix/health-report.json");
-      expect(JSON.parse(await readFile(path.join(root, reportPath!), "utf8"))).toEqual({ results: [] });
+      const saved = await saveSetupCheckReports(root, output);
+      expect(saved).toEqual({ reportPath: ".repnix/health-report.json", summaryPath: ".repnix/check-results.md" });
+      expect(JSON.parse(await readFile(path.join(root, saved!.reportPath), "utf8"))).toEqual(JSON.parse(output));
+      expect(await readFile(path.join(root, saved!.summaryPath), "utf8")).toContain("yarn run health:duplication");
     } finally {
       await rm(root, { recursive: true, force: true });
     }
+  });
+
+  it("renders every actionable check command in the saved summary", () => {
+    const output = JSON.stringify({ repository: { packageManager: "npm", categories: [] }, results: [{ provider: "script:format:check", name: "format", category: "format", status: "warn", findings: [{}] }, { provider: "jscpd", name: "jscpd", category: "duplication", status: "warn", findings: [{}, {}] }] });
+    const summary = renderSetupCheckSummary(output);
+    expect(summary).toContain("npm run format:check");
+    expect(summary).toContain("npm run health:duplication");
+    expect(summary).toContain("repnix check");
+    expect(summary.indexOf("## Summary")).toBeLessThan(summary.indexOf("## Next steps"));
+    expect(summary.indexOf("npm run health:duplication")).toBeLessThan(summary.indexOf("npm run format:check"));
   });
 
   it("orders setup work before findings and gives each item a command", () => {

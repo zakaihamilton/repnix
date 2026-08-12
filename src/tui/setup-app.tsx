@@ -15,7 +15,7 @@ import { createSetupTuiModel, selectionItems, setupTuiReducer, type SetupTuiMode
 import { auditContentLineCount, auditPageSummary, auditRecommendationSummary, auditSetupOptions, auditStatusPresentation, manualContentLineCount, manualRecommendationLines, manualRecommendationSteps, manualRecommendationViewport, selectedSetupOptions, setupCheckDetails, type AuditPageSummary, type SetupCheckDetails } from "./setup-helpers.js";
 import { createSetupTuiTheme, diffLineColor, normalizeTuiDiffLine, selectionIndicator, selectionRowPresentation, setupPaneLayout, setupStepIndex, tuiLayoutMetrics, clampTuiScroll, type ColorOutput, type SetupPaneLayout, type SetupTuiTheme, type ThemeEnvironment, type TuiLayoutMetrics } from "./setup-theme.js";
 import { Footer, Header, Panel, progressMessage } from "./setup-components.js";
-import { ApplyView, AuditView, CheckDetailsView, ConfirmView, DetailsView, ManualRecommendationsView, ReviewView, SelectView, auditUsesSingleColumn, AUDIT_LABEL_COLUMN_WIDTH, AUDIT_TWO_COLUMN_MIN_WIDTH, setupCheckOutputLines } from "./setup-views.js";
+import { ApplyView, AuditView, CheckDetailsView, ConfirmView, DetailsView, ManualRecommendationsView, ReviewView, SelectView, auditUsesSingleColumn, AUDIT_LABEL_COLUMN_WIDTH, AUDIT_TWO_COLUMN_MIN_WIDTH, setupCheckActions, setupCheckOutputLines, setupCheckRows } from "./setup-views.js";
 
 export interface SetupTuiDependencies {
   audit: typeof auditRepository;
@@ -54,14 +54,55 @@ async function runSetupCheck(root: string, logger: DiagnosticLogger, timeoutMs?:
   return localResult.spawnError ? runCommand("repnix", args, commandOptions) : localResult;
 }
 
-export async function saveSetupCheckReport(root: string, output: string): Promise<string | undefined> {
+export interface SavedSetupCheckReports {
+  reportPath: string;
+  summaryPath: string;
+}
+
+function markdownCell(value: string): string {
+  return value.replaceAll("|", "\\|").replaceAll("\n", " ");
+}
+
+export function renderSetupCheckSummary(output: string): string {
+  const rows = setupCheckRows(output);
+  const actions = setupCheckActions(output);
+  const lines = [
+    "# Check results",
+    "",
+    "## Summary",
+    "",
+    "| Status | Check | Result | Provider |",
+    "| --- | --- | --- | --- |",
+  ];
+  for (const row of rows) lines.push(`| ${checkStatusLabelForFile(row.status)} | ${markdownCell(row.category)} | ${markdownCell(row.result)} | ${markdownCell(row.providers)} |`);
+  lines.push("", "## Next steps", "", "Run these commands from the repository root, in order.", "");
+  if (actions.length) {
+    actions.forEach((action, index) => {
+      lines.push(`${index + 1}. ${action.title}`);
+      if (action.detail) lines.push(`   ${action.detail}`);
+      lines.push("", "   ```sh", `   ${action.command}`, "   ```", "");
+    });
+  } else {
+    lines.push("All configured checks passed.", "");
+  }
+  lines.push("", "## Verify", "", "```sh", "repnix check", "```", "");
+  return lines.join("\n");
+}
+
+function checkStatusLabelForFile(status: "pass" | "warn" | "fail" | "error" | "skipped"): string {
+  return status === "pass" ? "PASS" : status === "error" ? "ERROR" : status === "skipped" ? "SKIP" : "WARN";
+}
+
+export async function saveSetupCheckReports(root: string, output: string): Promise<SavedSetupCheckReports | undefined> {
   try {
     const report = JSON.parse(output) as unknown;
-    const relativePath = ".repnix/health-report.json";
     const directory = path.join(root, ".repnix");
+    const reportPath = ".repnix/health-report.json";
+    const summaryPath = ".repnix/check-results.md";
     await mkdir(directory, { recursive: true });
-    await writeFile(path.join(root, relativePath), `${JSON.stringify(report, null, 2)}\n`, "utf8");
-    return relativePath;
+    await writeFile(path.join(root, reportPath), `${JSON.stringify(report, null, 2)}\n`, "utf8");
+    await writeFile(path.join(root, summaryPath), renderSetupCheckSummary(output), "utf8");
+    return { reportPath, summaryPath };
   } catch {
     // A failed command may not produce JSON; preserve its visible error without
     // replacing a prior usable report with malformed output.
@@ -116,7 +157,7 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
     startedCheck.current = true;
     void deps.runCheck(audit.context.root, logger, options.timeout === undefined ? undefined : options.timeout * 1000, (message) => dispatch({ type: "check-progress", message })).then((check) => {
       const output = [check.stdout.trimEnd(), check.spawnError ? `Error: ${check.spawnError}` : ""].filter(Boolean).join("\n");
-      return saveSetupCheckReport(audit.context.root, check.stdout).then((reportPath) => dispatch({ type: "check-complete", output, exitCode: check.exitCode, ...(reportPath ? { reportPath } : {}) }));
+      return saveSetupCheckReports(audit.context.root, check.stdout).then((saved) => dispatch({ type: "check-complete", output, exitCode: check.exitCode, ...(saved ? saved : {}) }));
     }).catch((error: unknown) => dispatch({ type: "check-complete", output: `Error: ${error instanceof Error ? error.message : String(error)}`, exitCode: null }));
   }, [model.screen]);
 
