@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { AUDIT_LABEL_COLUMN_WIDTH, AUDIT_TWO_COLUMN_MIN_WIDTH, COMPACT_LAYOUT_HEIGHT, COMPACT_LAYOUT_WIDTH, HORIZONTAL_PANE_MIN_WIDTH, auditContentLineCount, auditPageSummary, auditRecommendationSummary, auditSetupOptions, auditStatusPresentation, auditUsesSingleColumn, clampTuiScroll, createSetupTuiTheme, diffLineColor, manualContentLineCount, manualRecommendationLines, manualRecommendationSteps, manualRecommendationViewport, normalizeTuiDiffLine, selectedSetupOptions, selectionIndicator, selectionRowPresentation, setupCheckDetails, setupPaneLayout, setupStepIndex, tuiLayoutMetrics } from "../src/tui/setup-app.js";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { AUDIT_LABEL_COLUMN_WIDTH, AUDIT_TWO_COLUMN_MIN_WIDTH, COMPACT_LAYOUT_HEIGHT, COMPACT_LAYOUT_WIDTH, HORIZONTAL_PANE_MIN_WIDTH, auditContentLineCount, auditPageSummary, auditRecommendationSummary, auditSetupOptions, auditStatusPresentation, auditUsesSingleColumn, clampTuiScroll, createSetupTuiTheme, diffLineColor, manualContentLineCount, manualRecommendationLines, manualRecommendationSteps, manualRecommendationViewport, normalizeTuiDiffLine, renderSetupCheckSummary, renderSetupHealthReport, saveSetupCheckReports, selectedSetupOptions, selectionIndicator, selectionRowPresentation, setupCheckActions, setupCheckDetails, setupCheckOutputLines, setupCheckRows, setupPaneLayout, setupStepIndex, tuiLayoutMetrics } from "../src/tui/setup-app.js";
 import { createSetupTuiModel, selectionItems, setupTuiReducer } from "../src/tui/setup-state.js";
 import type { AuditModel, Recommendation } from "../src/recommendations/recommendation-engine.js";
 import type { RepositoryContext } from "../src/core/types.js";
@@ -208,6 +211,79 @@ describe("setup TUI presentation", () => {
     expect(manualRecommendationSteps(manual, details)).toContain("Install the OSV-Scanner binary in your local toolchain or CI image.");
     expect(manualRecommendationSteps(manual, details)).toHaveLength(3);
   });
+
+  it("wraps check details to the setup viewport without discarding output", () => {
+    const output = "Repository health\nA deliberately long finding message that must be readable in a narrow terminal viewport.";
+    const lines = setupCheckOutputLines(output, 32);
+
+    expect(lines).toContain("Repository health");
+    expect(lines.join(" ")).toContain("deliberately long finding message");
+    expect(lines.every((line) => line.length <= 26)).toBe(true);
+  });
+
+  it("turns structured check output into clear status rows", () => {
+    const output = JSON.stringify({
+      repository: { categories: [] },
+      results: [
+        { provider: "typescript", name: "TypeScript", category: "types", status: "pass", findings: [] },
+        { provider: "c8", name: "c8", category: "coverage", status: "error", findings: [] },
+      ],
+    });
+    expect(setupCheckRows(output)).toEqual([
+      { category: "Type safety", status: "pass", result: "Passed", providers: "TypeScript" },
+      { category: "Test coverage", status: "error", result: "Setup needed", providers: "c8" },
+    ]);
+  });
+
+  it("automatically saves structured results and a runnable check summary in the repository", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "repnix-setup-report-"));
+    const output = JSON.stringify({ repository: { packageManager: "yarn", categories: [] }, results: [{ provider: "jscpd", name: "jscpd", category: "duplication", status: "warn", findings: [{ id: "duplicate", fingerprint: "duplicate", type: "duplicate-block", provider: "jscpd", category: "duplication", severity: "warning", message: "Duplicated code", file: "src/example.ts", remediation: "Extract shared code." }] }] });
+    try {
+      const saved = await saveSetupCheckReports(root, output);
+      expect(saved).toEqual({ reportPath: ".repnix/health-report.md", summaryPath: ".repnix/check-results.md" });
+      expect(await readFile(path.join(root, saved!.reportPath), "utf8")).toContain("## Instructions for an AI assistant");
+      expect(await readFile(path.join(root, saved!.summaryPath), "utf8")).toContain("yarn run health:duplication");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("renders all finding context in the AI-ready health report", () => {
+    const output = JSON.stringify({ repository: { root: "/repo", packageManager: "npm", categories: [] }, results: [{ provider: "script:lint", name: "Lint", category: "lint", status: "fail", findings: [{ id: "lint", fingerprint: "lint", type: "lint-rule", ruleId: "no-any", provider: "Lint", category: "lint", severity: "error", message: "Avoid any.", file: "src/index.ts", line: 4, column: 12, remediation: "Use a concrete type.", documentationUrl: "https://example.com/no-any", metadata: { source: "eslint" } }] }] });
+    const report = renderSetupHealthReport(output);
+    expect(report).toContain("## Instructions for an AI assistant");
+    expect(report).toContain("src/index.ts:4:12");
+    expect(report).toContain("Suggested remediation: Use a concrete type.");
+    expect(report).toContain('"source": "eslint"');
+    expect(report).toContain("npm run lint");
+  });
+
+  it("renders every actionable check command in the saved summary", () => {
+    const output = JSON.stringify({ repository: { packageManager: "npm", categories: [] }, results: [{ provider: "script:format:check", name: "format", category: "format", status: "warn", findings: [{}] }, { provider: "jscpd", name: "jscpd", category: "duplication", status: "warn", findings: [{}, {}] }] });
+    const summary = renderSetupCheckSummary(output);
+    expect(summary).toContain("npm run format:check");
+    expect(summary).toContain("npm run health:duplication");
+    expect(summary).toContain("repnix check");
+    expect(summary.indexOf("## Summary")).toBeLessThan(summary.indexOf("## Next steps"));
+    expect(summary.indexOf("npm run health:duplication")).toBeLessThan(summary.indexOf("npm run format:check"));
+  });
+
+  it("orders setup work before findings and gives each item a command", () => {
+    const output = JSON.stringify({
+      repository: { packageManager: "yarn", categories: [] },
+      results: [
+        { provider: "markdownlint", name: "markdownlint", category: "documentation", status: "error", findings: [], message: "Command output exceeded 10485760 bytes" },
+        { provider: "script:format:check", name: "script:format:check", category: "format", status: "warn", findings: [{}] },
+        { provider: "jscpd", name: "jscpd", category: "duplication", status: "warn", findings: [{}, {}] },
+      ],
+    });
+    expect(setupCheckActions(output)).toEqual([
+      expect.objectContaining({ kind: "setup", title: "Set up Documentation", command: "yarn run health:documentation" }),
+      expect.objectContaining({ kind: "review", title: "Review Duplication (2 findings)", command: "yarn run health:duplication" }),
+      expect.objectContaining({ kind: "review", title: "Review Formatting (1 finding)", command: "yarn run format:check" }),
+    ]);
+    expect(setupCheckActions(output)[1]?.detail).toBeUndefined();
+  });
 });
 
 describe("setup TUI state", () => {
@@ -216,6 +292,14 @@ describe("setup TUI state", () => {
     expect(model.screen).toBe("audit");
     model = setupTuiReducer(model, { type: "begin-selection" });
     expect(model.screen).toBe("select");
+  });
+
+  it("keeps recent live check activity while a health check runs", () => {
+    let model = createSetupTuiModel(recommendations);
+    model = setupTuiReducer(model, { type: "begin-check" });
+    model = setupTuiReducer(model, { type: "check-progress", message: "Running TypeScript" });
+    model = setupTuiReducer(model, { type: "check-progress", message: "Finished TypeScript" });
+    expect(model.checkProgress).toEqual(["Preparing configured checks…", "Running TypeScript", "Finished TypeScript"]);
   });
 
   it("opens and scrolls the manual recommendations page", () => {
@@ -313,5 +397,18 @@ describe("setup TUI state", () => {
       model = setupTuiReducer(model, { type: "move-detail", direction: "down", lineCount: 10, viewport: 4 });
     }
     expect(model.detailScroll).toBe(6);
+  });
+
+  it("runs a detailed check after setup and scrolls its output", () => {
+    let model = createSetupTuiModel(recommendations);
+    model = setupTuiReducer(model, { type: "complete" });
+    model = setupTuiReducer(model, { type: "begin-check" });
+    expect(model.screen).toBe("checking");
+    model = setupTuiReducer(model, { type: "check-complete", output: "first\nsecond\nthird", exitCode: 1 });
+    expect(model.screen).toBe("check-details");
+    model = setupTuiReducer(model, { type: "move-check", direction: "down", lineCount: 3, viewport: 2 });
+    expect(model.checkScroll).toBe(1);
+    model = setupTuiReducer(model, { type: "back-to-success" });
+    expect(model.screen).toBe("success");
   });
 });

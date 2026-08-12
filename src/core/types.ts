@@ -169,7 +169,7 @@ export interface InstallPlan {
 }
 
 export interface InstallProgress {
-  phase: "writing-files" | "running-command" | "rollback" | "complete";
+  phase: "validating" | "snapshotting" | "writing-files" | "running-command" | "rollback" | "complete";
   current?: number;
   total?: number;
   label?: string;

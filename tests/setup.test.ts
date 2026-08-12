@@ -89,6 +89,30 @@ describe("setup planning", () => {
     expect(plan.files.find((item) => item.path === "repnix.config.json")).toBeDefined();
   });
 
+  it("excludes dependency documentation from generated Markdown checks", async () => {
+    const root = await copyFixture("minimal-js");
+    temporary.push(root);
+    const plan = await buildInstallPlan(await detectRepository(root), ["markdownlint"], false);
+    const packageChange = plan.files.find((item) => item.path === "package.json");
+    expect(packageChange).toBeDefined();
+    const packageJson = JSON.parse(packageChange!.after) as { scripts: Record<string, string> };
+    expect(packageJson.scripts["health:documentation"]).toBe("markdownlint-cli2 \"**/*.md\" \"#node_modules\"");
+  });
+
+  it("upgrades the previous generated Markdown script without replacing custom scripts", async () => {
+    const root = await copyFixture("minimal-js");
+    temporary.push(root);
+    const manifestPath = path.join(root, "package.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as { scripts: Record<string, string> };
+    manifest.scripts["health:documentation"] = "markdownlint-cli2 \"**/*.md\"";
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+
+    const plan = await buildInstallPlan(await detectRepository(root), ["markdownlint"], false);
+    const packageJson = JSON.parse(plan.files.find((item) => item.path === "package.json")!.after) as { scripts: Record<string, string> };
+    expect(packageJson.scripts["health:documentation"]).toBe("markdownlint-cli2 \"**/*.md\" \"#node_modules\"");
+    expect(plan.conflicts).not.toContain("package.json script 'health:documentation' already exists and was preserved.");
+  });
+
   it("runs report-only c8 and adds configured thresholds when a policy exists", async () => {
     const root = await copyFixture("minimal-js");
     temporary.push(root);
@@ -302,8 +326,28 @@ describe("setup planning", () => {
     };
 
     await expect(applyInstallPlan(context, plan, createDiagnosticLogger({ quiet: true }), 1000, (event) => progress.push(event.phase))).rejects.toThrow("rolled back");
-    expect(progress).toEqual(["writing-files", "running-command", "rollback"]);
+    expect(progress).toEqual(["validating", "snapshotting", "writing-files", "running-command", "rollback"]);
     expect(await readFile(packagePath, "utf8")).toBe(before);
     expect(await readFile(lockfilePath, "utf8")).toBe(lockfileBefore);
+  });
+
+  it("restores a binary Bun lockfile byte-for-byte when installation fails", async () => {
+    const root = await copyFixture("minimal-js");
+    temporary.push(root);
+    const lockfilePath = path.join(root, "bun.lockb");
+    const before = Buffer.from([0, 255, 128, 65, 10]);
+    await writeFile(lockfilePath, before);
+    const context = await detectRepository(root);
+    const plan = {
+      schemaVersion: 1 as const,
+      packages: [],
+      files: [],
+      commands: [{ command: process.execPath, args: ["-e", "require('node:fs').writeFileSync('bun.lockb', 'changed'); process.exit(1)"], reason: "test failure" }],
+      warnings: [],
+      conflicts: [],
+    };
+
+    await expect(applyInstallPlan(context, plan, createDiagnosticLogger({ quiet: true }), 1000)).rejects.toThrow("rolled back");
+    expect(await readFile(lockfilePath)).toEqual(before);
   });
 });

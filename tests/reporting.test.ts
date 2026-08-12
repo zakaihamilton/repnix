@@ -112,6 +112,8 @@ describe("console reporting", () => {
       results: [baseResult],
     };
     expect(renderHealth(base)).toContain("All configured checks passed");
+    expect(stripVTControlCharacters(renderHealth(base))).toContain("STATUS   CHECK");
+    expect(stripVTControlCharacters(renderHealth(base))).toContain("PASS     Tests");
 
     const findingRun = {
       ...base,
@@ -173,5 +175,31 @@ describe("console reporting", () => {
     } as unknown as HealthRun;
 
     expect(renderExplain(run)).toContain("No health findings. All configured checks passed.");
+  });
+
+  it("keeps repeated findings focused while preserving a path to every location", () => {
+    const findings = Array.from({ length: 7 }, (_, index) => ({
+      id: `duplicate-${index}`,
+      fingerprint: `duplicate-${index}`,
+      type: "duplicate-block",
+      provider: "jscpd",
+      category: "duplication" as const,
+      severity: "warning" as const,
+      message: `Duplicated block ${index}`,
+      file: index < 6 ? "src/repeated.ts" : "src/other.ts",
+    }));
+    const run = {
+      schemaVersion: 1,
+      generatedAt: "2026-08-11T00:00:00.000Z",
+      repository: { root: "/tmp/project", packageManager: "npm", kinds: ["node-application"], frameworks: [], languages: [] },
+      summary: { status: "findings", findings: 7, errors: 0, exitCode: 1 },
+      results: [{ provider: "jscpd", name: "jscpd", category: "duplication", status: "warn", durationMs: 10, findings }],
+    } as unknown as HealthRun;
+
+    const output = renderExplain(run);
+    expect(output).toContain("2 additional findings are hidden");
+    expect(output).toContain("src/repeated.ts (6)");
+    expect(output).toContain("repnix check duplication --format json");
+    expect(output).not.toContain("Duplicated block 6");
   });
 });

@@ -182,17 +182,31 @@ export function renderAudit(model: AuditModel, options: { details?: boolean } = 
   return lines.join("\n").trimEnd();
 }
 
-function statusMark(status: string, findings: number): string {
-  if (status === "pass") return pc.green("✓");
-  if (status === "skipped") return pc.dim("–");
-  if (status === "error") return pc.red("✗ error");
-  return pc.yellow(`⚠ ${findings}`);
+function healthStatus(status: string): string {
+  if (status === "pass") return pc.green("PASS");
+  if (status === "error") return pc.red("ERROR");
+  if (status === "skipped") return pc.dim("SKIP");
+  return pc.yellow("WARN");
+}
+
+function healthResultLabel(status: string, findings: number): string {
+  if (status === "pass") return "passed";
+  if (status === "error") return "setup needed";
+  if (status === "skipped") return "not run";
+  return `${findings} finding${findings === 1 ? "" : "s"}`;
 }
 
 export function renderHealth(run: HealthRun): string {
   const width = terminalWidth();
   const lines = [pc.bold("Repository health check"), ""];
   addWrapped(lines, "RepNix ran the health checks that are configured and active in this repository.", width);
+  lines.push("");
+  const statusColumn = "STATUS";
+  const categoryColumn = "CHECK";
+  const resultColumn = "RESULT";
+  const categoryWidth = 24;
+  const resultWidth = 14;
+  lines.push(pc.dim(`${statusColumn.padEnd(8)} ${categoryColumn.padEnd(categoryWidth)} ${resultColumn.padEnd(resultWidth)} PROVIDER`));
   const grouped = new Map<keyof typeof CATEGORY_LABELS, typeof run.results>();
   for (const result of run.results) {
     grouped.set(result.category, [...(grouped.get(result.category) ?? []), result]);
@@ -205,12 +219,12 @@ export function renderHealth(run: HealthRun): string {
     "skipped" as keyof typeof statusRank);
     const findings = results.reduce((total, result) => total + result.findings.length, 0);
     const providers = results.map((result) => result.name).join(", ");
-    const prefix = `${categoryLabel(category).padEnd(22)} ${statusMark(status, findings)}  `;
+    const prefix = `${status.padEnd(8)} ${categoryLabel(category).padEnd(categoryWidth)} ${healthResultLabel(status, findings).padEnd(resultWidth)} `;
     addWrapped(
       lines,
       providers,
       width,
-      prefix,
+      `${healthStatus(status)}${prefix.slice(status.length)}`,
       " ".repeat(visibleLength(prefix)),
     );
   }
@@ -246,8 +260,8 @@ function findingLocation(finding: HealthFinding): string {
 
 export function renderHealthDetails(run: HealthRun): string {
   const width = terminalWidth();
-  const lines: string[] = [pc.bold("Understanding repository health findings"), ""];
-  addWrapped(lines, "A finding is a specific issue reported by a health check. A check error means the tool could not complete, so fix the setup or tool problem first.", width);
+  const lines: string[] = [pc.bold("Repository health — details"), ""];
+  addWrapped(lines, "Start with check errors: they usually mean a tool needs setup, not that your code is broken. Findings are grouped so you can focus on the next action.", width);
   lines.push("");
   const groups = new Map<string, HealthFinding[]>();
   const categoryLabel = (category: string) => run.repository.categories?.find((entry) => entry.id === category)?.label ?? CATEGORY_LABELS[category] ?? category;
@@ -258,11 +272,8 @@ export function renderHealthDetails(run: HealthRun): string {
     }
     if (result.status === "error" && result.message) {
       lines.push(pc.bold(categoryLabel(result.category)), rule(width));
-      addWrapped(lines, categoryDescription(result.category), width);
-      lines.push("");
-      addWrapped(lines, "What happened: this check could not run to completion.", width);
-      addWrapped(lines, result.message, width, "  ", "  ");
-      addWrapped(lines, "Next step: check the provider installation and configuration, then run the command again.", width);
+      addWrapped(lines, `${result.name} needs attention: ${result.message}`, width);
+      addWrapped(lines, `Next: fix it, then run ${pc.bold(`repnix check ${result.category}`)} again. Use ${pc.bold("--verbose")} only if you need technical command diagnostics.`, width);
       lines.push("");
     }
   }
@@ -270,7 +281,8 @@ export function renderHealthDetails(run: HealthRun): string {
     lines.push(pc.bold(categoryLabel(category)), rule(width));
     addWrapped(lines, categoryDescription(category), width);
     lines.push("");
-    for (const finding of findings) {
+    const visibleFindings = findings.slice(0, 5);
+    for (const finding of visibleFindings) {
       const location = findingLocation(finding);
       const severity = finding.severity === "error"
         ? "error — fix before merging"
@@ -285,6 +297,17 @@ export function renderHealthDetails(run: HealthRun): string {
       if (finding.baselineState) addWrapped(lines, `Baseline: ${finding.baselineState}`, width);
       if (finding.remediation) addWrapped(lines, `How to fix: ${finding.remediation}`, width);
       if (finding.documentationUrl) addWrapped(lines, `Documentation: ${finding.documentationUrl}`, width);
+      lines.push("");
+    }
+    if (findings.length > visibleFindings.length) {
+      const files = new Map<string, number>();
+      for (const finding of findings) {
+        if (finding.file) files.set(finding.file, (files.get(finding.file) ?? 0) + 1);
+      }
+      addWrapped(lines, `${findings.length - visibleFindings.length} additional finding${findings.length - visibleFindings.length === 1 ? " is" : "s are"} hidden to keep this report focused.`, width);
+      const hotspots = [...files.entries()].sort(([, left], [, right]) => right - left).slice(0, 3);
+      if (hotspots.length) addWrapped(lines, `Most affected: ${hotspots.map(([file, count]) => `${file} (${count})`).join(", ")}.`, width);
+      addWrapped(lines, `To inspect every location, run ${pc.bold(`repnix check ${category} --format json`)}.`, width);
       lines.push("");
     }
   }

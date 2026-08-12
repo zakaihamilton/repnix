@@ -20,6 +20,7 @@ export interface RunCommandOptions {
   env?: NodeJS.ProcessEnv;
   maxOutputBytes?: number;
   timeoutMs?: number;
+  onOutput?: (stream: "stdout" | "stderr", chunk: Buffer) => void;
 }
 
 export const DEFAULT_COMMAND_TIMEOUT_MS = 5 * 60 * 1000;
@@ -69,6 +70,7 @@ export async function runCommand(
       child.kill(signal);
     };
     child.stdout.on("data", (chunk: Buffer) => {
+      options.onOutput?.("stdout", chunk);
       logger.output("stdout", chunk, { command: displayCommand });
       if (!overflow) stdout += chunk.toString();
       if (Buffer.byteLength(stdout) > maxOutput) {
@@ -77,6 +79,7 @@ export async function runCommand(
       }
     });
     child.stderr.on("data", (chunk: Buffer) => {
+      options.onOutput?.("stderr", chunk);
       logger.output("stderr", chunk, { command: displayCommand });
       if (!overflow) stderr += chunk.toString();
       if (Buffer.byteLength(stderr) > maxOutput) {
@@ -86,7 +89,9 @@ export async function runCommand(
     });
     child.on("error", (error) => {
       clearTimers();
-      logger.error("command.spawn-error", `Could not start ${displayCommand}: ${error.message}`, { command: displayCommand, cwd: options.cwd });
+      // The health reporter turns this into a concise, actionable check error. Keep
+      // the command line in debug logs so normal output does not repeat it twice.
+      logger.debug("command.spawn-error", `Could not start ${displayCommand}: ${error.message}`, { command: displayCommand, cwd: options.cwd });
       resolve({
         command,
         args,

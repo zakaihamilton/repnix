@@ -107,7 +107,7 @@ async function setupWithPrompts(options: SetupOptions = {}): Promise<number> {
   const after = await auditRepository(process.cwd(), { ...options, logger });
   const beforeCovered = audit.coverage.filter((entry) => entry.status === "covered").length;
   const gained = Math.max(after.coverage.filter((entry) => entry.status === "covered").length - beforeCovered, 0);
-  outro(pc.green(`Repository health setup complete${gained ? ` with ${gained} newly covered categor${gained === 1 ? "y" : "ies"}` : ""}. Run \`repnix check --details\` to verify the checks.`));
+  outro(pc.green(`Repository health setup complete${gained ? ` with ${gained} newly covered categor${gained === 1 ? "y" : "ies"}` : ""}. Run \`repnix check\` to verify the checks; add a category and \`--details\` only when troubleshooting.`));
   return 0;
 }
 
@@ -142,7 +142,7 @@ export async function setupCommand(options: SetupOptions = {}): Promise<number> 
     const apply = await confirm({ message: "Apply this saved and revalidated setup plan?", initialValue: false });
     if (isCancel(apply) || !apply) return 0;
     await applyInstallPlan(audit.context, plan, resolveDiagnosticLogger(options), options.timeout === undefined ? undefined : options.timeout * 1000);
-    outro(pc.green("Repository health setup complete. Run `repnix check --details` to verify the checks."));
+    outro(pc.green("Repository health setup complete. Run `repnix check` to verify the checks; add a category and `--details` only when troubleshooting."));
     return 0;
   }
   if (!process.stdin.isTTY || !process.stdout.isTTY) {

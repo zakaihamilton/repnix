@@ -41,7 +41,7 @@ const SETUP: Record<SetupProviderId, NonNullable<BuiltinProviderDefinition["setu
   attw: { packageName: "@arethetypeswrong/cli", scriptName: "health:package:types", scriptCommand: () => "attw --pack .", checks: ["TypeScript consumer resolution across Node and bundler modes."] },
   syncpack: { packageName: "syncpack", scriptName: "health:monorepo", scriptCommand: () => "syncpack list-mismatches", checks: ["Dependency version and package metadata consistency across workspaces."] },
   "license-checker": { packageName: "license-checker", scriptName: "health:licenses", scriptCommand: () => "license-checker --json", checks: ["Declared dependency licenses against repository policy."] },
-  markdownlint: { packageName: "markdownlint-cli2", scriptName: "health:documentation", scriptCommand: () => "markdownlint-cli2 \"**/*.md\"", checks: ["Markdown structure and style consistency."] },
+  markdownlint: { packageName: "markdownlint-cli2", scriptName: "health:documentation", scriptCommand: () => "markdownlint-cli2 \"**/*.md\" \"#node_modules\"", checks: ["Markdown structure and style consistency."] },
   changesets: { packageName: "@changesets/cli", scriptName: "health:release", scriptCommand: () => "changeset status", checks: ["Pending release metadata and package versioning intent."] },
 };
 

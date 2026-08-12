@@ -1,6 +1,6 @@
 import type { Recommendation } from "../recommendations/recommendation-engine.js";
 
-export type SetupScreen = "loading" | "audit" | "manual" | "empty" | "select" | "planning" | "review" | "details" | "confirm" | "applying" | "success" | "error";
+export type SetupScreen = "loading" | "audit" | "manual" | "empty" | "select" | "planning" | "review" | "details" | "confirm" | "applying" | "success" | "checking" | "check-details" | "error";
 
 export type SetupSelectionItem =
   | { kind: "provider"; provider: string; name: string }
@@ -18,6 +18,13 @@ export interface SetupTuiModel {
   includeCi: boolean;
   sidebarCollapsed: boolean;
   progress?: string;
+  progressLog?: string[];
+  checkOutput?: string;
+  checkExitCode?: number | null;
+  checkScroll?: number;
+  checkProgress?: string[];
+  checkReportPath?: string;
+  checkSummaryPath?: string;
   error?: string;
 }
 
@@ -44,6 +51,11 @@ export type SetupTuiAction =
   | { type: "begin-applying" }
   | { type: "progress"; message: string }
   | { type: "complete" }
+  | { type: "begin-check" }
+  | { type: "check-progress"; message: string }
+  | { type: "check-complete"; output: string; exitCode: number | null; reportPath?: string; summaryPath?: string }
+  | { type: "move-check"; direction: "up" | "down"; lineCount: number; viewport: number }
+  | { type: "back-to-success" }
   | { type: "fail"; message: string };
 
 function moveCursor(cursor: number, direction: "up" | "down", itemCount: number): number {
@@ -137,11 +149,21 @@ export function setupTuiReducer(model: SetupTuiModel, action: SetupTuiAction): S
     case "cancel-confirm":
       return { ...model, screen: "review" };
     case "begin-applying":
-      return { ...model, screen: "applying", progress: "Starting safe apply…" };
+      return { ...model, screen: "applying", progress: "Starting safe apply…", progressLog: ["Starting safe apply…"] };
     case "progress":
-      return { ...model, progress: action.message };
+      return { ...model, progress: action.message, progressLog: [...(model.progressLog ?? []), action.message].slice(-6) };
     case "complete":
       return { ...model, screen: "success" };
+    case "begin-check":
+      return { ...model, screen: "checking", checkOutput: "", checkExitCode: null, checkScroll: 0, checkProgress: ["Preparing configured checks…"] };
+    case "check-progress":
+      return { ...model, checkProgress: [...(model.checkProgress ?? []), action.message].slice(-6) };
+    case "check-complete":
+      return { ...model, screen: "check-details", checkOutput: action.output, checkExitCode: action.exitCode, checkScroll: 0, ...(action.reportPath ? { checkReportPath: action.reportPath } : {}), ...(action.summaryPath ? { checkSummaryPath: action.summaryPath } : {}) };
+    case "move-check":
+      return { ...model, checkScroll: moveScroll(model.checkScroll ?? 0, action.direction, action.lineCount, action.viewport) };
+    case "back-to-success":
+      return { ...model, screen: "success", checkScroll: 0 };
     case "fail":
       return { ...model, screen: "error", error: action.message };
   }

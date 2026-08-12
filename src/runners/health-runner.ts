@@ -157,12 +157,12 @@ function commandLine(runnable: RunnableCommand): string {
   return [runnable.command, ...runnable.args].map((part) => JSON.stringify(part)).join(" ");
 }
 
-function normalizeCommandOutput(runnable: RunnableCommand, output: string): HealthFinding[] {
+function normalizeCommandOutput(runnable: RunnableCommand, output: string, root = process.cwd()): HealthFinding[] {
   const findings: HealthFinding[] = [];
   if (runnable.category === "types") {
     const pattern = /^(.+?)\((\d+),(\d+)\):\s+(error|warning)\s+(TS\d+):\s+(.+)$/gm;
     for (const match of output.matchAll(pattern)) {
-      const file = path.isAbsolute(match[1]!) ? path.relative(process.cwd(), match[1]!) : match[1]!;
+      const file = path.isAbsolute(match[1]!) ? path.relative(root, match[1]!) : match[1]!;
       findings.push(createFinding({
         provider: runnable.name,
         category: "types",
@@ -185,7 +185,7 @@ function normalizeCommandOutput(runnable: RunnableCommand, output: string): Heal
     for (const line of output.split("\n")) {
       const trimmed = line.trim();
       if (trimmed && !/^\d+:\d+\s/.test(trimmed) && /\.[cm]?[jt]sx?$/.test(trimmed)) {
-        currentFile = path.isAbsolute(trimmed) ? path.relative(process.cwd(), trimmed) : trimmed;
+        currentFile = path.isAbsolute(trimmed) ? path.relative(root, trimmed) : trimmed;
         continue;
       }
       const match = /^(\d+):(\d+)\s+(error|warning)\s+(.+?)(?:\s{2,}|\s)([@\w/-]+)$/.exec(trimmed);
@@ -228,6 +228,7 @@ function commandResult(
     };
   }
   if (result.spawnError) {
+    const missingLocalBinary = /node_modules[\\/]+\.bin[\\/].+\bENOENT\b/i.test(result.spawnError);
     return {
       provider: runnable.provider,
       name: runnable.name,
@@ -235,7 +236,9 @@ function commandResult(
       status: "error",
       findings: [],
       durationMs: result.durationMs,
-      message: `${runnable.name} could not start. Command: ${commandLine(runnable)}. ${result.spawnError}`,
+      message: missingLocalBinary
+        ? `${runnable.name} is configured, but its local executable is unavailable. Install this project's dependencies, then try again.`
+        : `${runnable.name} could not start. ${result.spawnError}`,
     };
   }
   if (result.exitCode === 0) {
@@ -266,7 +269,7 @@ function commandResult(
   }
   const normalized = normalize && context
     ? normalize({ output: excerpt, result, context })
-    : normalizeCommandOutput(runnable, excerpt);
+    : normalizeCommandOutput(runnable, excerpt, context?.root);
   if (normalized.length) {
     return {
       provider: runnable.provider,
@@ -368,7 +371,8 @@ async function basicCommands(
   }
   for (const provider of PROVIDERS) {
     // Coverage uses a dedicated runner so report-only setup and configured thresholds share one command path.
-    if (provider.id === "c8") continue;
+    // Markdownlint uses its provider command, which always excludes dependency docs.
+    if (provider.id === "c8" || provider.id === "markdownlint") continue;
     if (!provider.scriptNames?.length || !Object.keys(detections.get(provider.id)?.activeCapabilities ?? {}).length) continue;
     const script = safeScript(context, provider.scriptNames, provider.scriptKind === "test" ? "test" : "general");
     if (!script || commands.some((command) => command.provider === `script:${script}`)) continue;
@@ -912,13 +916,16 @@ export async function runHealth(
 
     const commands = await basicCommands(context, detections, timeoutMs);
     const commandTasks = commands.filter((runnable) => (!options.category || runnable.category === options.category) && !categoryOff(runnable.category, runnable.scope ?? ".")).map((runnable) => async () => {
+      logger.info("health.provider.start", `Running ${runnable.name}`, { provider: runnable.provider, category: runnable.category });
       const result = await runCommand(runnable.command, runnable.args, {
         cwd: context.root,
         logger,
         env: { ...HEALTH_OFFLINE_ENV, ...runnable.env },
         ...(runnable.timeoutMs === undefined ? {} : { timeoutMs: runnable.timeoutMs }),
       });
-      return commandResult(runnable, result);
+      const healthResult = commandResult(runnable, result, context);
+      logger.info("health.provider.finish", `Finished ${runnable.name}`, { provider: runnable.provider, category: runnable.category, status: healthResult.status });
+      return healthResult;
     });
     results.push(...await runBounded(commandTasks, options.jobs ?? config.execution.jobs));
     const providerTasks: Array<() => Promise<HealthResult>> = [];
@@ -926,7 +933,13 @@ export async function runHealth(
     const schedule = (provider: string, task: () => Promise<HealthResult>) => {
       if (scheduledProviders.has(provider)) return;
       scheduledProviders.add(provider);
-      providerTasks.push(task);
+      providerTasks.push(async () => {
+        const name = builtinProvider(provider)?.name ?? provider;
+        logger.info("health.provider.start", `Running ${name}`, { provider });
+        const result = await task();
+        logger.info("health.provider.finish", `Finished ${name}`, { provider, category: result.category, status: result.status });
+        return result;
+      });
     };
     if ((!options.category || options.category === "dead-code") && !categoryOff("dead-code") && detections.get("knip")?.installed && enabled("knip")) {
       schedule("knip", () => runKnip(context, logger, timeoutMs));

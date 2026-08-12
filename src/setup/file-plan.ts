@@ -89,16 +89,17 @@ export async function validateChanges(root: string, changes: FileChange[]): Prom
   }
 }
 
-export async function writeChanges(root: string, changes: FileChange[]): Promise<void> {
+export async function writeChanges(root: string, changes: FileChange[], onWrite?: (change: FileChange, current: number, total: number) => void): Promise<void> {
   const written: FileChange[] = [];
   try {
-    for (const change of changes) {
+    for (const [index, change] of changes.entries()) {
       const target = resolveRepositoryPath(root, change.path);
       await createSafeParentDirectory(root, target);
       const temporary = `${target}.repnix-${process.pid}-${Date.now()}.tmp`;
       await writeFile(temporary, change.after, "utf8");
       await rename(temporary, target);
       written.push(change);
+      onWrite?.(change, index + 1, changes.length);
     }
   } catch (error) {
     try {
@@ -127,6 +128,24 @@ export async function restoreChanges(root: string, changes: FileChange[]): Promi
     await writeFile(temporary, change.before, "utf8");
     await rename(temporary, target);
   }
+}
+
+/** Restore a file without decoding its contents, for binary package-manager state. */
+export async function restoreBinaryFile(root: string, relativePath: string, before: Buffer | null): Promise<void> {
+  const target = resolveRepositoryPath(root, relativePath);
+  await assertNoSymlinkComponents(root, target);
+  if (before === null) {
+    try {
+      await unlink(target);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    return;
+  }
+  await createSafeParentDirectory(root, target);
+  const temporary = `${target}.repnix-rollback-${process.pid}-${Date.now()}.tmp`;
+  await writeFile(temporary, before);
+  await rename(temporary, target);
 }
 
 type DiffLine = { kind: "context" | "add" | "remove"; text: string };
