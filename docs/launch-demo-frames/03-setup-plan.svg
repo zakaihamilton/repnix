@@ -7,7 +7,7 @@
   <g font-family="SFMono-Regular,Menlo,Monaco,Consolas,monospace" font-size="20">
     <text x="80" y="138" fill="#f8fafc" font-weight="700">Read-only setup plan</text>
     <text x="80" y="190" fill="#f8fafc" font-weight="700">Packages to install (3)</text>
-    <text x="80" y="226" fill="#cbd5e1">+ repnix@^0.3.3</text>
+    <text x="80" y="226" fill="#cbd5e1">+ repnix (current CLI)</text>
     <text x="80" y="258" fill="#cbd5e1">+ knip</text>
     <text x="80" y="290" fill="#cbd5e1">+ jscpd</text>
     <text x="80" y="350" fill="#f8fafc" font-weight="700">Files (3)</text>
