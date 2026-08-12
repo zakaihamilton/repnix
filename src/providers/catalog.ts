@@ -6,6 +6,7 @@ import { isNonMutatingQualityCommand, isNonMutatingTestCommand } from "../reposi
 import { MARKDOWNLINT_CLI_ARGS } from "./markdownlint/command.js";
 import { normalizeMarkdownlintResult } from "./markdownlint/normalizer.js";
 import type { ProviderModule } from "./sdk.js";
+import { executableOnPath } from "../runners/health/task-executor.js";
 
 export type ProviderDescriptor = ProviderModule;
 
@@ -316,20 +317,6 @@ export const PROVIDERS: ProviderDescriptor[] = [
     zeroConfig: true,
   },
 ];
-
-async function executableOnPath(binary: string): Promise<string | null> {
-  for (const directory of (process.env.PATH ?? "").split(path.delimiter)) {
-    if (!directory) continue;
-    const candidate = path.join(directory, `${binary}${process.platform === "win32" ? ".exe" : ""}`);
-    try {
-      await access(candidate, constants.X_OK);
-      return candidate;
-    } catch {
-      // Keep searching PATH.
-    }
-  }
-  return null;
-}
 
 export async function detectProvider(
   descriptor: ProviderDescriptor,

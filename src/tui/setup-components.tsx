@@ -101,4 +101,3 @@ export function ConfirmButton({ label, focused, theme }: { label: string; focuse
   return <Text color={focused ? theme.primary : theme.muted} backgroundColor={focused ? theme.active : theme.panelRaised} bold={focused}>{` ${label} `}</Text>;
 }
 
-export { foregroundColor };

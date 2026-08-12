@@ -183,4 +183,3 @@ export function setupCheckDetails(recommendation: AuditModel["recommendations"][
   }
 }
 
-export { CATEGORY_DESCRIPTIONS, CATEGORY_LABELS };

@@ -105,6 +105,11 @@ function findingMetadata(finding: HealthFinding): string | undefined {
   return JSON.stringify(finding.metadata, null, 2).replaceAll("```", "``\\`");
 }
 
+function appendCheckResultsTable(lines: string[], rows: ReturnType<typeof setupCheckRows>): void {
+  lines.push("| Status | Check | Result | Provider |", "| --- | --- | --- | --- |");
+  for (const row of rows) lines.push(`| ${checkStatusLabelForFile(row.status)} | ${markdownCell(row.category)} | ${markdownCell(row.result)} | ${markdownCell(row.providers)} |`);
+}
+
 export function renderSetupHealthReport(output: string): string {
   const run = parseSetupHealthRun(output);
   if (!run) return ["# RepNix health report", "", "The health check did not produce structured results, so RepNix could not create an AI-ready report.", "", "Run `repnix check` again and include its output when asking for help.", ""].join("\n");
@@ -130,10 +135,8 @@ export function renderSetupHealthReport(output: string): string {
     "",
     "## Check results",
     "",
-    "| Status | Check | Result | Provider |",
-    "| --- | --- | --- | --- |",
   ];
-  for (const row of rows) lines.push(`| ${checkStatusLabelForFile(row.status)} | ${markdownCell(row.category)} | ${markdownCell(row.result)} | ${markdownCell(row.providers)} |`);
+  appendCheckResultsTable(lines, rows);
   lines.push("", "## Recommended fix order", "");
   if (actions.length) {
     actions.forEach((action, index) => {
@@ -175,10 +178,8 @@ export function renderSetupCheckSummary(output: string): string {
     "",
     "## Summary",
     "",
-    "| Status | Check | Result | Provider |",
-    "| --- | --- | --- | --- |",
   ];
-  for (const row of rows) lines.push(`| ${checkStatusLabelForFile(row.status)} | ${markdownCell(row.category)} | ${markdownCell(row.result)} | ${markdownCell(row.providers)} |`);
+  appendCheckResultsTable(lines, rows);
   lines.push("", "## Next steps", "", "Run these commands from the repository root, in order.", "");
   if (actions.length) {
     actions.forEach((action, index) => {
@@ -391,7 +392,6 @@ export async function runSetupTui(options: DiagnosticOptions = {}): Promise<numb
 }
 
 export { supportsTui, createSetupTuiTheme, diffLineColor, normalizeTuiDiffLine, selectionIndicator, selectionRowPresentation, setupPaneLayout, setupStepIndex, tuiLayoutMetrics, clampTuiScroll, auditContentLineCount, auditPageSummary, auditRecommendationSummary, auditSetupOptions, auditStatusPresentation, manualContentLineCount, manualRecommendationLines, manualRecommendationSteps, manualRecommendationViewport, selectedSetupOptions, setupCheckDetails };
-export type { AuditPageSummary, SetupCheckDetails, ColorOutput, SetupPaneLayout, SetupTuiTheme, ThemeEnvironment, TuiLayoutMetrics };
 export { AUDIT_LABEL_COLUMN_WIDTH, AUDIT_TWO_COLUMN_MIN_WIDTH, auditUsesSingleColumn };
 export { setupCheckActions, setupCheckOutputLines, setupCheckRows } from "./setup-views.js";
 export { COMPACT_LAYOUT_HEIGHT, COMPACT_LAYOUT_WIDTH, HORIZONTAL_PANE_MIN_WIDTH } from "./setup-theme.js";

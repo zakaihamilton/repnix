@@ -151,5 +151,4 @@ const byId = new Map(BUILTIN_PROVIDERS.map((provider) => [provider.id, provider]
 const byName = new Map(BUILTIN_PROVIDERS.map((provider) => [provider.name, provider]));
 export function builtinProvider(id: string): BuiltinProviderDefinition | undefined { return byId.get(id); }
 export function builtinProviderByName(name: string): BuiltinProviderDefinition | undefined { return byName.get(name); }
-export { definePlugin };
-export { detectAllProviders } from "./catalog.js";
+
