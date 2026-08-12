@@ -6,7 +6,7 @@ import type { DiagnosticLogger, DiagnosticOptions } from "../cli/options.js";
 import { resolveDiagnosticLogger } from "../cli/options.js";
 import { auditRepository } from "../cli/audit.js";
 import type { AuditModel } from "../recommendations/recommendation-engine.js";
-import type { HealthFinding, HealthRun, InstallPlan } from "../core/types.js";
+import type { HealthFinding, HealthRun, InstallPlan, RepositoryDiagnostic } from "../core/types.js";
 import { runCommand, type CommandResult } from "../runners/command-runner.js";
 import { applyInstallPlan } from "../setup/apply-plan.js";
 import { buildInstallPlan } from "../setup/install-plan.js";
@@ -29,6 +29,24 @@ export interface SetupTuiProps {
   logger: DiagnosticLogger;
   dependencies?: Partial<SetupTuiDependencies>;
   result: { code: number };
+}
+
+export function setupDetectionErrorMessage(diagnostics: RepositoryDiagnostic[]): string {
+  const errors = diagnostics.filter((diagnostic) => diagnostic.severity === "error");
+  if (!errors.length) return "Repository detection reported an error.";
+
+  const instructions = errors.map((diagnostic) => {
+    switch (diagnostic.code) {
+      case "ambiguous-package-manager":
+        return "How to fix: choose the intended package manager, add its packageManager entry to package.json, and remove any stale lockfiles. Then rerun `repnix setup`.";
+      case "unsupported-package-manager":
+        return "How to fix: set package.json#packageManager to npm, pnpm, yarn, or bun (optionally with a version), then rerun `repnix setup`.";
+      default:
+        return "How to fix: resolve this repository detection issue, then rerun `repnix setup`.";
+    }
+  });
+
+  return [...errors.map((diagnostic) => diagnostic.message), "", ...new Set(instructions)].join("\n");
 }
 
 async function runSetupCheck(root: string, logger: DiagnosticLogger, timeoutMs?: number, onProgress?: (message: string) => void): Promise<CommandResult> {
@@ -223,7 +241,7 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
     void deps.audit(process.cwd(), { ...options, logger }).then((nextAudit) => {
       setAudit(nextAudit);
       if (nextAudit.context.diagnostics.some((diagnostic) => diagnostic.severity === "error")) {
-        dispatch({ type: "fail", message: "Repository detection reported an error. Run `repnix audit` for details." });
+        dispatch({ type: "fail", message: setupDetectionErrorMessage(nextAudit.context.diagnostics) });
         return;
       }
       setModel(createSetupTuiModel(nextAudit.recommendations));

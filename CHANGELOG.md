@@ -6,6 +6,12 @@ All notable changes to RepNix are documented here. The project follows semantic 
 
 _No unreleased changes._
 
+## 0.3.6 - 2026-08-12
+
+### Fixed
+
+- Show the underlying repository detection error and remediation instructions in the setup TUI.
+
 ## 0.3.5 - 2026-08-12
 
 ### Changed

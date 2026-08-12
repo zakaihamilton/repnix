@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { AUDIT_LABEL_COLUMN_WIDTH, AUDIT_TWO_COLUMN_MIN_WIDTH, COMPACT_LAYOUT_HEIGHT, COMPACT_LAYOUT_WIDTH, HORIZONTAL_PANE_MIN_WIDTH, auditContentLineCount, auditPageSummary, auditRecommendationSummary, auditSetupOptions, auditStatusPresentation, auditUsesSingleColumn, clampTuiScroll, createSetupTuiTheme, diffLineColor, manualContentLineCount, manualRecommendationLines, manualRecommendationSteps, manualRecommendationViewport, normalizeTuiDiffLine, renderSetupCheckSummary, renderSetupHealthReport, saveSetupCheckReports, selectedSetupOptions, selectionIndicator, selectionRowPresentation, setupCheckActions, setupCheckDetails, setupCheckOutputLines, setupCheckRows, setupPaneLayout, setupStepIndex, tuiLayoutMetrics } from "../src/tui/setup-app.js";
+import { AUDIT_LABEL_COLUMN_WIDTH, AUDIT_TWO_COLUMN_MIN_WIDTH, COMPACT_LAYOUT_HEIGHT, COMPACT_LAYOUT_WIDTH, HORIZONTAL_PANE_MIN_WIDTH, auditContentLineCount, auditPageSummary, auditRecommendationSummary, auditSetupOptions, auditStatusPresentation, auditUsesSingleColumn, clampTuiScroll, createSetupTuiTheme, diffLineColor, manualContentLineCount, manualRecommendationLines, manualRecommendationSteps, manualRecommendationViewport, normalizeTuiDiffLine, renderSetupCheckSummary, renderSetupHealthReport, saveSetupCheckReports, selectedSetupOptions, selectionIndicator, selectionRowPresentation, setupCheckActions, setupCheckDetails, setupCheckOutputLines, setupCheckRows, setupDetectionErrorMessage, setupPaneLayout, setupStepIndex, tuiLayoutMetrics } from "../src/tui/setup-app.js";
 import { createSetupTuiModel, selectionItems, setupTuiReducer } from "../src/tui/setup-state.js";
 import type { AuditModel, Recommendation } from "../src/recommendations/recommendation-engine.js";
 import type { RepositoryContext } from "../src/core/types.js";
@@ -60,6 +60,19 @@ const context: RepositoryContext = {
 };
 
 describe("setup TUI presentation", () => {
+  it("shows the repository diagnostic and a package-manager fix", () => {
+    const message = setupDetectionErrorMessage([{
+      code: "ambiguous-package-manager",
+      severity: "error",
+      message: "Conflicting lockfiles detected: package-lock.json, yarn.lock.",
+    }]);
+
+    expect(message).toContain("Conflicting lockfiles detected: package-lock.json, yarn.lock.");
+    expect(message).toContain("add its packageManager entry to package.json");
+    expect(message).toContain("remove any stale lockfiles");
+    expect(message).toContain("repnix setup");
+  });
+
   it("uses filled square selection indicators", () => {
     expect(selectionIndicator(true)).toBe("■");
     expect(selectionIndicator(false)).toBe("□");
