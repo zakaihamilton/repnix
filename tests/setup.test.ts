@@ -70,13 +70,31 @@ describe("setup planning", () => {
     const context = await detectRepository(root);
     const plan = await buildInstallPlan(context, ["knip", "jscpd"], false);
     expect(plan.packages.map((item) => item.name)).toEqual(["repnix", "knip", "jscpd"]);
-    expect(plan.files.map((item) => item.path)).toEqual(["package.json", "repnix.config.json", ".jscpd.json"]);
+    expect(plan.files.map((item) => item.path)).toEqual(["package.json", ".gitignore", "repnix.config.json", ".jscpd.json"]);
+    expect(plan.files.find((item) => item.path === ".gitignore")?.after).toBe(".repnix/\n");
     await validateChanges(root, plan.files);
     await writeChanges(root, plan.files);
     const packageJson = JSON.parse(await readFile(path.join(root, "package.json"), "utf8")) as { scripts: Record<string, string> };
     expect(packageJson.scripts).toMatchObject({ health: "repnix check", "health:dead-code": "knip", "health:duplication": "jscpd src" });
     const second = await buildInstallPlan(await detectRepository(root), ["knip", "jscpd"], false);
     expect(second.files).toEqual([]);
+  });
+
+  it("adds the RepNix report directory to an existing gitignore without duplicating it", async () => {
+    const root = await copyFixture("minimal-js");
+    temporary.push(root);
+    const gitignorePath = path.join(root, ".gitignore");
+    await writeFile(gitignorePath, "node_modules/\n");
+
+    const plan = await buildInstallPlan(await detectRepository(root), ["knip"], false);
+    expect(plan.files.find((item) => item.path === ".gitignore")).toMatchObject({
+      kind: "modify",
+      after: "node_modules/\n.repnix/\n",
+    });
+
+    await writeChanges(root, plan.files);
+    const second = await buildInstallPlan(await detectRepository(root), ["knip"], false);
+    expect(second.files.find((item) => item.path === ".gitignore")).toBeUndefined();
   });
 
   it("adds report-only c8 coverage around a safe test script", async () => {
@@ -278,7 +296,7 @@ describe("setup planning", () => {
     temporary.push(root);
     const plan = await buildInstallPlan(await detectRepository(root), ["dependency-cruiser"], false);
     expect(plan.packages.map((item) => item.name)).toEqual(["repnix", "dependency-cruiser"]);
-    expect(plan.files.map((item) => item.path)).toEqual(["package.json", "repnix.config.json", ".dependency-cruiser.cjs"]);
+    expect(plan.files.map((item) => item.path)).toEqual(["package.json", ".gitignore", "repnix.config.json", ".dependency-cruiser.cjs"]);
     expect(plan.files.find((item) => item.path === "package.json")?.after).toContain('"health:architecture": "depcruise --output-type json --config -- src"');
     expect(plan.files.find((item) => item.path === ".dependency-cruiser.cjs")?.after).toContain("no-source-to-test");
   });
@@ -288,7 +306,8 @@ describe("setup planning", () => {
     temporary.push(root);
     const plan = await buildInstallPlan(await detectRepository(root), ["publint", "attw"], false);
     expect(plan.packages.map((item) => item.name)).toEqual(["repnix", "publint", "@arethetypeswrong/cli"]);
-    expect(plan.files).toHaveLength(2);
+    expect(plan.files).toHaveLength(3);
+    expect(plan.files.find((item) => item.path === ".gitignore")?.after).toBe(".repnix/\n");
     expect(plan.files.find((item) => item.path === "package.json")?.after).toContain('"health:package:publint": "publint"');
     expect(plan.files.find((item) => item.path === "package.json")?.after).toContain('"health:package:types": "attw --pack ."');
     expect(plan.conflicts).toEqual([]);
