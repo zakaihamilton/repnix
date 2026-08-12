@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import path from "node:path";
+import { mkdir, writeFile } from "node:fs/promises";
 import { Box, Newline, Text, render, useApp, useInput, useStdout } from "ink";
 import type { DiagnosticLogger, DiagnosticOptions } from "../cli/options.js";
 import { resolveDiagnosticLogger } from "../cli/options.js";
@@ -53,6 +54,21 @@ async function runSetupCheck(root: string, logger: DiagnosticLogger, timeoutMs?:
   return localResult.spawnError ? runCommand("repnix", args, commandOptions) : localResult;
 }
 
+export async function saveSetupCheckReport(root: string, output: string): Promise<string | undefined> {
+  try {
+    const report = JSON.parse(output) as unknown;
+    const relativePath = ".repnix/health-report.json";
+    const directory = path.join(root, ".repnix");
+    await mkdir(directory, { recursive: true });
+    await writeFile(path.join(root, relativePath), `${JSON.stringify(report, null, 2)}\n`, "utf8");
+    return relativePath;
+  } catch {
+    // A failed command may not produce JSON; preserve its visible error without
+    // replacing a prior usable report with malformed output.
+    return undefined;
+  }
+}
+
 const defaultDependencies: SetupTuiDependencies = { audit: auditRepository, buildPlan: buildInstallPlan, applyPlan: applyInstallPlan, runCheck: runSetupCheck };
 
 export function SetupApp({ options, logger, dependencies = {}, result }: SetupTuiProps): React.ReactElement {
@@ -100,7 +116,7 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
     startedCheck.current = true;
     void deps.runCheck(audit.context.root, logger, options.timeout === undefined ? undefined : options.timeout * 1000, (message) => dispatch({ type: "check-progress", message })).then((check) => {
       const output = [check.stdout.trimEnd(), check.spawnError ? `Error: ${check.spawnError}` : ""].filter(Boolean).join("\n");
-      dispatch({ type: "check-complete", output, exitCode: check.exitCode });
+      return saveSetupCheckReport(audit.context.root, check.stdout).then((reportPath) => dispatch({ type: "check-complete", output, exitCode: check.exitCode, ...(reportPath ? { reportPath } : {}) }));
     }).catch((error: unknown) => dispatch({ type: "check-complete", output: `Error: ${error instanceof Error ? error.message : String(error)}`, exitCode: null }));
   }, [model.screen]);
 

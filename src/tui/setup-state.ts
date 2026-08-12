@@ -23,6 +23,7 @@ export interface SetupTuiModel {
   checkExitCode?: number | null;
   checkScroll?: number;
   checkProgress?: string[];
+  checkReportPath?: string;
   error?: string;
 }
 
@@ -51,7 +52,7 @@ export type SetupTuiAction =
   | { type: "complete" }
   | { type: "begin-check" }
   | { type: "check-progress"; message: string }
-  | { type: "check-complete"; output: string; exitCode: number | null }
+  | { type: "check-complete"; output: string; exitCode: number | null; reportPath?: string }
   | { type: "move-check"; direction: "up" | "down"; lineCount: number; viewport: number }
   | { type: "back-to-success" }
   | { type: "fail"; message: string };
@@ -157,7 +158,7 @@ export function setupTuiReducer(model: SetupTuiModel, action: SetupTuiAction): S
     case "check-progress":
       return { ...model, checkProgress: [...(model.checkProgress ?? []), action.message].slice(-6) };
     case "check-complete":
-      return { ...model, screen: "check-details", checkOutput: action.output, checkExitCode: action.exitCode, checkScroll: 0 };
+      return { ...model, screen: "check-details", checkOutput: action.output, checkExitCode: action.exitCode, checkScroll: 0, ...(action.reportPath ? { checkReportPath: action.reportPath } : {}) };
     case "move-check":
       return { ...model, checkScroll: moveScroll(model.checkScroll ?? 0, action.direction, action.lineCount, action.viewport) };
     case "back-to-success":
