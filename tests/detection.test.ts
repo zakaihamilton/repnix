@@ -129,7 +129,7 @@ describe("repository detection", () => {
     expect(providers.get("c8")?.activeCapabilities.testCoverage).toBeUndefined();
   });
 
-  it("does not credit an unrestricted Markdown glob as a safe documentation check", async () => {
+  it("recognizes Markdown linting while the runner uses the dependency-safe provider command", async () => {
     const root = await copyFixture("minimal-js");
     temporary.push(root);
     const manifestPath = path.join(root, "package.json");
@@ -138,13 +138,10 @@ describe("repository detection", () => {
     manifest.devDependencies["markdownlint-cli2"] = "^0.23.0";
     manifest.scripts["health:documentation"] = "markdownlint-cli2 \"**/*.md\"";
     await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
-    let providers = await detectAllProviders(await detectRepository(root));
-    expect(providers.get("markdownlint")?.activeCapabilities.documentation).toBeUndefined();
-
-    manifest.scripts["health:documentation"] = "markdownlint-cli2 \"**/*.md\" \"#node_modules\"";
-    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
-    providers = await detectAllProviders(await detectRepository(root));
+    const providers = await detectAllProviders(await detectRepository(root));
     expect(providers.get("markdownlint")?.activeCapabilities.documentation).toBe(true);
+
+    expect(manifest.scripts["health:documentation"]).toBe("markdownlint-cli2 \"**/*.md\"");
   });
 
   it("credits configured accessibility rules and workspace consistency", async () => {

@@ -371,7 +371,8 @@ async function basicCommands(
   }
   for (const provider of PROVIDERS) {
     // Coverage uses a dedicated runner so report-only setup and configured thresholds share one command path.
-    if (provider.id === "c8") continue;
+    // Markdownlint uses its provider command, which always excludes dependency docs.
+    if (provider.id === "c8" || provider.id === "markdownlint") continue;
     if (!provider.scriptNames?.length || !Object.keys(detections.get(provider.id)?.activeCapabilities ?? {}).length) continue;
     const script = safeScript(context, provider.scriptNames, provider.scriptKind === "test" ? "test" : "general");
     if (!script || commands.some((command) => command.provider === `script:${script}`)) continue;

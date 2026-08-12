@@ -246,6 +246,7 @@ describe("setup TUI presentation", () => {
       expect.objectContaining({ kind: "review", title: "Review Duplication (2 findings)", command: "yarn run health:duplication" }),
       expect.objectContaining({ kind: "review", title: "Review Formatting (1 finding)", command: "yarn run format:check" }),
     ]);
+    expect(setupCheckActions(output)[1]?.detail).toBeUndefined();
   });
 });
 

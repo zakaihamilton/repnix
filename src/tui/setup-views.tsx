@@ -119,7 +119,7 @@ export interface SetupCheckRow {
 export interface SetupCheckAction {
   kind: "setup" | "fix" | "review";
   title: string;
-  detail: string;
+  detail?: string;
   command: string;
 }
 
@@ -195,7 +195,6 @@ export function setupCheckActions(output: string): SetupCheckAction[] {
       return {
         kind: group.status === "fail" ? "fix" : "review",
         title: `${group.status === "fail" ? "Fix" : "Review"} ${label} (${count})`,
-        detail: `Run this check to see the affected locations and decide what to change.`,
         command: resultCommand(run, primary),
       };
     });
@@ -232,7 +231,7 @@ export function CheckDetailsView({ model, width, layout, theme }: { model: Setup
       <Text color={errors.length ? theme.warning : findings ? theme.warning : theme.success} bold>{summary}</Text>
       <Box flexDirection="row" marginTop={1}><Box width={9} flexShrink={0}><Text color={theme.muted} bold>STATUS</Text></Box><Box width={27} flexShrink={0}><Text color={theme.muted} bold>CHECK</Text></Box><Box width={17} flexShrink={0}><Text color={theme.muted} bold>RESULT</Text></Box><Box flexGrow={1} overflow="hidden"><Text color={theme.muted} bold>PROVIDER</Text></Box></Box>
       {visible.map((row) => <Box key={row.category} flexDirection="row"><Box width={9} flexShrink={0}><Text color={checkStatusColor(row.status, theme)} bold>{checkStatusLabel(row.status)}</Text></Box><Box width={27} flexShrink={0}><Text {...textColor(theme)} wrap="truncate-end">{row.category}</Text></Box><Box width={17} flexShrink={0}><Text color={checkStatusColor(row.status, theme)} wrap="truncate-end">{row.result}</Text></Box><Box flexGrow={1} overflow="hidden"><Text {...textColor(theme)} wrap="truncate-end">{row.providers}</Text></Box></Box>)}
-      {actions.length && scroll === 0 ? <><Newline /><Text color={theme.secondary} bold>NEXT STEPS · DO THESE IN ORDER</Text>{actions.slice(0, 4).map((action, index) => <Box key={`${action.kind}-${action.title}`} flexDirection="column"><Text color={action.kind === "setup" ? theme.danger : action.kind === "fix" ? theme.warning : theme.info} bold>{`${index + 1}. ${action.title}`}</Text><Text color={theme.muted} wrap="truncate-end">   {action.detail}</Text><Text color={theme.primary}>   $ {action.command}</Text></Box>)}<Text color={theme.muted}>Afterwards: $ repnix check</Text></> : null}
+      {actions.length && scroll === 0 ? <><Newline /><Text color={theme.secondary} bold>NEXT STEPS · DO THESE IN ORDER</Text>{actions.slice(0, 4).map((action, index) => <Box key={`${action.kind}-${action.title}`} flexDirection="column"><Text color={action.kind === "setup" ? theme.danger : action.kind === "fix" ? theme.warning : theme.info} bold>{`${index + 1}. ${action.title}`}</Text>{action.detail ? <Text color={theme.muted} wrap="truncate-end">   {action.detail}</Text> : null}<Text color={theme.primary}>   $ {action.command}</Text></Box>)}<Newline /><Text color={theme.muted}>Verify: $ repnix check</Text><Text color={theme.muted}>Save the full report: $ repnix check --format json &gt; repnix-health-report.json</Text></> : null}
       {scroll + visible.length < rows.length ? <Text color={theme.muted}>↓ more · use ↑↓ to scroll</Text> : null}
     </Panel>;
   }
