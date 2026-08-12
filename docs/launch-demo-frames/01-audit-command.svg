@@ -5,7 +5,7 @@
   <circle cx="74" cy="64" r="8" fill="#fb7185"/><circle cx="102" cy="64" r="8" fill="#fbbf24"/><circle cx="130" cy="64" r="8" fill="#34d399"/>
   <text x="600" y="70" text-anchor="middle" font-family="system-ui, sans-serif" font-size="16" fill="#94a3b8">underprotected-typescript — npm</text>
   <g font-family="SFMono-Regular,Menlo,Monaco,Consolas,monospace" font-size="24">
-    <text x="80" y="150" fill="#f8fafc">$ npm install --save-dev repnix@0.3.3</text>
+    <text x="80" y="150" fill="#f8fafc">$ npm install --save-dev repnix</text>
     <text x="80" y="202" fill="#94a3b8">added RepNix without changing project guardrails</text>
     <text x="80" y="284" fill="#f8fafc">$ npx repnix audit</text>
     <text x="80" y="336" fill="#94a3b8">Inspecting the existing repository…</text>
