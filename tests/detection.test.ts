@@ -81,6 +81,20 @@ describe("repository detection", () => {
     await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
     providers = await detectAllProviders(await detectRepository(root));
     expect(providers.get("test-script")?.activeCapabilities.testing).toBeUndefined();
+
+    manifest.scripts.test = "npm install";
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    providers = await detectAllProviders(await detectRepository(root));
+    expect(providers.get("test-script")?.activeCapabilities.testing).toBeUndefined();
+  });
+
+  it("does not offer legacy ESLint automation when a flat config is present", async () => {
+    const root = await copyFixture("react-eslint");
+    temporary.push(root);
+    await writeFile(path.join(root, ".eslintrc.json"), `{ "extends": "eslint:recommended" }\n`);
+
+    const context = await detectRepository(root);
+    expect(context.editableLegacyEslintConfig).toBeUndefined();
   });
 
   it("detects Oxfmt and suppresses redundant generic test-script coverage", async () => {

@@ -16,7 +16,7 @@ import type {
   RepositoryContext,
 } from "../core/types.js";
 import type { AuditModel } from "../recommendations/recommendation-engine.js";
-import { isNonMutatingQualityCommand, isNonMutatingTestCommand } from "../repository/script-detection.js";
+import { isNonMutatingQualityCommand, isNonMutatingTestCommand, safeTestScript } from "../repository/script-detection.js";
 import { normalizeDependencyCruiser } from "../providers/dependency-cruiser/normalizer.js";
 import { normalizeOsv } from "../providers/osv/normalizer.js";
 import { normalizePublint } from "../providers/publint/normalizer.js";
@@ -367,6 +367,8 @@ async function basicCommands(
     }
   }
   for (const provider of PROVIDERS) {
+    // Coverage uses a dedicated runner so report-only setup and configured thresholds share one command path.
+    if (provider.id === "c8") continue;
     if (!provider.scriptNames?.length || !Object.keys(detections.get(provider.id)?.activeCapabilities ?? {}).length) continue;
     const script = safeScript(context, provider.scriptNames, provider.scriptKind === "test" ? "test" : "general");
     if (!script || commands.some((command) => command.provider === `script:${script}`)) continue;
@@ -477,22 +479,25 @@ async function runCoveragePolicy(
   diagnostics: DiagnosticLogger,
   timeoutMs?: number,
 ): Promise<HealthResult> {
-  const script = safeScript(context, ["test", "test:run", "check:test"], "test");
+  const testScript = safeTestScript(context.scripts);
   const thresholds = config.policies?.coverage;
-  if (!script || !thresholds || !Object.keys(thresholds).length) {
-    return { provider: "c8", name: "c8", category: "coverage", status: "skipped", findings: [], durationMs: 0, message: "Coverage is detected, but no coverage policy and test command are configured." };
+  if (!testScript) {
+    return { provider: "c8", name: "c8", category: "coverage", status: "skipped", findings: [], durationMs: 0, message: "Coverage is detected, but no safe test command is configured." };
   }
-  const args = ["--check-coverage"];
-  for (const [key, value] of Object.entries(thresholds)) {
-    if (typeof value === "number") args.push(`--${key}`, String(value));
+  const args = ["--all", "--reporter=text"];
+  if (thresholds && Object.keys(thresholds).length) {
+    args.push("--check-coverage");
+    for (const [key, value] of Object.entries(thresholds)) {
+      if (typeof value === "number") args.push(`--${key}`, String(value));
+    }
   }
   const testArgs = context.packageManager === "npm"
-    ? ["run", script]
+    ? ["run", testScript]
     : context.packageManager === "pnpm"
-      ? ["run", script]
+      ? ["run", testScript]
       : context.packageManager === "yarn"
-        ? [script]
-        : ["run", script];
+        ? [testScript]
+        : ["run", testScript];
   const runnable: RunnableCommand = {
     provider: "c8",
     name: "c8",

@@ -1,9 +1,13 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { stripVTControlCharacters } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import { createDiagnosticLogger } from "../src/cli/options.js";
+import { readConfig } from "../src/config/repo-health-config.js";
+import { detectAllProviders } from "../src/providers/catalog.js";
+import { buildAuditModel } from "../src/recommendations/recommendation-engine.js";
 import { detectRepository } from "../src/repository/detect-repository.js";
+import { runHealth } from "../src/runners/health-runner.js";
 import { planCiChange } from "../src/setup/ci-plan.js";
 import { fileChange, renderFileDiff, validateChanges, writeChanges } from "../src/setup/file-plan.js";
 import { buildInstallPlan } from "../src/setup/install-plan.js";
@@ -42,6 +46,80 @@ describe("setup planning", () => {
     expect(packageJson.scripts).toMatchObject({ health: "repnix check", "health:dead-code": "knip", "health:duplication": "jscpd src" });
     const second = await buildInstallPlan(await detectRepository(root), ["knip", "jscpd"], false);
     expect(second.files).toEqual([]);
+  });
+
+  it("adds report-only c8 coverage around a safe test script", async () => {
+    const root = await copyFixture("minimal-js");
+    temporary.push(root);
+    const plan = await buildInstallPlan(await detectRepository(root), ["c8"], false);
+
+    expect(plan.packages.map((item) => item.name)).toEqual(["repnix", "c8"]);
+    expect(plan.files.find((item) => item.path === "package.json")?.after).toContain('"health:coverage": "c8 --all --reporter=text npm run test"');
+    expect(plan.files.find((item) => item.path === "repnix.config.json")).toBeDefined();
+  });
+
+  it("runs report-only c8 and adds configured thresholds when a policy exists", async () => {
+    const root = await copyFixture("minimal-js");
+    temporary.push(root);
+    const plan = await buildInstallPlan(await detectRepository(root), ["c8"], false);
+    await writeChanges(root, plan.files);
+    const binDirectory = path.join(root, "node_modules", ".bin");
+    await mkdir(binDirectory, { recursive: true });
+    const argsPath = path.join(root, "c8-args.txt");
+    const binary = path.join(binDirectory, "c8");
+    await writeFile(binary, `#!/bin/sh\nprintf '%s' "$*" > ${JSON.stringify(argsPath)}\n`);
+    await chmod(binary, 0o755);
+
+    const context = await detectRepository(root);
+    const { config } = await readConfig(root);
+    const audit = buildAuditModel(context, await detectAllProviders(context), config);
+    const report = await runHealth(audit, config, { category: "coverage", logger: createDiagnosticLogger({ quiet: true }) });
+    expect(report.results).toContainEqual(expect.objectContaining({ provider: "c8", status: "pass" }));
+    expect(await readFile(argsPath, "utf8")).toContain("--all --reporter=text npm run test");
+
+    const withThreshold = { ...config, policies: { coverage: { lines: 80 } } };
+    await runHealth(audit, withThreshold, { category: "coverage", logger: createDiagnosticLogger({ quiet: true }) });
+    expect(await readFile(argsPath, "utf8")).toContain("--check-coverage --lines 80 npm run test");
+  });
+
+  it("creates Changesets config only with a resolved remote default branch", async () => {
+    const root = await copyFixture("npm-library");
+    temporary.push(root);
+    const context = await detectRepository(root);
+    const withoutBranch = await buildInstallPlan(context, ["changesets"], false);
+    expect(withoutBranch.packages.map((item) => item.name)).toEqual(["repnix"]);
+    expect(withoutBranch.conflicts).toContain("Changesets needs the Git remote default branch, which could not be resolved safely.");
+
+    context.gitDefaultBranch = "main";
+    const withBranch = await buildInstallPlan(context, ["changesets"], false);
+    expect(withBranch.packages.map((item) => item.name)).toEqual(["repnix", "@changesets/cli"]);
+    expect(withBranch.files.find((item) => item.path === ".changeset/config.json")?.after).toContain('"baseBranch": "main"');
+    expect(withBranch.files.find((item) => item.path === "package.json")?.after).toContain('"health:release": "changeset status"');
+  });
+
+  it("adds jsx-a11y to a legacy JSON ESLint configuration without duplicates", async () => {
+    const root = await copyFixture("react-eslint");
+    temporary.push(root);
+    await rm(path.join(root, "eslint.config.js"));
+    await writeFile(path.join(root, ".eslintrc.json"), `{\n  // Existing comments stay intact.\n  "plugins": ["react"],\n  "extends": "eslint:recommended"\n}\n`);
+
+    const context = await detectRepository(root);
+    expect(context.editableLegacyEslintConfig).toBe(true);
+    const { config } = await readConfig(root);
+    context.scopes = context.scopes.map((scope) => ({ ...scope, roles: ["web-app"] }));
+    const audit = buildAuditModel(context, await detectAllProviders(context), config);
+    expect(audit.recommendations.find((item) => item.provider === "jsx-a11y")).toMatchObject({ actionable: true, priority: "baseline" });
+
+    const plan = await buildInstallPlan(context, ["jsx-a11y"], false);
+    expect(plan.packages.map((item) => item.name)).toEqual(["repnix", "eslint-plugin-jsx-a11y"]);
+    const eslint = plan.files.find((item) => item.path === ".eslintrc.json")?.after;
+    expect(eslint).toContain("// Existing comments stay intact.");
+    expect(eslint).toContain('"jsx-a11y"');
+    expect(eslint).toContain('"plugin:jsx-a11y/recommended"');
+
+    await writeChanges(root, plan.files);
+    const repeated = await buildInstallPlan(await detectRepository(root), ["jsx-a11y"], false);
+    expect(repeated.files.some((item) => item.path === ".eslintrc.json")).toBe(false);
   });
 
   it("preserves conflicting user scripts", async () => {

@@ -8,6 +8,7 @@ import { categoryModeFor, type RepnixConfig } from "../config/repo-health-config
 import { createBuiltinRegistry, type ProviderRegistry } from "../providers/registry.js";
 import { categoryDefinition, type Capability } from "../core/category-registry.js";
 import { HEALTH_CATEGORIES } from "../core/health-category.js";
+import { safeTestScript } from "../repository/script-detection.js";
 
 export type CoverageStatus = "covered" | "partial" | "missing" | "not-applicable" | "off";
 
@@ -283,13 +284,19 @@ export function buildAuditModel(
   };
 
   if (isApplicable("accessibility", context, registry)) {
-    addMissing("jsx-a11y", "eslint-plugin-jsx-a11y", "accessibility", "baseline", false, "This UI repository uses JSX, but no active accessibility rules were detected. Enable jsx-a11y’s recommended rules in the existing ESLint configuration.");
+    const legacyJsonConfig = context.editableLegacyEslintConfig === true;
+    addMissing("jsx-a11y", "eslint-plugin-jsx-a11y", "accessibility", "baseline", legacyJsonConfig, legacyJsonConfig
+      ? "This UI repository uses JSX, but no active accessibility rules were detected. RepNix can safely add jsx-a11y’s recommended rules to the root legacy JSON ESLint configuration."
+      : "This UI repository uses JSX, but no active accessibility rules were detected. Enable jsx-a11y’s recommended rules in the existing ESLint configuration.");
   }
   if (context.isMonorepo) {
     addMissing("syncpack", "syncpack", "monorepo", "baseline", true, "This repository contains multiple workspaces, but dependency versions and package metadata are not being checked for consistency.");
   }
   if (isApplicable("coverage", context, registry)) {
-    addMissing("c8", "c8", "coverage", "baseline", false, "Tests are present, but no coverage command is active. Add a project-specific coverage command and threshold rather than treating raw line counts as a universal quality score.");
+    const testScript = safeTestScript(context.scripts);
+    addMissing("c8", "c8", "coverage", "baseline", testScript !== null, testScript
+      ? "Tests are present, but no coverage command is active. RepNix can safely add a report-only c8 command around the existing non-watch test script; coverage thresholds remain an explicit project policy."
+      : "Tests are present, but RepNix could not find a safe non-watch test script to wrap with c8. Add a project-specific coverage command and threshold rather than treating raw line counts as a universal quality score.");
     addMissing("stryker", "Stryker", "coverage", "advanced", false, "Mutation testing measures whether tests catch behavior changes. It requires a test-specific configuration and can be expensive, so it is an advanced recommendation.");
   }
   addMissing("gitleaks", "Gitleaks", "secrets", "baseline", false, "No secret scanner is active. Gitleaks can detect credentials before they reach the repository or CI artifacts.");
@@ -299,7 +306,10 @@ export function buildAuditModel(
     addMissing("lhci", "Lighthouse CI", "performance", "optional", false, "This repository ships frontend or package output, but no runtime performance budget is active. Configure Lighthouse CI against a real URL or build.");
   }
   if (isApplicable("release", context, registry)) {
-    addMissing("changesets", "Changesets", "release", "optional", false, "This repository appears publishable or multi-package, but release metadata is not being checked. Changesets can make version and changelog intent explicit.");
+    const hasDefaultBranch = Boolean(context.gitDefaultBranch);
+    addMissing("changesets", "Changesets", "release", "optional", hasDefaultBranch, hasDefaultBranch
+      ? "This repository appears publishable or multi-package, but release metadata is not being checked. RepNix can create standard Changesets configuration using the Git remote’s default branch."
+      : "This repository appears publishable or multi-package, but release metadata is not being checked. Changesets needs the Git remote’s default branch, which RepNix could not resolve safely.");
   }
   addMissing("actionlint", "actionlint", "ci", "optional", false, "GitHub Actions workflows are present, but their syntax and common automation mistakes are not being checked.");
 
