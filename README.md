@@ -37,7 +37,7 @@ If RepNix recommends checks you want to add, run the interactive setup. It expla
 npx repnix setup
 ```
 
-Setup requires an interactive terminal. If you are working in a non-interactive environment, use `repnix audit` to review recommendations and make the project changes yourself.
+Setup requires an interactive terminal to apply changes. In non-interactive environments, `repnix setup --plan --format json` emits a revalidatable, read-only plan.
 
 Once setup is complete, run the unified health check:
 
@@ -45,11 +45,10 @@ Once setup is complete, run the unified health check:
 npm run health
 ```
 
-For detailed explanations of findings, use:
+For detailed findings and remediation, use:
 
 ```bash
-npx repnix check
-npx repnix explain
+npx repnix check --details
 ```
 
 ## A beginner-friendly workflow
@@ -76,24 +75,26 @@ RepNix gives you a clear inventory and a deliberate next step:
 - **Measures active coverage.** An installed package is not treated as a health check unless it is configured and actually contributes a capability.
 - **Adds only useful gaps.** Recommendations are based on the repository’s shape and existing tools, with baseline, optional, and advanced priorities.
 - **Preserves your choices.** Setup keeps existing scripts and configuration, creates only the files it needs, and shows conflicts instead of overwriting them blindly.
-- **Stays local-first.** `audit`, `check`, and `explain` do not install packages or access a package registry. Security and package-health checks use local/offline execution paths.
-- **Produces one report.** Human-readable output groups findings by category and provider; `--json` emits a versioned normalized report for automation.
+- **Understands repository roles.** CLI, library, web application, Node application, and tooling scopes receive different recommendations; a React dependency alone does not make a CLI a web app.
+- **Stays local-first.** `audit` and `check` do not install packages or access a package registry. Security and package-health checks use local/offline execution paths.
+- **Produces one report.** Human-readable output groups findings by category and provider; JSON and SARIF formats support automation and code scanning.
+- **Supports gradual adoption.** A reviewed baseline can record current debt so CI fails only on new findings.
 - **Scales across workspaces.** Root and workspace quality scripts can run as separate, attributed results instead of hiding failures behind one aggregate command.
 - **Supports explicit policy.** License and coverage thresholds can be recorded in `repnix.config.json`.
 
 ## The workflow
 
 ```text
-audit → choose recommendations → setup → check → explain
+audit → choose recommendations → setup → check
 ```
 
-![RepNix workflow from repository detection to explained findings](docs/repnix-workflow.svg)
+![RepNix workflow from repository detection to actionable findings](docs/repnix-workflow.svg)
 
 1. **Audit** the repository without modifying it.
 2. **Choose** the providers that fit your project.
 3. **Set up** packages, scripts, configuration, and optional CI integration through a previewed plan.
 4. **Check** all active health providers with one command.
-5. **Explain** findings with normalized messages, locations, severity, and provider attribution.
+5. Use `check --details` for normalized messages, locations, remediation, baseline state, and provider attribution.
 
 ### How to read the output
 
@@ -101,7 +102,7 @@ audit → choose recommendations → setup → check → explain
 - A **provider** is the tool that performs the check, such as Vitest, Knip, or OSV-Scanner.
 - **Covered** means an active provider contributes the capability. **Partly covered** means some related capabilities are active but a gap remains. **Missing** means no active provider was found.
 - A **finding** is an issue reported by a check. A **check error** means the tool could not finish, usually because setup or configuration needs attention.
-- `repnix audit` is for deciding what to add. `repnix check` is for a quick pass/fail result. `repnix explain` is for deciding what to do about a finding.
+- `repnix audit` is for deciding what to add. `repnix check` is for a quick result, and `repnix check --details` explains what to do about findings.
 
 If `repnix check` says that no applicable health checks ran, RepNix did not find an active provider for that category. That is not the same as being covered; run `repnix audit` to see whether a provider is missing, disabled, or not relevant to the repository.
 
@@ -110,18 +111,18 @@ If `repnix check` says that no applicable health checks ran, RepNix did not find
 `repnix setup` is an interactive, opt-in change flow:
 
 - In a capable terminal, setup opens a full-screen keyboard-driven dashboard that starts with an audit page showing detected project facts, category coverage, and recommendation priorities. Press **Enter** to continue to provider selection, review the planned changes, and explicitly confirm apply.
-- On the audit page, use **Enter** to continue or **q/Esc** to leave without changing files. If no actionable recommendations exist, the audit page explains that there is nothing to add before setup exits.
+- After the audit page, setup opens a manual-recommendations step when checks need project-specific decisions. It lists those checks with concrete setup steps and the command to run when ready. Press **Enter** to continue to installable checks or **q/Esc** to leave without changing files. If no recommendations exist, the audit page explains that there is nothing to add before setup exits.
 - Baseline recommendations are preselected because they are useful for most JavaScript and TypeScript repositories.
 - Optional and advanced recommendations are not automatically enabled when they need project-specific rules or budgets.
-- Use **↑/↓** or **j/k** to move after the audit page. On the selection screen, **Space** selects or clears a provider and **Enter** continues. Press **Esc** or **Backspace** to return to the previous page; use **q** to quit. On the review screen, **↑/↓** moves between files, **Space** inspects the focused file, and **Enter** opens confirmation. In the confirmation dialog, focus starts on **Cancel**; press **→** to focus **Apply**, then **Enter**. While changes are being applied, exit keys are disabled until the rollback-safe operation finishes.
+- Use **↑/↓** or **j/k** to move after the audit page. On the selection screen, **Space** selects or clears a provider and **Enter** continues. Press **Esc** or **Delete** to return to the previous page; use **q** to quit. On the review screen, **↑/↓** moves between files, **Space** inspects the focused file, and **Enter** opens confirmation. In the confirmation dialog, focus starts on **Cancel**; press **→** to focus **Apply**, then **Enter**. While changes are being applied, exit keys are disabled until the rollback-safe operation finishes.
 - Before confirmation, RepNix shows the packages, scripts, configuration files, and optional CI changes it plans to apply. Existing files are preserved and conflicts are shown for review.
 - Some recommendations need preparation outside RepNix: OSV-Scanner needs its binary and local vulnerability database, architecture checks need module-boundary rules, and bundle checks need an explicit size budget.
 
-If the terminal is too small or does not support the full-screen dashboard, RepNix falls back to its sequential prompts. Non-interactive environments should use `repnix audit` for a read-only review.
+If the terminal is too small or does not support the full-screen dashboard, RepNix falls back to sequential prompts. Non-interactive environments can use `repnix setup --plan --format json` for a read-only plan.
 
-The interactive setup flow is: `audit → select checks → review changes → apply safely`.
+The interactive setup flow is: `audit → manual guidance (when needed) → select checks → review changes → apply safely`.
 
-After setup completes, run `repnix check`. If it reports findings or a provider error, run `repnix explain` for the next place to look.
+After setup completes, run `repnix check --details` to verify coverage and review findings.
 
 ## See it in action
 
@@ -175,7 +176,7 @@ Duplication            ✓  jscpd
 
 2 findings need attention at the configured severity threshold.
 
-Next: run repnix explain to see what each finding means and where to start.
+Next: run repnix check --details to see what each finding means and where to start.
 ```
 
 ## Commands
@@ -184,15 +185,18 @@ Next: run repnix explain to see what each finding means and where to start.
 | --- | --- | :---: |
 | `repnix audit` | See what your repository already checks, what is missing, and why it matters. | No |
 | `repnix setup` | Review and apply recommended checks through an interactive preview. | Yes, after confirmation |
+| `repnix setup --plan --format json` | Emit a serializable setup plan without applying it. | No |
+| `repnix setup --apply-plan <file>` | Revalidate, review, and apply a saved plan. | Yes, after confirmation |
 | `repnix check` | Run all active health checks and get a short result. | No |
 | `repnix check <category>` | Run one category, such as `dead-code` or `security`. | No |
-| `repnix check --json` | Emit a versioned normalized report to stdout. | No |
+| `repnix check --details` | Show findings, locations, remediation, and baseline state. | No |
+| `repnix check --format json\|sarif` | Emit machine-readable output to stdout. | No |
+| `repnix check --write-baseline` | Record reviewed current findings for gradual CI adoption. | Yes |
 | `repnix <command> --verbose` | Show debug diagnostics and stream provider output to stderr. | No |
 | `repnix <command> --quiet` | Suppress diagnostic output while keeping the command report. | No |
 | `repnix <command> --log-level <level>` | Set diagnostics to `silent`, `error`, `warn`, `info`, or `debug`. | No |
 | `repnix <command> --log-format json` | Emit newline-delimited structured diagnostics on stderr. | No |
 | `repnix <command> --timeout <seconds>` | Set the maximum runtime for each repository command; the default is five minutes. | No |
-| `repnix explain` | Rerun checks and explain findings, locations, severity, and next steps. | No |
 
 Examples:
 
@@ -211,10 +215,13 @@ npx repnix check dead-code
 npx repnix check package-health
 
 # Send machine-readable output to another tool
-npx repnix check --json > repnix-report.json
+npx repnix check --format json > repnix-report.json
 
-# Inspect locations and provider-specific explanations
-npx repnix explain
+# Inspect locations and provider-specific remediation
+npx repnix check --details
+
+# Record existing debt, then fail only on new findings
+npx repnix check --write-baseline
 ```
 
 ## What each health category means
@@ -291,16 +298,36 @@ Package-health checks analyze a local packed artifact with lifecycle scripts dis
 
 ## Configuration
 
-Configuration is optional. Add `repnix.config.json` when your team wants to make a category required, change which findings fail CI, or intentionally disable a provider:
+Configuration is optional. Add `repnix.config.json` when your team wants to make a category required, change which findings fail CI, or intentionally disable a category:
 
 ```json
 {
+  "schemaVersion": 1,
+  "scopes": {
+    ".": {
+      "roles": ["cli", "library"]
+    },
+    "apps/web": {
+      "roles": ["web-app"],
+      "categories": {
+        "performance": { "mode": "required" }
+      }
+    }
+  },
   "categories": {
-    "dead-code": "required",
-    "duplication": "optional",
-    "architecture": "off"
+    "dead-code": { "mode": "required" },
+    "duplication": { "mode": "optional" },
+    "architecture": { "mode": "off" }
   },
   "severityThreshold": "warning",
+  "execution": {
+    "jobs": 2,
+    "timeoutSeconds": 300
+  },
+  "baseline": {
+    "path": ".repnix-baseline.json",
+    "failOn": "new"
+  },
   "policies": {
     "licenses": {
       "allow": ["MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause"],
@@ -317,16 +344,6 @@ Configuration is optional. Add `repnix.config.json` when your team wants to make
       "maxCls": 0.1,
       "maxTbtMs": 300
     }
-  },
-  "providers": {
-    "jscpd": { "enabled": true },
-    "osv-scanner": { "enabled": true },
-    "dependency-cruiser": { "enabled": true },
-    "publint": { "enabled": true },
-    "attw": { "enabled": true },
-    "syncpack": { "enabled": true },
-    "license-checker": { "enabled": true },
-    "markdownlint": { "enabled": true }
   }
 }
 ```
@@ -337,21 +354,35 @@ Category modes are:
 - `optional` — run the category when a provider is active, but do not require setup.
 - `off` — skip the category intentionally.
 
-Severity thresholds are `info`, `warning`, and `error`. A finding at or above the threshold produces exit code `1`. Configuration is strict, so misspelled categories and provider names fail with a correction tip.
+Severity thresholds are `info`, `warning`, and `error`. A finding at or above the threshold produces exit code `1`. Configuration is strict, so misspelled category names fail with a correction tip.
 
 Policies are optional and provider-aware. License `allow` and `deny` lists are enforced by license-checker; coverage thresholds are used when RepNix runs c8 around the configured test command. Performance values document the budgets expected by a configured Lighthouse CI provider; RepNix does not invent a URL or build command.
 
-Use `required` for coverage that must exist, `off` for categories that do not apply to your repository, and provider flags when you want to keep a detected tool out of the RepNix run.
+Use `required` for coverage that must exist and `off` for categories that do not apply to your repository. Providers are discovered from the built-in registry and from direct `repnix-provider-*` dependencies.
+
+To add a provider module or publish an external provider plugin, see [Provider plugins](docs/provider-plugins.md).
+
+Scope roles normally come from repository evidence such as `package.json#bin`, publishable exports, framework configuration, source layout, and scripts. Add a scope override only when the repository intentionally differs from those signals.
+
+### Baseline existing findings
+
+For a repository with existing debt, review the current detailed report and then run:
+
+```bash
+npx repnix check --write-baseline
+```
+
+This writes `.repnix-baseline.json` and enables it in `repnix.config.json`. Findings are then classified as `new`, `existing`, or `resolved`, and only new findings fail by default. Provider errors and missing required coverage can never be hidden by a baseline. Ordinary checks never rewrite the file.
 
 ## Exit codes and automation
 
 RepNix uses predictable exit codes so both people and CI can understand the result:
 
 - `0` — all configured checks passed at the configured severity threshold.
-- `1` — one or more findings reached the configured threshold; run `repnix explain` to understand them.
+- `1` — one or more new findings reached the configured threshold; run `repnix check --details` to understand them.
 - `2` — RepNix could not complete a check because of configuration, repository detection, or tool execution; this is different from a code finding.
 
-`repnix check --json` writes the versioned report to stdout. With debug diagnostics (`--verbose` or `--log-level debug`), child provider output goes to stderr so stdout remains machine-readable.
+`repnix check --format json` writes the normalized report to stdout, while `--format sarif` produces SARIF 2.1.0. With debug diagnostics (`--verbose` or `--log-level debug`), child provider output goes to stderr so stdout remains machine-readable.
 All commands accept the diagnostic options. `--verbose` is shorthand for `--log-level debug`; `--quiet` takes precedence over the other level switches. Use `--log-format json` when a log collector needs stable event names and context fields. If an unexpected error occurs, verbose mode includes its stack trace.
 
 ### GitHub Actions
@@ -365,18 +396,18 @@ After installing dependencies, add the unified check to an existing GitHub Actio
 
 When `repnix setup` is asked to update CI, it looks for a workflow job with a checkout step and a supported package-manager install step, then inserts the health step immediately after that install using the job's package manager. It prefers a uniquely identified test, check, or CI job when several jobs qualify; ties are left unchanged and the candidate job locations are shown for manual review.
 
-For machine-readable CI integrations, use `npx repnix check --json` and redirect or collect stdout as an artifact.
+For machine-readable CI integrations, use `npx repnix check --format json` or upload `--format sarif` output to a compatible code-scanning service.
 
 ## How it works
 
 RepNix follows a detect → recommend → plan → run model:
 
-1. Detect repository type, package manager, source roots, scripts, CI, configuration, and active provider capabilities.
-2. Compare those capabilities with the health categories that apply to the repository.
+1. Detect scope roles, package manager, source roots, scripts, CI, configuration, and active provider capabilities.
+2. Use evidence-backed category applicability so CLI, library, browser, Node, and tooling scopes receive different recommendations.
 3. Build a minimal installation plan that preserves existing project choices.
 4. Run active providers and normalize their findings into a shared report with category, severity, provider, and location.
 
-The audit and reporting pipeline is designed to be safe to run locally and in CI. `setup` is the only command that can make changes, and it requires an explicit confirmation after showing the planned commands and file changes.
+The audit and reporting pipeline is designed to be safe to run locally and in CI. Setup changes require explicit confirmation after showing the planned commands and files. Baseline writing is the only explicitly mutating `check` option.
 
 ## Notes and current limits
 

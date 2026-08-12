@@ -1,32 +1,11 @@
 import { constants } from "node:fs";
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
-import type {
-  ProviderCapabilities,
-  ProviderDetection,
-  RepositoryContext,
-} from "../core/types.js";
-import type { HealthCategory } from "../core/health-category.js";
+import type { ProviderDetection, RepositoryContext } from "../core/types.js";
 import { isNonMutatingQualityCommand, isNonMutatingTestCommand } from "../repository/script-detection.js";
+import type { ProviderModule } from "./sdk.js";
 
-export interface ProviderDescriptor {
-  id: string;
-  name: string;
-  category: HealthCategory;
-  packages: string[];
-  configPatterns: RegExp[];
-  scriptPattern: RegExp;
-  capabilities: ProviderCapabilities;
-  zeroConfig?: boolean;
-  binary?: string;
-  searchPath?: boolean;
-  packageJsonConfigKey?: string;
-  activeConfigPattern?: RegExp;
-  requiresConfiguration?: boolean;
-  scriptNames?: string[];
-  scriptKind?: "test" | "quality";
-  command?: { binary: string; args: string[]; searchPath?: boolean };
-}
+export type ProviderDescriptor = ProviderModule;
 
 export const PROVIDERS: ProviderDescriptor[] = [
   {
@@ -122,7 +101,7 @@ export const PROVIDERS: ProviderDescriptor[] = [
     packages: ["c8"],
     configPatterns: [/(^|\/)(?:\.c8rc(?:\.[^/]+)?|c8\.config\.[cm]?[jt]s)$/],
     scriptPattern: /(^|\s|&&|\|)c8(?:\s|$)/,
-    scriptNames: ["coverage", "test:coverage", "check:coverage"],
+    scriptNames: ["health:coverage", "coverage", "test:coverage", "check:coverage"],
     scriptKind: "test",
     capabilities: { testCoverage: true },
     zeroConfig: true,
@@ -134,6 +113,7 @@ export const PROVIDERS: ProviderDescriptor[] = [
     packages: ["@stryker-mutator/core"],
     configPatterns: [/(^|\/)stryker\.config\.[cm]?[jt]s$/],
     scriptPattern: /(^|\s|&&|\|)stryker(?:\s|$)/,
+    scriptNames: ["health:mutation", "mutation", "stryker"],
     capabilities: { mutationTesting: true },
     command: { binary: "stryker", args: ["run"] },
     requiresConfiguration: true,
@@ -142,6 +122,7 @@ export const PROVIDERS: ProviderDescriptor[] = [
     id: "knip",
     name: "Knip",
     category: "dead-code",
+    runnable: true,
     packages: ["knip"],
     configPatterns: [/(^|\/)knip\.(?:jsonc?|[cm]?[jt]s)$/],
     scriptPattern: /(^|\s|&&|\|)knip(?:\s|$)/,
@@ -157,6 +138,7 @@ export const PROVIDERS: ProviderDescriptor[] = [
     id: "jscpd",
     name: "jscpd",
     category: "duplication",
+    runnable: true,
     packages: ["jscpd"],
     configPatterns: [/(^|\/)\.jscpd\.json$/, /(^|\/)jscpd\.json$/],
     scriptPattern: /(^|\s|&&|\|)jscpd(?:\s|$)/,
@@ -167,6 +149,7 @@ export const PROVIDERS: ProviderDescriptor[] = [
     id: "osv-scanner",
     name: "OSV-Scanner",
     category: "security",
+    runnable: true,
     packages: [],
     configPatterns: [/(^|\/)osv-scanner\.toml$/],
     scriptPattern: /(^|\s|&&|\|)osv-scanner(?:\s|$)/,
@@ -179,6 +162,7 @@ export const PROVIDERS: ProviderDescriptor[] = [
     id: "jsx-a11y",
     name: "eslint-plugin-jsx-a11y",
     category: "accessibility",
+    runnable: true,
     packages: ["eslint-plugin-jsx-a11y"],
     configPatterns: [/(^|\/)eslint\.config\.[cm]?[jt]s$/, /(^|\/)\.eslintrc(?:\.[^/]+)?$/],
     scriptPattern: /(^|\s|&&|\|)eslint(?:\s|$)/,
@@ -190,6 +174,7 @@ export const PROVIDERS: ProviderDescriptor[] = [
     id: "eslint-boundaries",
     name: "eslint-plugin-boundaries",
     category: "architecture",
+    runnable: true,
     packages: ["eslint-plugin-boundaries"],
     configPatterns: [/(^|\/)eslint\.config\.[cm]?[jt]s$/, /(^|\/)\.eslintrc(?:\.[^/]+)?$/],
     scriptPattern: /\bboundaries\//,
@@ -201,6 +186,7 @@ export const PROVIDERS: ProviderDescriptor[] = [
     id: "dependency-cruiser",
     name: "dependency-cruiser",
     category: "architecture",
+    runnable: true,
     packages: ["dependency-cruiser"],
     configPatterns: [/(^|\/)\.dependency-cruiser\.(?:json|[cm]?[jt]s)$/],
     scriptPattern: /(^|\s|&&|\|)(?:depcruise|dependency-cruiser)(?:\s|$)/,
@@ -212,6 +198,7 @@ export const PROVIDERS: ProviderDescriptor[] = [
     id: "size-limit",
     name: "Size Limit",
     category: "bundle",
+    runnable: true,
     packages: ["size-limit"],
     configPatterns: [/(^|\/)\.size-limit\.(?:json|[cm]?[jt]s)$/],
     scriptPattern: /(^|\s|&&|\|)size-limit(?:\s|$)/,
@@ -227,6 +214,7 @@ export const PROVIDERS: ProviderDescriptor[] = [
     packages: ["syncpack"],
     configPatterns: [/(^|\/)\.syncpack(?:\.[^/]+)?$/],
     scriptPattern: /(^|\s|&&|\|)syncpack(?:\s|$)/,
+    scriptNames: ["health:monorepo", "monorepo", "syncpack"],
     capabilities: { workspaceConsistency: true },
     command: { binary: "syncpack", args: ["list-mismatches"] },
     zeroConfig: true,
@@ -251,6 +239,7 @@ export const PROVIDERS: ProviderDescriptor[] = [
     packages: ["license-checker"],
     configPatterns: [],
     scriptPattern: /(^|\s|&&|\|)license-checker(?:\s|$)/,
+    scriptNames: ["health:licenses", "licenses", "license-checker"],
     capabilities: { licenses: true },
     command: { binary: "license-checker", args: ["--json"] },
     zeroConfig: true,
@@ -262,6 +251,7 @@ export const PROVIDERS: ProviderDescriptor[] = [
     packages: ["markdownlint-cli2"],
     configPatterns: [/(^|\/)\.markdownlint(?:[.-][^/]+)?$/],
     scriptPattern: /(^|\s|&&|\|)markdownlint(?:-cli2)?(?:\s|$)/,
+    scriptNames: ["health:documentation", "documentation", "docs", "markdownlint"],
     capabilities: { documentation: true },
     command: { binary: "markdownlint-cli2", args: ["**/*.md"] },
     zeroConfig: true,
@@ -273,6 +263,7 @@ export const PROVIDERS: ProviderDescriptor[] = [
     packages: ["@lhci/cli"],
     configPatterns: [/(^|\/)lighthouserc\.[cm]?[jt]s(?:on)?$/],
     scriptPattern: /(^|\s|&&|\|)lhci(?:\s|$)/,
+    scriptNames: ["health:performance", "performance", "lhci"],
     capabilities: { performance: true },
     requiresConfiguration: true,
   },
@@ -283,6 +274,7 @@ export const PROVIDERS: ProviderDescriptor[] = [
     packages: ["@changesets/cli"],
     configPatterns: [/(^|\/)\.changeset\/config\.json$/],
     scriptPattern: /(^|\s|&&|\|)changeset(?:\s|$)/,
+    scriptNames: ["health:release", "release", "changeset:status"],
     capabilities: { release: true },
     requiresConfiguration: true,
   },
@@ -303,6 +295,7 @@ export const PROVIDERS: ProviderDescriptor[] = [
     id: "publint",
     name: "Publint",
     category: "package-health",
+    runnable: true,
     packages: ["publint"],
     configPatterns: [],
     scriptPattern: /(^|\s|&&|\|)publint(?:\s|$)/,
@@ -313,6 +306,7 @@ export const PROVIDERS: ProviderDescriptor[] = [
     id: "attw",
     name: "Are The Types Wrong?",
     category: "package-health",
+    runnable: true,
     packages: ["@arethetypeswrong/cli"],
     configPatterns: [/(^|\/)\.attw\.json$/],
     scriptPattern: /(^|\s|&&|\|)attw(?:\s|$)/,
@@ -339,6 +333,7 @@ export async function detectProvider(
   descriptor: ProviderDescriptor,
   context: RepositoryContext,
 ): Promise<ProviderDetection> {
+  if (descriptor.detect) return descriptor.detect(context);
   const packageName = descriptor.packages.find((name) => context.installedPackages.has(name));
   const candidateConfigFiles = [...context.files].filter((file) =>
     descriptor.configPatterns.some((pattern) => pattern.test(file)),
@@ -391,8 +386,8 @@ export async function detectProvider(
   return detection;
 }
 
-export async function detectAllProviders(context: RepositoryContext): Promise<Map<string, ProviderDetection>> {
-  const detections = await Promise.all(PROVIDERS.map(async (provider) => [provider.id, await detectProvider(provider, context)] as const));
+export async function detectAllProviders(context: RepositoryContext, providers: readonly ProviderDescriptor[] = PROVIDERS): Promise<Map<string, ProviderDetection>> {
+  const detections = await Promise.all(providers.map(async (provider) => [provider.id, await detectProvider(provider, context)] as const));
   const result = new Map(detections);
   if (["jest", "vitest"].some((id) => result.get(id)?.activeCapabilities.testing)) {
     const generic = result.get("test-script");

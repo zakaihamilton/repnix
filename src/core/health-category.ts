@@ -1,4 +1,4 @@
-export const HEALTH_CATEGORIES = [
+export const HEALTH_CATEGORIES: string[] = [
   "types",
   "lint",
   "format",
@@ -20,9 +20,10 @@ export const HEALTH_CATEGORIES = [
   "package-health",
 ] as const;
 
-export type HealthCategory = (typeof HEALTH_CATEGORIES)[number];
+/** Built-in categories are listed in HEALTH_CATEGORIES; plugins may add string IDs. */
+export type HealthCategory = string;
 
-export const CATEGORY_LABELS: Record<HealthCategory, string> = {
+export const CATEGORY_LABELS: Record<string, string> = {
   types: "Type safety",
   lint: "Linting",
   format: "Formatting",
@@ -45,7 +46,7 @@ export const CATEGORY_LABELS: Record<HealthCategory, string> = {
 };
 
 /** Plain-language descriptions used by the human-readable CLI output. */
-export const CATEGORY_DESCRIPTIONS: Record<HealthCategory, string> = {
+export const CATEGORY_DESCRIPTIONS: Record<string, string> = {
   types: "Checks whether TypeScript catches mismatched values before your code runs.",
   lint: "Finds suspicious or inconsistent code patterns while you are developing.",
   format: "Keeps code style consistent so reviews can focus on behavior.",

@@ -1,21 +1,12 @@
-import type {
-  HealthProvider,
-  HealthResult,
-  InstallPlan,
-  ProviderRecommendation,
-  RepositoryContext,
-} from "../core/types.js";
-import { runAttw, runDependencyCruiser, runJscpd, runKnip, runOsvScanner, runPublint, runSizeLimit } from "../runners/health-runner.js";
+import type { HealthProvider, HealthResult, InstallPlan, ProviderRecommendation, RepositoryContext } from "../core/types.js";
+import { resolveDiagnosticLogger } from "../cli/options.js";
+import { runCommand } from "../runners/command-runner.js";
 import { buildInstallPlan, type SetupProviderId } from "../setup/install-plan.js";
-import { PROVIDERS, detectProvider, type ProviderDescriptor } from "./catalog.js";
+import { detectProvider, type ProviderDescriptor } from "./catalog.js";
+import { createBuiltinRegistry, type ProviderRegistry } from "./registry.js";
 
 function emptyPlan(): InstallPlan {
-  return { packages: [], files: [], commands: [], warnings: [], conflicts: [] };
-}
-
-function publishesTypes(value: unknown): boolean {
-  if (!value || typeof value !== "object") return false;
-  return Object.entries(value as Record<string, unknown>).some(([key, child]) => key === "types" || publishesTypes(child));
+  return { schemaVersion: 1, packages: [], files: [], commands: [], warnings: [], conflicts: [] };
 }
 
 class ExternalToolAdapter implements HealthProvider {
@@ -32,65 +23,45 @@ class ExternalToolAdapter implements HealthProvider {
   }
 
   async detect(context: RepositoryContext) {
-    return detectProvider(this.descriptor, context);
+    return this.descriptor.detect ? this.descriptor.detect(context) : detectProvider(this.descriptor, context);
   }
 
   async recommend(context: RepositoryContext): Promise<ProviderRecommendation | null> {
-    const detection = await this.detect(context);
-    if (Object.keys(detection.activeCapabilities).length > 0 || !["knip", "jscpd", "dependency-cruiser", "publint", "attw", "syncpack", "license-checker", "markdownlint"].includes(this.id)) return null;
-    if (this.id === "knip" && context.sourceFiles.length > 0) {
-      return { recommended: true, priority: "baseline", actionable: true, reason: "Unused files, exports, and dependencies are not covered." };
-    }
-    if (this.id === "jscpd" && context.sourceFiles.length >= 2) {
-      return { recommended: true, priority: "baseline", actionable: true, reason: "Duplication detection is not covered." };
-    }
-    if (this.id === "dependency-cruiser" && context.sourceFiles.length >= 2) {
-      return { recommended: true, priority: "optional", actionable: true, reason: "Architecture rules are not covered." };
-    }
-    if (this.id === "publint" && context.kinds.includes("npm-library")) {
-      return { recommended: true, priority: "baseline", actionable: true, reason: "Published package metadata and files are not validated." };
-    }
-    if (this.id === "attw" && context.kinds.includes("npm-library") && (context.packageJson.types || context.packageJson.typings || publishesTypes(context.packageJson.exports))) {
-      return { recommended: true, priority: "baseline", actionable: true, reason: "Published TypeScript declarations are not tested across consumer resolution modes." };
-    }
-    if (this.id === "syncpack" && context.isMonorepo) {
-      return { recommended: true, priority: "baseline", actionable: true, reason: "Workspace dependency versions and package metadata are not checked for consistency." };
-    }
-    if (this.id === "license-checker" && context.installedPackages.size > 0) {
-      return { recommended: true, priority: "optional", actionable: true, reason: "Dependency licenses are not reported against a project policy." };
-    }
-    if (this.id === "markdownlint" && [...context.files].some((file) => /\.md$/i.test(file))) {
-      return { recommended: true, priority: "optional", actionable: true, reason: "Markdown documentation is not checked for consistent structure." };
-    }
-    return null;
+    return this.descriptor.recommend?.(context) ?? null;
   }
 
   async planInstall(context: RepositoryContext): Promise<InstallPlan> {
-    return ["knip", "jscpd", "dependency-cruiser", "publint", "attw", "syncpack", "license-checker", "markdownlint"].includes(this.id)
-      ? await buildInstallPlan(context, [this.id as SetupProviderId], false)
-      : emptyPlan();
+    if (this.descriptor.planInstall) return this.descriptor.planInstall(context);
+    return this.descriptor.setup ? buildInstallPlan(context, [this.id as SetupProviderId], false) : emptyPlan();
   }
 
   async run(context: RepositoryContext): Promise<HealthResult> {
-    if (this.id === "knip") return await runKnip(context, false);
-    if (this.id === "jscpd") return await runJscpd(context, false);
-    if (this.id === "osv-scanner") return await runOsvScanner(context, false);
-    if (this.id === "dependency-cruiser") return await runDependencyCruiser(context, false);
-    if (this.id === "size-limit") return await runSizeLimit(context, false);
-    if (this.id === "publint") return await runPublint(context, false);
-    if (this.id === "attw") return await runAttw(context, false);
+    const logger = resolveDiagnosticLogger(false);
+    if (this.descriptor.run) {
+      return this.descriptor.run({
+        context,
+        runtime: {
+          logger,
+          runCommand: (command, args, options = {}) => runCommand(command, args, { cwd: options.cwd ?? context.root, logger, ...(options.env ? { env: options.env } : {}), ...(options.maxOutputBytes === undefined ? {} : { maxOutputBytes: options.maxOutputBytes }) }),
+        },
+      });
+    }
+    if (!this.descriptor.command) {
+      return { provider: this.id, name: this.name, category: this.category, status: "skipped", findings: [], durationMs: 0, message: "Detection-only provider." };
+    }
+    const result = await runCommand(this.descriptor.command.binary, this.descriptor.command.args, { cwd: context.root, logger });
     return {
       provider: this.id,
       name: this.name,
       category: this.category,
-      status: "skipped",
+      status: result.exitCode === 0 ? "pass" : result.spawnError || result.timedOut ? "error" : "fail",
       findings: [],
-      durationMs: 0,
-      message: this.id === "eslint-boundaries" ? "Architecture rules run through the existing ESLint command." : "Detection-only provider.",
+      durationMs: result.durationMs,
+      ...(result.spawnError ? { message: result.spawnError } : {}),
     };
   }
 }
 
-export function createProviderAdapters(): HealthProvider[] {
-  return PROVIDERS.map((descriptor) => new ExternalToolAdapter(descriptor));
+export function createProviderAdapters(registry: ProviderRegistry = createBuiltinRegistry()): HealthProvider[] {
+  return registry.providers.map((descriptor) => new ExternalToolAdapter(descriptor));
 }

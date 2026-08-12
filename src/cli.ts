@@ -2,7 +2,6 @@
 import { Command } from "commander";
 import { auditCommand } from "./cli/audit.js";
 import { checkCommand } from "./cli/check.js";
-import { explainCommand } from "./cli/explain.js";
 import { setupCommand } from "./cli/setup.js";
 import { addDiagnosticOptions, type DiagnosticOptions } from "./cli/options.js";
 import { VERSION } from "./core/version.js";
@@ -13,13 +12,20 @@ const program = new Command()
   .description("Find missing checks and make software repositories safer to change")
   .version(VERSION)
   .showHelpAfterError()
-  .addHelpText("after", `\nStart here:\n  repnix audit   See what your repository already checks and what is missing.\n  repnix setup   Add recommended checks after reviewing a preview.\n  repnix check   Run all active checks.\n  repnix explain  Read findings in plain language.\n\nHealth categories:\n${HEALTH_CATEGORIES.map((category) => `  ${category.padEnd(16)} ${CATEGORY_LABELS[category]} — ${CATEGORY_DESCRIPTIONS[category]}`).join("\n")}\n`);
+  .addHelpText("after", `\nStart here:\n  repnix audit   See what your repository already checks and what is missing.\n  repnix setup   Add recommended checks after reviewing a preview.\n  repnix check   Run active checks; add --details for remediation.\n\nHealth categories:\n${HEALTH_CATEGORIES.map((category) => `  ${category.padEnd(16)} ${CATEGORY_LABELS[category]} — ${CATEGORY_DESCRIPTIONS[category]}`).join("\n")}\n`);
 
-addDiagnosticOptions(program.command("audit").description("Read-only overview of active checks, missing coverage, and recommendations")).action(async (options: DiagnosticOptions) => {
+addDiagnosticOptions(program.command("audit").description("Read-only overview of active checks, missing coverage, and recommendations")
+  .option("--format <format>", "output format: text or json", "text")
+  .option("--details", "show every applicable recommendation and its evidence"))
+  .action(async (options: DiagnosticOptions & { format?: "text" | "json"; details?: boolean }) => {
   process.exitCode = await auditCommand(options);
 });
 
-addDiagnosticOptions(program.command("setup").description("Review and interactively add recommended checks")).action(async (options: DiagnosticOptions) => {
+addDiagnosticOptions(program.command("setup").description("Review and interactively add recommended checks")
+  .option("--plan", "print a read-only plan for recommended baseline checks")
+  .option("--apply-plan <file>", "review and apply a previously serialized setup plan")
+  .option("--format <format>", "plan output format: text or json", "text"))
+  .action(async (options: DiagnosticOptions & { plan?: boolean; applyPlan?: string; format?: "text" | "json" }) => {
   process.exitCode = await setupCommand(options);
 });
 
@@ -27,15 +33,19 @@ const check = program
   .command("check")
   .description("Run all active checks, or one category such as dead-code or security")
   .argument("[category]", "optional category name, for example dead-code or security")
-  .option("--json", "emit versioned JSON to stdout")
-  .action(async (category: string | undefined, options: DiagnosticOptions & { json?: boolean }) => {
+  .option("--format <format>", "output format: summary, details, json, or sarif", "summary")
+  .option("--details", "show finding remediation (shortcut for --format details)")
+  .option("--jobs <count>", "maximum concurrent repository commands", (value: string) => {
+    const jobs = Number(value);
+    if (!Number.isInteger(jobs) || jobs < 1 || jobs > 32) throw new Error("Jobs must be an integer between 1 and 32.");
+    return jobs;
+  })
+  .option("--write-baseline [path]", "record current findings and fail future checks only on new findings")
+  .action(async (category: string | undefined, options: DiagnosticOptions & { format?: "summary" | "details" | "json" | "sarif"; details?: boolean; jobs?: number; writeBaseline?: boolean | string }) => {
+    if (options.details) options.format = "details";
     process.exitCode = await checkCommand(category, options);
   });
 addDiagnosticOptions(check);
-
-addDiagnosticOptions(program.command("explain").description("Rerun checks and explain findings, locations, and next steps")).action(async (options: DiagnosticOptions) => {
-  process.exitCode = await explainCommand(options);
-});
 
 try {
   await program.parseAsync(process.argv);

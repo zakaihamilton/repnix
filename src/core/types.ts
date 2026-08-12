@@ -9,6 +9,14 @@ export type RepositoryKind =
   | "npm-library"
   | "monorepo";
 
+export type RepositoryRole = "cli" | "library" | "web-app" | "node-app" | "tooling";
+
+export interface RoleEvidence {
+  role: RepositoryRole;
+  confidence: "high" | "medium" | "configured";
+  signals: string[];
+}
+
 export interface PackageJson {
   name?: string;
   version?: string;
@@ -34,6 +42,18 @@ export interface PackageJson {
 export interface WorkspaceManifest {
   path: string;
   packageJson: PackageJson;
+}
+
+export interface RepositoryScope {
+  path: string;
+  manifestPath: string;
+  packageJson: PackageJson;
+  roles: RepositoryRole[];
+  roleEvidence: RoleEvidence[];
+  frameworks: string[];
+  languages: string[];
+  sourceFiles: string[];
+  sourceRoots: string[];
 }
 
 export interface RepositoryDiagnostic {
@@ -63,10 +83,12 @@ export interface RepositoryContext {
   sourceRoots: string[];
   workspaceRoots?: string[];
   workspaceSourceFiles?: Record<string, string[]>;
+  scopes: RepositoryScope[];
   diagnostics: RepositoryDiagnostic[];
 }
 
 export interface ProviderCapabilities {
+  [capability: string]: boolean | undefined;
   typeChecking?: boolean;
   linting?: boolean;
   formatting?: boolean;
@@ -134,6 +156,7 @@ export interface PlannedCommand {
 }
 
 export interface InstallPlan {
+  schemaVersion: 1;
   packages: PackageInstall[];
   files: FileChange[];
   commands: PlannedCommand[];
@@ -153,13 +176,21 @@ export type HealthStatus = "pass" | "warn" | "fail" | "error" | "skipped";
 
 export interface HealthFinding {
   id: string;
+  fingerprint: string;
   type: string;
+  ruleId?: string;
+  title?: string;
   provider: string;
   category: HealthCategory;
   severity: FindingSeverity;
   message: string;
   file?: string;
   line?: number;
+  column?: number;
+  scope?: string;
+  remediation?: string;
+  documentationUrl?: string;
+  baselineState?: "new" | "existing";
   metadata?: Record<string, unknown>;
 }
 
@@ -184,14 +215,35 @@ export interface HealthRun {
     frameworks: string[];
     languages: string[];
     workspaces?: string[];
+    scopes: Array<{ path: string; roles: RepositoryRole[] }>;
+    categories?: Array<{ id: string; label: string; description: string }>;
   };
   summary: {
     status: "healthy" | "findings" | "error";
     findings: number;
+    newFindings: number;
+    existingFindings: number;
+    resolvedFindings: number;
     errors: number;
     exitCode: 0 | 1 | 2;
   };
   results: HealthResult[];
+}
+
+export interface BaselineEntry {
+  fingerprint: string;
+  provider: string;
+  category: HealthCategory;
+  type: string;
+  scope?: string;
+  file?: string;
+  line?: number;
+}
+
+export interface BaselineFile {
+  schemaVersion: 1;
+  generatedAt: string;
+  entries: BaselineEntry[];
 }
 
 export interface HealthProvider {

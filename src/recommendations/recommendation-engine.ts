@@ -1,36 +1,13 @@
 import type { HealthCategory } from "../core/health-category.js";
 import type {
-  ProviderCapabilities,
   ProviderDetection,
   ProviderRecommendation,
   RepositoryContext,
 } from "../core/types.js";
-import type { RepnixConfig } from "../config/repo-health-config.js";
-import { PROVIDERS } from "../providers/catalog.js";
-
-type Capability = keyof ProviderCapabilities;
-
-const REQUIREMENTS: Record<HealthCategory, Capability[]> = {
-  types: ["typeChecking"],
-  lint: ["linting"],
-  format: ["formatting"],
-  tests: ["testing"],
-  coverage: ["testCoverage"],
-  "dead-code": ["unusedFiles", "unusedExports", "unusedDependencies"],
-  duplication: ["duplication"],
-  security: ["vulnerabilities"],
-  architecture: ["architectureRules"],
-  bundle: ["bundleBudget"],
-  accessibility: ["accessibilityRules"],
-  monorepo: ["workspaceConsistency"],
-  secrets: ["secrets"],
-  licenses: ["licenses"],
-  documentation: ["documentation"],
-  performance: ["performance"],
-  release: ["release"],
-  ci: ["ciWorkflow"],
-  "package-health": ["packagePublishing"],
-};
+import { categoryModeFor, type RepnixConfig } from "../config/repo-health-config.js";
+import { createBuiltinRegistry, type ProviderRegistry } from "../providers/registry.js";
+import { categoryDefinition, type Capability } from "../core/category-registry.js";
+import { HEALTH_CATEGORIES } from "../core/health-category.js";
 
 export type CoverageStatus = "covered" | "partial" | "missing" | "not-applicable" | "off";
 
@@ -40,6 +17,8 @@ export interface CategoryCoverage {
   providers: string[];
   capabilities: Capability[];
   missingCapabilities: Capability[];
+  scopes: string[];
+  evidence: string[];
   reason?: string;
 }
 
@@ -58,11 +37,11 @@ function hasPublishedTypes(context: RepositoryContext): boolean {
   return visit(context.packageJson.exports);
 }
 
-function requirementsFor(category: HealthCategory, context: RepositoryContext): Capability[] {
+function requirementsFor(category: HealthCategory, context: RepositoryContext, registry: ProviderRegistry): Capability[] {
   if (category === "package-health" && hasPublishedTypes(context)) {
     return ["packagePublishing", "typesCompatibility"];
   }
-  return REQUIREMENTS[category];
+  return categoryDefinition(category, registry.categoryRegistry).requiredCapabilities;
 }
 
 export interface AuditModel {
@@ -70,37 +49,11 @@ export interface AuditModel {
   detections: Map<string, ProviderDetection>;
   coverage: CategoryCoverage[];
   recommendations: Recommendation[];
+  registry?: ProviderRegistry;
 }
 
-function isApplicable(category: HealthCategory, context: RepositoryContext): boolean {
-  switch (category) {
-    case "types":
-      return context.languages.includes("TypeScript");
-    case "bundle":
-      return context.kinds.includes("react") || context.kinds.includes("nextjs") || context.kinds.includes("npm-library");
-    case "accessibility":
-      return context.kinds.includes("react") || context.kinds.includes("nextjs");
-    case "monorepo":
-      return context.isMonorepo;
-    case "package-health":
-      return context.kinds.includes("npm-library");
-    case "coverage":
-      return context.sourceFiles.length > 0 && context.manifests.some((manifest) => Object.keys(manifest.packageJson.scripts ?? {}).some((name) => /^(test|test:run|check:test)/.test(name)));
-    case "secrets":
-      return context.files.size > 0;
-    case "licenses":
-      return context.installedPackages.size > 0;
-    case "documentation":
-      return [...context.files].some((file) => /\.md$/i.test(file));
-    case "performance":
-      return context.kinds.includes("react") || context.kinds.includes("nextjs") || context.kinds.includes("npm-library");
-    case "release":
-      return context.kinds.includes("npm-library") || context.isMonorepo;
-    case "ci":
-      return context.hasCI;
-    default:
-      return context.sourceFiles.length > 0;
-  }
+function isApplicable(category: HealthCategory, context: RepositoryContext, registry: ProviderRegistry): boolean {
+  return categoryDefinition(category, registry.categoryRegistry).applicable(context).applicable;
 }
 
 function coverageFor(
@@ -108,14 +61,17 @@ function coverageFor(
   context: RepositoryContext,
   detections: Map<string, ProviderDetection>,
   config: RepnixConfig,
+  registry: ProviderRegistry,
 ): CategoryCoverage {
-  if (config.categories?.[category] === "off") {
-    return { category, status: "off", providers: [], capabilities: [], missingCapabilities: [] };
+  const applicability = categoryDefinition(category, registry.categoryRegistry).applicable(context);
+  const enabledScopes = applicability.scopes.filter((scope) => categoryModeFor(config, category, scope) !== "off");
+  if (categoryModeFor(config, category) === "off" || (applicability.applicable && enabledScopes.length === 0)) {
+    return { category, status: "off", providers: [], capabilities: [], missingCapabilities: [], scopes: applicability.scopes, evidence: ["disabled in repnix.config.json"] };
   }
-  if (!isApplicable(category, context)) {
-    return { category, status: "not-applicable", providers: [], capabilities: [], missingCapabilities: [] };
+  if (!applicability.applicable) {
+    return { category, status: "not-applicable", providers: [], capabilities: [], missingCapabilities: [], scopes: [], evidence: [] };
   }
-  const required = requirementsFor(category, context);
+  const required = requirementsFor(category, context, registry);
   if (required.length === 0) {
     return {
       category,
@@ -123,16 +79,16 @@ function coverageFor(
       providers: [],
       capabilities: [],
       missingCapabilities: [],
+      scopes: enabledScopes,
+      evidence: applicability.evidence,
       reason: "No installable provider is available for this category in the MVP.",
     };
   }
   const providers: string[] = [];
   const active = new Set<Capability>();
-  for (const descriptor of PROVIDERS) {
+  for (const descriptor of registry.providers) {
     const detection = detections.get(descriptor.id);
     if (!detection) continue;
-    const explicitlyDisabled = config.providers?.[descriptor.id as keyof NonNullable<RepnixConfig["providers"]>]?.enabled === false;
-    if (explicitlyDisabled) continue;
     const matching = required.filter((capability) => detection.activeCapabilities[capability]);
     if (matching.length > 0) {
       providers.push(descriptor.name);
@@ -147,6 +103,8 @@ function coverageFor(
     providers,
     capabilities: [...active],
     missingCapabilities,
+    scopes: enabledScopes,
+    evidence: applicability.evidence,
   };
 }
 
@@ -154,12 +112,13 @@ export function buildAuditModel(
   context: RepositoryContext,
   detections: Map<string, ProviderDetection>,
   config: RepnixConfig,
+  registry: ProviderRegistry = createBuiltinRegistry(),
 ): AuditModel {
-  const categories = Object.keys(REQUIREMENTS) as HealthCategory[];
-  const coverage = categories.map((category) => coverageFor(category, context, detections, config));
+  const categories = [...new Set([...HEALTH_CATEGORIES, ...registry.categories.map((category) => category.id)])];
+  const coverage = categories.map((category) => coverageFor(category, context, detections, config, registry));
   const byCategory = new Map(coverage.map((entry) => [entry.category, entry]));
   const recommendations: Recommendation[] = [];
-  const providerEnabled = (id: string) => (config.providers as Record<string, { enabled: boolean }> | undefined)?.[id]?.enabled !== false;
+  const providerEnabled = (_id: string) => true;
 
   const deadCode = byCategory.get("dead-code")!;
   const knip = detections.get("knip")!;
@@ -317,32 +276,39 @@ export function buildAuditModel(
     if (
       coverageEntry.status === "off" ||
       coverageEntry.status === "not-applicable" ||
-      detection?.activeCapabilities[REQUIREMENTS[category][0]!] ||
+      detection?.activeCapabilities[categoryDefinition(category).requiredCapabilities[0]!] ||
       !providerEnabled(provider)
     ) return;
     recommendations.push({ provider, name, category, recommended: true, priority, actionable, reason });
   };
 
-  if (context.kinds.includes("react") || context.kinds.includes("nextjs")) {
+  if (isApplicable("accessibility", context, registry)) {
     addMissing("jsx-a11y", "eslint-plugin-jsx-a11y", "accessibility", "baseline", false, "This UI repository uses JSX, but no active accessibility rules were detected. Enable jsx-a11y’s recommended rules in the existing ESLint configuration.");
   }
   if (context.isMonorepo) {
     addMissing("syncpack", "syncpack", "monorepo", "baseline", true, "This repository contains multiple workspaces, but dependency versions and package metadata are not being checked for consistency.");
   }
-  if (isApplicable("coverage", context)) {
+  if (isApplicable("coverage", context, registry)) {
     addMissing("c8", "c8", "coverage", "baseline", false, "Tests are present, but no coverage command is active. Add a project-specific coverage command and threshold rather than treating raw line counts as a universal quality score.");
     addMissing("stryker", "Stryker", "coverage", "advanced", false, "Mutation testing measures whether tests catch behavior changes. It requires a test-specific configuration and can be expensive, so it is an advanced recommendation.");
   }
   addMissing("gitleaks", "Gitleaks", "secrets", "baseline", false, "No secret scanner is active. Gitleaks can detect credentials before they reach the repository or CI artifacts.");
   addMissing("license-checker", "license-checker", "licenses", "optional", true, "Dependencies are present, but no license report is active. Add an allow/deny policy before making license violations fail CI.");
   addMissing("markdownlint", "markdownlint", "documentation", "optional", true, "Markdown documentation is present, but no documentation style check is active.");
-  if (isApplicable("performance", context)) {
+  if (isApplicable("performance", context, registry)) {
     addMissing("lhci", "Lighthouse CI", "performance", "optional", false, "This repository ships frontend or package output, but no runtime performance budget is active. Configure Lighthouse CI against a real URL or build.");
   }
-  if (isApplicable("release", context)) {
+  if (isApplicable("release", context, registry)) {
     addMissing("changesets", "Changesets", "release", "optional", false, "This repository appears publishable or multi-package, but release metadata is not being checked. Changesets can make version and changelog intent explicit.");
   }
   addMissing("actionlint", "actionlint", "ci", "optional", false, "GitHub Actions workflows are present, but their syntax and common automation mistakes are not being checked.");
 
-  return { context, detections, coverage, recommendations };
+  for (const provider of registry.providers) {
+    if (!provider.recommend || recommendations.some((recommendation) => recommendation.provider === provider.id)) continue;
+    const recommendation = provider.recommend(context);
+    if (!recommendation) continue;
+    recommendations.push({ provider: provider.id, name: provider.name, category: provider.category, ...recommendation });
+  }
+
+  return { context, detections, coverage, recommendations, registry };
 }

@@ -14,6 +14,16 @@
   "bin": {
     "repnix": "dist/cli.js"
   },
+  "exports": {
+    ".": {
+      "types": "./dist/cli.d.ts",
+      "import": "./dist/cli.js"
+    },
+    "./provider-sdk": {
+      "types": "./dist/providers/sdk.d.ts",
+      "import": "./dist/providers/sdk.js"
+    }
+  },
   "files": [
     "dist",
     "README.md",
