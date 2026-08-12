@@ -70,7 +70,7 @@ describe("setup TUI presentation", () => {
     expect(message).toContain("Conflicting lockfiles detected: package-lock.json, yarn.lock.");
     expect(message).toContain("add its packageManager entry to package.json");
     expect(message).toContain("remove any stale lockfiles");
-    expect(message).toContain("repnix audit");
+    expect(message).toContain("repnix setup");
   });
 
   it("uses filled square selection indicators", () => {

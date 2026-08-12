@@ -38,11 +38,11 @@ export function setupDetectionErrorMessage(diagnostics: RepositoryDiagnostic[]):
   const instructions = errors.map((diagnostic) => {
     switch (diagnostic.code) {
       case "ambiguous-package-manager":
-        return "How to fix: choose the intended package manager, add its packageManager entry to package.json, and remove any stale lockfiles. Then rerun `repnix audit`.";
+        return "How to fix: choose the intended package manager, add its packageManager entry to package.json, and remove any stale lockfiles. Then rerun `repnix setup`.";
       case "unsupported-package-manager":
-        return "How to fix: set package.json#packageManager to npm, pnpm, yarn, or bun (optionally with a version), then rerun `repnix audit`.";
+        return "How to fix: set package.json#packageManager to npm, pnpm, yarn, or bun (optionally with a version), then rerun `repnix setup`.";
       default:
-        return "How to fix: resolve this repository detection issue, then rerun `repnix audit`.";
+        return "How to fix: resolve this repository detection issue, then rerun `repnix setup`.";
     }
   });
 
