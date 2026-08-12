@@ -22,6 +22,7 @@ export interface SetupTuiModel {
   checkOutput?: string;
   checkExitCode?: number | null;
   checkScroll?: number;
+  checkProgress?: string[];
   error?: string;
 }
 
@@ -49,6 +50,7 @@ export type SetupTuiAction =
   | { type: "progress"; message: string }
   | { type: "complete" }
   | { type: "begin-check" }
+  | { type: "check-progress"; message: string }
   | { type: "check-complete"; output: string; exitCode: number | null }
   | { type: "move-check"; direction: "up" | "down"; lineCount: number; viewport: number }
   | { type: "back-to-success" }
@@ -151,7 +153,9 @@ export function setupTuiReducer(model: SetupTuiModel, action: SetupTuiAction): S
     case "complete":
       return { ...model, screen: "success" };
     case "begin-check":
-      return { ...model, screen: "checking", checkOutput: "", checkExitCode: null, checkScroll: 0 };
+      return { ...model, screen: "checking", checkOutput: "", checkExitCode: null, checkScroll: 0, checkProgress: ["Preparing configured checks…"] };
+    case "check-progress":
+      return { ...model, checkProgress: [...(model.checkProgress ?? []), action.message].slice(-6) };
     case "check-complete":
       return { ...model, screen: "check-details", checkOutput: action.output, checkExitCode: action.exitCode, checkScroll: 0 };
     case "move-check":

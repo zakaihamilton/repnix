@@ -258,6 +258,14 @@ describe("setup TUI state", () => {
     expect(model.screen).toBe("select");
   });
 
+  it("keeps recent live check activity while a health check runs", () => {
+    let model = createSetupTuiModel(recommendations);
+    model = setupTuiReducer(model, { type: "begin-check" });
+    model = setupTuiReducer(model, { type: "check-progress", message: "Running TypeScript" });
+    model = setupTuiReducer(model, { type: "check-progress", message: "Finished TypeScript" });
+    expect(model.checkProgress).toEqual(["Preparing configured checks…", "Running TypeScript", "Finished TypeScript"]);
+  });
+
   it("opens and scrolls the manual recommendations page", () => {
     let model = createSetupTuiModel(recommendations);
     model = setupTuiReducer(model, { type: "begin-manual" });

@@ -916,13 +916,16 @@ export async function runHealth(
 
     const commands = await basicCommands(context, detections, timeoutMs);
     const commandTasks = commands.filter((runnable) => (!options.category || runnable.category === options.category) && !categoryOff(runnable.category, runnable.scope ?? ".")).map((runnable) => async () => {
+      logger.info("health.provider.start", `Running ${runnable.name}`, { provider: runnable.provider, category: runnable.category });
       const result = await runCommand(runnable.command, runnable.args, {
         cwd: context.root,
         logger,
         env: { ...HEALTH_OFFLINE_ENV, ...runnable.env },
         ...(runnable.timeoutMs === undefined ? {} : { timeoutMs: runnable.timeoutMs }),
       });
-      return commandResult(runnable, result, context);
+      const healthResult = commandResult(runnable, result, context);
+      logger.info("health.provider.finish", `Finished ${runnable.name}`, { provider: runnable.provider, category: runnable.category, status: healthResult.status });
+      return healthResult;
     });
     results.push(...await runBounded(commandTasks, options.jobs ?? config.execution.jobs));
     const providerTasks: Array<() => Promise<HealthResult>> = [];
@@ -930,7 +933,13 @@ export async function runHealth(
     const schedule = (provider: string, task: () => Promise<HealthResult>) => {
       if (scheduledProviders.has(provider)) return;
       scheduledProviders.add(provider);
-      providerTasks.push(task);
+      providerTasks.push(async () => {
+        const name = builtinProvider(provider)?.name ?? provider;
+        logger.info("health.provider.start", `Running ${name}`, { provider });
+        const result = await task();
+        logger.info("health.provider.finish", `Finished ${name}`, { provider, category: result.category, status: result.status });
+        return result;
+      });
     };
     if ((!options.category || options.category === "dead-code") && !categoryOff("dead-code") && detections.get("knip")?.installed && enabled("knip")) {
       schedule("knip", () => runKnip(context, logger, timeoutMs));

@@ -20,7 +20,7 @@ export interface SetupTuiDependencies {
   audit: typeof auditRepository;
   buildPlan: typeof buildInstallPlan;
   applyPlan: typeof applyInstallPlan;
-  runCheck: (root: string, logger: DiagnosticLogger, timeoutMs?: number) => Promise<CommandResult>;
+  runCheck: (root: string, logger: DiagnosticLogger, timeoutMs?: number, onProgress?: (message: string) => void) => Promise<CommandResult>;
 }
 
 export interface SetupTuiProps {
@@ -30,12 +30,27 @@ export interface SetupTuiProps {
   result: { code: number };
 }
 
-async function runSetupCheck(root: string, logger: DiagnosticLogger, timeoutMs?: number): Promise<CommandResult> {
-  const options = { cwd: root, logger, ...(timeoutMs === undefined ? {} : { timeoutMs }) };
+async function runSetupCheck(root: string, logger: DiagnosticLogger, timeoutMs?: number, onProgress?: (message: string) => void): Promise<CommandResult> {
+  let pendingDiagnostics = "";
+  const onOutput = (stream: "stdout" | "stderr", chunk: Buffer) => {
+    if (stream !== "stderr") return;
+    pendingDiagnostics += chunk.toString();
+    const lines = pendingDiagnostics.split("\n");
+    pendingDiagnostics = lines.pop() ?? "";
+    for (const line of lines) {
+      try {
+        const event = JSON.parse(line) as { event?: string; message?: string };
+        if (event.event === "health.provider.start" || event.event === "health.provider.finish") onProgress?.(event.message ?? "Check progress updated");
+      } catch {
+        // Diagnostics are optional; the final JSON report remains authoritative.
+      }
+    }
+  };
+  const commandOptions = { cwd: root, logger, onOutput, ...(timeoutMs === undefined ? {} : { timeoutMs }) };
   const localCommand = path.join(root, "node_modules", ".bin", process.platform === "win32" ? "repnix.cmd" : "repnix");
-  const args = ["check", "--format", "json", "--quiet"];
-  const localResult = await runCommand(localCommand, args, options);
-  return localResult.spawnError ? runCommand("repnix", args, options) : localResult;
+  const args = ["check", "--format", "json", "--log-format", "json", "--log-level", "info"];
+  const localResult = await runCommand(localCommand, args, commandOptions);
+  return localResult.spawnError ? runCommand("repnix", args, commandOptions) : localResult;
 }
 
 const defaultDependencies: SetupTuiDependencies = { audit: auditRepository, buildPlan: buildInstallPlan, applyPlan: applyInstallPlan, runCheck: runSetupCheck };
@@ -83,8 +98,8 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
   useEffect(() => {
     if (model.screen !== "checking" || !audit || startedCheck.current) return;
     startedCheck.current = true;
-    void deps.runCheck(audit.context.root, logger, options.timeout === undefined ? undefined : options.timeout * 1000).then((check) => {
-      const output = [check.stdout.trimEnd(), check.stderr.trimEnd(), check.spawnError ? `Error: ${check.spawnError}` : ""].filter(Boolean).join("\n");
+    void deps.runCheck(audit.context.root, logger, options.timeout === undefined ? undefined : options.timeout * 1000, (message) => dispatch({ type: "check-progress", message })).then((check) => {
+      const output = [check.stdout.trimEnd(), check.spawnError ? `Error: ${check.spawnError}` : ""].filter(Boolean).join("\n");
       dispatch({ type: "check-complete", output, exitCode: check.exitCode });
     }).catch((error: unknown) => dispatch({ type: "check-complete", output: `Error: ${error instanceof Error ? error.message : String(error)}`, exitCode: null }));
   }, [model.screen]);
@@ -194,7 +209,7 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
       {model.screen === "details" && plan ? <DetailsView plan={plan} model={model} width={width} layout={layout} theme={theme} /> : null}
       {model.screen === "confirm" && audit && plan ? <ConfirmView audit={audit} plan={plan} model={model} compact={compact} theme={theme} /> : null}
       {model.screen === "applying" && plan ? <ApplyView plan={plan} model={model} theme={theme} /> : null}
-      {model.screen === "checking" ? <Panel title="Running check" theme={theme} borderColor={theme.info}><Text color={theme.info}>◌ Running `repnix check`…</Text><Text color={theme.muted}>Output will appear here when the check completes.</Text></Panel> : null}
+      {model.screen === "checking" ? <Panel title="Running check" theme={theme} borderColor={theme.info}><Text color={theme.info} bold>◌ Running repository health checks</Text><Text color={theme.muted}>Checks may run in parallel. Completed results will appear when all checks finish.</Text><Newline /><Text color={theme.secondary} bold>LIVE ACTIVITY</Text>{(model.checkProgress ?? ["Preparing configured checks…"]).map((message, index, entries) => <Text key={`${index}-${message}`} color={index === entries.length - 1 ? theme.primary : theme.muted}>{index === entries.length - 1 ? "◌" : "✓"} {message}</Text>)}</Panel> : null}
       {model.screen === "success" ? <Panel title="Setup complete" theme={theme} borderColor={theme.success}><Text color={theme.success}>● Repository health setup completed successfully.</Text><Newline /><Text>{model.progress}</Text><Text color={theme.primary} bold>Press Enter to run `repnix check` now.</Text><Text color={theme.muted}>Run a category with --details later when you need more context.</Text></Panel> : null}
       {model.screen === "check-details" ? <CheckDetailsView model={model} width={width} layout={layout} theme={theme} /> : null}
       {model.screen === "error" ? <Panel title="Setup stopped" theme={theme} borderColor={theme.danger}><Text color={theme.danger}>◆ {model.error ?? "An unexpected error occurred."}</Text><Newline /><Text color={theme.muted}>No further changes will be applied.</Text></Panel> : null}
