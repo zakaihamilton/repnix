@@ -6,7 +6,7 @@ import type { DiagnosticLogger, DiagnosticOptions } from "../cli/options.js";
 import { resolveDiagnosticLogger } from "../cli/options.js";
 import { auditRepository } from "../cli/audit.js";
 import type { AuditModel } from "../recommendations/recommendation-engine.js";
-import type { InstallPlan } from "../core/types.js";
+import type { HealthFinding, HealthRun, InstallPlan } from "../core/types.js";
 import { runCommand, type CommandResult } from "../runners/command-runner.js";
 import { applyInstallPlan } from "../setup/apply-plan.js";
 import { buildInstallPlan } from "../setup/install-plan.js";
@@ -15,7 +15,7 @@ import { createSetupTuiModel, selectionItems, setupTuiReducer, type SetupTuiMode
 import { auditContentLineCount, auditPageSummary, auditRecommendationSummary, auditSetupOptions, auditStatusPresentation, manualContentLineCount, manualRecommendationLines, manualRecommendationSteps, manualRecommendationViewport, selectedSetupOptions, setupCheckDetails, type AuditPageSummary, type SetupCheckDetails } from "./setup-helpers.js";
 import { createSetupTuiTheme, diffLineColor, normalizeTuiDiffLine, selectionIndicator, selectionRowPresentation, setupPaneLayout, setupStepIndex, tuiLayoutMetrics, clampTuiScroll, type ColorOutput, type SetupPaneLayout, type SetupTuiTheme, type ThemeEnvironment, type TuiLayoutMetrics } from "./setup-theme.js";
 import { Footer, Header, Panel, progressMessage } from "./setup-components.js";
-import { ApplyView, AuditView, CheckDetailsView, ConfirmView, DetailsView, ManualRecommendationsView, ReviewView, SelectView, auditUsesSingleColumn, AUDIT_LABEL_COLUMN_WIDTH, AUDIT_TWO_COLUMN_MIN_WIDTH, setupCheckActions, setupCheckOutputLines, setupCheckRows } from "./setup-views.js";
+import { ApplyView, AuditView, CheckDetailsView, ConfirmView, DetailsView, ManualRecommendationsView, ReviewView, SelectView, auditUsesSingleColumn, AUDIT_LABEL_COLUMN_WIDTH, AUDIT_TWO_COLUMN_MIN_WIDTH, setupCheckActions, setupCheckCommand, setupCheckOutputLines, setupCheckRows } from "./setup-views.js";
 
 export interface SetupTuiDependencies {
   audit: typeof auditRepository;
@@ -63,6 +63,92 @@ function markdownCell(value: string): string {
   return value.replaceAll("|", "\\|").replaceAll("\n", " ");
 }
 
+function markdownCode(value: string): string {
+  return value.replaceAll("`", "\\`").replaceAll("\n", " ");
+}
+
+function parseSetupHealthRun(output: string): HealthRun | undefined {
+  try {
+    const parsed: unknown = JSON.parse(output);
+    return parsed && typeof parsed === "object" && "results" in parsed && Array.isArray((parsed as { results?: unknown }).results)
+      ? parsed as HealthRun
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function findingLocation(finding: HealthFinding): string | undefined {
+  return finding.file ? `${finding.file}${finding.line ? `:${finding.line}${finding.column ? `:${finding.column}` : ""}` : ""}` : undefined;
+}
+
+function findingMetadata(finding: HealthFinding): string | undefined {
+  if (!finding.metadata || Object.keys(finding.metadata).length === 0) return undefined;
+  return JSON.stringify(finding.metadata, null, 2).replaceAll("```", "``\\`");
+}
+
+export function renderSetupHealthReport(output: string): string {
+  const run = parseSetupHealthRun(output);
+  if (!run) return ["# RepNix health report", "", "The health check did not produce structured results, so RepNix could not create an AI-ready report.", "", "Run `repnix check` again and include its output when asking for help.", ""].join("\n");
+  const rows = setupCheckRows(output);
+  const actions = setupCheckActions(output);
+  const lines = [
+    "# RepNix health report",
+    "",
+    "This report is designed to be pasted into an AI coding assistant so it can investigate and fix the reported repository-health issues.",
+    "",
+    "## Instructions for an AI assistant",
+    "",
+    "1. Work only on the issues in this report, starting with setup errors and failed checks.",
+    "2. Inspect the referenced files and make the smallest safe changes that resolve the findings.",
+    "3. Preserve intended behaviour and do not suppress, baseline, or disable a check merely to make it pass unless explicitly asked.",
+    "4. Run the listed verification commands after making changes and report anything that remains.",
+    "",
+    "## Repository context",
+    "",
+    `- Package manager: ${run.repository.packageManager ?? "unknown"}`,
+    `- Repository root: ${run.repository.root ?? "unknown"}`,
+    `- Generated: ${run.generatedAt ?? "unknown"}`,
+    "",
+    "## Check results",
+    "",
+    "| Status | Check | Result | Provider |",
+    "| --- | --- | --- | --- |",
+  ];
+  for (const row of rows) lines.push(`| ${checkStatusLabelForFile(row.status)} | ${markdownCell(row.category)} | ${markdownCell(row.result)} | ${markdownCell(row.providers)} |`);
+  lines.push("", "## Recommended fix order", "");
+  if (actions.length) {
+    actions.forEach((action, index) => {
+      lines.push(`${index + 1}. ${action.title}`);
+      if (action.detail) lines.push(`   - Why: ${markdownCell(action.detail)}`);
+      lines.push(`   - Run: \`${markdownCode(action.command)}\``);
+    });
+  } else {
+    lines.push("All configured checks passed.");
+  }
+  lines.push("", "## Complete finding details");
+  run.results.forEach((result, resultIndex) => {
+    const category = run.repository.categories?.find((item) => item.id === result.category)?.label ?? result.category;
+    const command = setupCheckCommand(run, result);
+    lines.push("", `### ${resultIndex + 1}. ${markdownCell(category)} — ${markdownCell(result.name)}`, "", `- Status: ${checkStatusLabelForFile(result.status)}`, `- Run: \`${markdownCode(command)}\``, `- Findings: ${result.findings.length}`);
+    if (result.message) lines.push(`- Check message: ${markdownCell(result.message)}`);
+    if (result.scope) lines.push(`- Scope: ${markdownCode(result.scope)}`);
+    result.findings.forEach((finding, findingIndex) => {
+      lines.push("", `#### Finding ${findingIndex + 1}: ${markdownCell(finding.title ?? finding.ruleId ?? finding.type)}`, "", `- Severity: ${finding.severity}`, `- Message: ${markdownCell(finding.message)}`);
+      const location = findingLocation(finding);
+      if (location) lines.push(`- Location: \`${markdownCode(location)}\``);
+      if (finding.ruleId) lines.push(`- Rule: \`${markdownCode(finding.ruleId)}\``);
+      if (finding.remediation) lines.push(`- Suggested remediation: ${markdownCell(finding.remediation)}`);
+      if (finding.documentationUrl) lines.push(`- Documentation: ${finding.documentationUrl}`);
+      if (finding.baselineState) lines.push(`- Baseline: ${finding.baselineState}`);
+      const metadata = findingMetadata(finding);
+      if (metadata) lines.push("", "<details>", "<summary>Tool context</summary>", "", "```json", metadata, "```", "", "</details>");
+    });
+  });
+  lines.push("", "## Verify", "", "```sh", "repnix check", "```", "");
+  return lines.join("\n");
+}
+
 export function renderSetupCheckSummary(output: string): string {
   const rows = setupCheckRows(output);
   const actions = setupCheckActions(output);
@@ -95,12 +181,12 @@ function checkStatusLabelForFile(status: "pass" | "warn" | "fail" | "error" | "s
 
 export async function saveSetupCheckReports(root: string, output: string): Promise<SavedSetupCheckReports | undefined> {
   try {
-    const report = JSON.parse(output) as unknown;
+    JSON.parse(output);
     const directory = path.join(root, ".repnix");
-    const reportPath = ".repnix/health-report.json";
+    const reportPath = ".repnix/health-report.md";
     const summaryPath = ".repnix/check-results.md";
     await mkdir(directory, { recursive: true });
-    await writeFile(path.join(root, reportPath), `${JSON.stringify(report, null, 2)}\n`, "utf8");
+    await writeFile(path.join(root, reportPath), renderSetupHealthReport(output), "utf8");
     await writeFile(path.join(root, summaryPath), renderSetupCheckSummary(output), "utf8");
     return { reportPath, summaryPath };
   } catch {

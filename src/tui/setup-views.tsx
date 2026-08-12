@@ -164,7 +164,7 @@ function groupedCheckResults(run: HealthRun): Array<{ category: string; results:
   }));
 }
 
-function resultCommand(run: HealthRun, result: HealthResult): string {
+export function setupCheckCommand(run: HealthRun, result: HealthResult): string {
   const manager = run.repository.packageManager ?? "npm";
   if (result.provider.startsWith("script:")) return `${manager} run ${result.provider.slice("script:".length)}`;
   const healthScripts: Record<string, string> = {
@@ -189,13 +189,13 @@ export function setupCheckActions(output: string): SetupCheckAction[] {
       const primary = group.results.find((result) => result.status === group.status) ?? group.results[0]!;
       const label = run.repository.categories?.find((item) => item.id === group.category)?.label ?? CATEGORY_LABELS[group.category] ?? group.category;
       if (group.status === "error") {
-        return { kind: "setup", title: `Set up ${label}`, detail: conciseCheckError(primary), command: resultCommand(run, primary) };
+        return { kind: "setup", title: `Set up ${label}`, detail: conciseCheckError(primary), command: setupCheckCommand(run, primary) };
       }
       const count = `${group.findings} finding${group.findings === 1 ? "" : "s"}`;
       return {
         kind: group.status === "fail" ? "fix" : "review",
         title: `${group.status === "fail" ? "Fix" : "Review"} ${label} (${count})`,
-        command: resultCommand(run, primary),
+        command: setupCheckCommand(run, primary),
       };
     });
 }
@@ -233,7 +233,7 @@ export function CheckDetailsView({ model, width, layout, theme }: { model: Setup
       {visible.map((row) => <Box key={row.category} flexDirection="row"><Box width={9} flexShrink={0}><Text color={checkStatusColor(row.status, theme)} bold>{checkStatusLabel(row.status)}</Text></Box><Box width={27} flexShrink={0}><Text {...textColor(theme)} wrap="truncate-end">{row.category}</Text></Box><Box width={17} flexShrink={0}><Text color={checkStatusColor(row.status, theme)} wrap="truncate-end">{row.result}</Text></Box><Box flexGrow={1} overflow="hidden"><Text {...textColor(theme)} wrap="truncate-end">{row.providers}</Text></Box></Box>)}
       {actions.length && scroll === 0 ? <><Newline /><Text color={theme.secondary} bold>NEXT STEPS · DO THESE IN ORDER</Text>{actions.slice(0, 4).map((action, index) => <Box key={`${action.kind}-${action.title}`} flexDirection="column"><Text color={action.kind === "setup" ? theme.danger : action.kind === "fix" ? theme.warning : theme.info} bold>{`${index + 1}. ${action.title}`}</Text>{action.detail ? <Text color={theme.muted} wrap="truncate-end">   {action.detail}</Text> : null}<Text color={theme.primary}>   $ {action.command}</Text></Box>)}<Newline /><Text color={theme.muted}>Verify: $ repnix check</Text></> : null}
       {model.checkSummaryPath ? <Text color={theme.muted}>Runbook saved: {model.checkSummaryPath}</Text> : null}
-      {model.checkReportPath ? <Text color={theme.muted}>Full JSON saved: {model.checkReportPath}</Text> : null}
+      {model.checkReportPath ? <Text color={theme.muted}>AI-ready report saved: {model.checkReportPath}</Text> : null}
       {scroll + visible.length < rows.length ? <Text color={theme.muted}>↓ more · use ↑↓ to scroll</Text> : null}
     </Panel>;
   }

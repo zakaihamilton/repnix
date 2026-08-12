@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { AUDIT_LABEL_COLUMN_WIDTH, AUDIT_TWO_COLUMN_MIN_WIDTH, COMPACT_LAYOUT_HEIGHT, COMPACT_LAYOUT_WIDTH, HORIZONTAL_PANE_MIN_WIDTH, auditContentLineCount, auditPageSummary, auditRecommendationSummary, auditSetupOptions, auditStatusPresentation, auditUsesSingleColumn, clampTuiScroll, createSetupTuiTheme, diffLineColor, manualContentLineCount, manualRecommendationLines, manualRecommendationSteps, manualRecommendationViewport, normalizeTuiDiffLine, renderSetupCheckSummary, saveSetupCheckReports, selectedSetupOptions, selectionIndicator, selectionRowPresentation, setupCheckActions, setupCheckDetails, setupCheckOutputLines, setupCheckRows, setupPaneLayout, setupStepIndex, tuiLayoutMetrics } from "../src/tui/setup-app.js";
+import { AUDIT_LABEL_COLUMN_WIDTH, AUDIT_TWO_COLUMN_MIN_WIDTH, COMPACT_LAYOUT_HEIGHT, COMPACT_LAYOUT_WIDTH, HORIZONTAL_PANE_MIN_WIDTH, auditContentLineCount, auditPageSummary, auditRecommendationSummary, auditSetupOptions, auditStatusPresentation, auditUsesSingleColumn, clampTuiScroll, createSetupTuiTheme, diffLineColor, manualContentLineCount, manualRecommendationLines, manualRecommendationSteps, manualRecommendationViewport, normalizeTuiDiffLine, renderSetupCheckSummary, renderSetupHealthReport, saveSetupCheckReports, selectedSetupOptions, selectionIndicator, selectionRowPresentation, setupCheckActions, setupCheckDetails, setupCheckOutputLines, setupCheckRows, setupPaneLayout, setupStepIndex, tuiLayoutMetrics } from "../src/tui/setup-app.js";
 import { createSetupTuiModel, selectionItems, setupTuiReducer } from "../src/tui/setup-state.js";
 import type { AuditModel, Recommendation } from "../src/recommendations/recommendation-engine.js";
 import type { RepositoryContext } from "../src/core/types.js";
@@ -237,15 +237,25 @@ describe("setup TUI presentation", () => {
 
   it("automatically saves structured results and a runnable check summary in the repository", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "repnix-setup-report-"));
-    const output = JSON.stringify({ repository: { packageManager: "yarn", categories: [] }, results: [{ provider: "jscpd", name: "jscpd", category: "duplication", status: "warn", findings: [{}, {}] }] });
+    const output = JSON.stringify({ repository: { packageManager: "yarn", categories: [] }, results: [{ provider: "jscpd", name: "jscpd", category: "duplication", status: "warn", findings: [{ id: "duplicate", fingerprint: "duplicate", type: "duplicate-block", provider: "jscpd", category: "duplication", severity: "warning", message: "Duplicated code", file: "src/example.ts", remediation: "Extract shared code." }] }] });
     try {
       const saved = await saveSetupCheckReports(root, output);
-      expect(saved).toEqual({ reportPath: ".repnix/health-report.json", summaryPath: ".repnix/check-results.md" });
-      expect(JSON.parse(await readFile(path.join(root, saved!.reportPath), "utf8"))).toEqual(JSON.parse(output));
+      expect(saved).toEqual({ reportPath: ".repnix/health-report.md", summaryPath: ".repnix/check-results.md" });
+      expect(await readFile(path.join(root, saved!.reportPath), "utf8")).toContain("## Instructions for an AI assistant");
       expect(await readFile(path.join(root, saved!.summaryPath), "utf8")).toContain("yarn run health:duplication");
     } finally {
       await rm(root, { recursive: true, force: true });
     }
+  });
+
+  it("renders all finding context in the AI-ready health report", () => {
+    const output = JSON.stringify({ repository: { root: "/repo", packageManager: "npm", categories: [] }, results: [{ provider: "script:lint", name: "Lint", category: "lint", status: "fail", findings: [{ id: "lint", fingerprint: "lint", type: "lint-rule", ruleId: "no-any", provider: "Lint", category: "lint", severity: "error", message: "Avoid any.", file: "src/index.ts", line: 4, column: 12, remediation: "Use a concrete type.", documentationUrl: "https://example.com/no-any", metadata: { source: "eslint" } }] }] });
+    const report = renderSetupHealthReport(output);
+    expect(report).toContain("## Instructions for an AI assistant");
+    expect(report).toContain("src/index.ts:4:12");
+    expect(report).toContain("Suggested remediation: Use a concrete type.");
+    expect(report).toContain('"source": "eslint"');
+    expect(report).toContain("npm run lint");
   });
 
   it("renders every actionable check command in the saved summary", () => {
