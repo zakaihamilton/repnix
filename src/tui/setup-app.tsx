@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import path from "node:path";
 import { Box, Newline, Text, render, useApp, useInput, useStdout } from "ink";
 import type { DiagnosticLogger, DiagnosticOptions } from "../cli/options.js";
 import { resolveDiagnosticLogger } from "../cli/options.js";
 import { auditRepository } from "../cli/audit.js";
 import type { AuditModel } from "../recommendations/recommendation-engine.js";
 import type { InstallPlan } from "../core/types.js";
+import { runCommand, type CommandResult } from "../runners/command-runner.js";
 import { applyInstallPlan } from "../setup/apply-plan.js";
 import { buildInstallPlan } from "../setup/install-plan.js";
 import { renderFileDiff } from "../setup/file-plan.js";
@@ -12,12 +14,13 @@ import { createSetupTuiModel, selectionItems, setupTuiReducer, type SetupTuiMode
 import { auditContentLineCount, auditPageSummary, auditRecommendationSummary, auditSetupOptions, auditStatusPresentation, manualContentLineCount, manualRecommendationLines, manualRecommendationSteps, manualRecommendationViewport, selectedSetupOptions, setupCheckDetails, type AuditPageSummary, type SetupCheckDetails } from "./setup-helpers.js";
 import { createSetupTuiTheme, diffLineColor, normalizeTuiDiffLine, selectionIndicator, selectionRowPresentation, setupPaneLayout, setupStepIndex, tuiLayoutMetrics, clampTuiScroll, type ColorOutput, type SetupPaneLayout, type SetupTuiTheme, type ThemeEnvironment, type TuiLayoutMetrics } from "./setup-theme.js";
 import { Footer, Header, Panel, progressMessage } from "./setup-components.js";
-import { AuditView, ConfirmView, DetailsView, ManualRecommendationsView, ReviewView, SelectView, auditUsesSingleColumn, AUDIT_LABEL_COLUMN_WIDTH, AUDIT_TWO_COLUMN_MIN_WIDTH } from "./setup-views.js";
+import { ApplyView, AuditView, CheckDetailsView, ConfirmView, DetailsView, ManualRecommendationsView, ReviewView, SelectView, auditUsesSingleColumn, AUDIT_LABEL_COLUMN_WIDTH, AUDIT_TWO_COLUMN_MIN_WIDTH, setupCheckOutputLines } from "./setup-views.js";
 
 export interface SetupTuiDependencies {
   audit: typeof auditRepository;
   buildPlan: typeof buildInstallPlan;
   applyPlan: typeof applyInstallPlan;
+  runCheck: (root: string, logger: DiagnosticLogger, timeoutMs?: number) => Promise<CommandResult>;
 }
 
 export interface SetupTuiProps {
@@ -27,7 +30,15 @@ export interface SetupTuiProps {
   result: { code: number };
 }
 
-const defaultDependencies: SetupTuiDependencies = { audit: auditRepository, buildPlan: buildInstallPlan, applyPlan: applyInstallPlan };
+async function runSetupCheck(root: string, logger: DiagnosticLogger, timeoutMs?: number): Promise<CommandResult> {
+  const options = { cwd: root, logger, ...(timeoutMs === undefined ? {} : { timeoutMs }) };
+  const localCommand = path.join(root, "node_modules", ".bin", process.platform === "win32" ? "repnix.cmd" : "repnix");
+  const args = ["check", "--format", "json", "--quiet"];
+  const localResult = await runCommand(localCommand, args, options);
+  return localResult.spawnError ? runCommand("repnix", args, options) : localResult;
+}
+
+const defaultDependencies: SetupTuiDependencies = { audit: auditRepository, buildPlan: buildInstallPlan, applyPlan: applyInstallPlan, runCheck: runSetupCheck };
 
 export function SetupApp({ options, logger, dependencies = {}, result }: SetupTuiProps): React.ReactElement {
   const deps = { ...defaultDependencies, ...dependencies };
@@ -38,6 +49,7 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
   const [model, setModel] = useState<SetupTuiModel>({ screen: "loading", cursor: 0, auditScroll: 0, manualScroll: 0, reviewCursor: 0, detailScroll: 0, confirmFocus: "cancel", selectedProviders: [], includeCi: false, sidebarCollapsed: false });
   const [dimensions, setDimensions] = useState({ width: stdout.columns ?? 100, height: stdout.rows ?? 24 });
   const startedApply = useRef(false);
+  const startedCheck = useRef(false);
   const theme = useMemo(() => createSetupTuiTheme(stdout), [stdout]);
   const dispatch = (action: Parameters<typeof setupTuiReducer>[1]) => setModel((current) => setupTuiReducer(current, action));
   const items = useMemo(() => audit ? selectionItems(audit.recommendations, audit.context.hasCI) : [], [audit]);
@@ -69,6 +81,19 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
   }, [model.screen]);
 
   useEffect(() => {
+    if (model.screen !== "checking" || !audit || startedCheck.current) return;
+    startedCheck.current = true;
+    void deps.runCheck(audit.context.root, logger, options.timeout === undefined ? undefined : options.timeout * 1000).then((check) => {
+      const output = [check.stdout.trimEnd(), check.stderr.trimEnd(), check.spawnError ? `Error: ${check.spawnError}` : ""].filter(Boolean).join("\n");
+      dispatch({ type: "check-complete", output, exitCode: check.exitCode });
+    }).catch((error: unknown) => dispatch({ type: "check-complete", output: `Error: ${error instanceof Error ? error.message : String(error)}`, exitCode: null }));
+  }, [model.screen]);
+
+  useEffect(() => {
+    if (model.screen === "success") startedCheck.current = false;
+  }, [model.screen]);
+
+  useEffect(() => {
     if (model.screen !== "applying" || !audit || !plan || startedApply.current) return;
     startedApply.current = true;
     void deps.applyPlan(audit.context, plan, logger, options.timeout === undefined ? undefined : options.timeout * 1000, (progress) => dispatch({ type: "progress", message: progressMessage(progress) })).then(async () => {
@@ -90,7 +115,8 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
   const manualLineCount = audit ? manualContentLineCount(audit, width) : 0;
   const detailFile = plan?.files[model.reviewCursor];
   const detailLineCount = detailFile ? renderFileDiff(detailFile, Math.max(width - 8, 32)).split("\n").length : 0;
-  const busy = model.screen === "loading" || model.screen === "planning" || model.screen === "applying";
+  const checkLineCount = setupCheckOutputLines(model.checkOutput ?? "", width).length;
+  const busy = model.screen === "loading" || model.screen === "planning" || model.screen === "applying" || model.screen === "checking";
   const leave = () => { result.code = model.screen === "error" ? 2 : 0; exit(); };
 
   useInput((input, key) => {
@@ -99,6 +125,7 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
     if (key.escape || key.backspace || key.delete) {
       if (busy) return;
       if (model.screen === "details") dispatch({ type: "close-details" });
+      else if (model.screen === "check-details") dispatch({ type: "back-to-success" });
       else if (model.screen === "manual") dispatch({ type: "back-to-audit" });
       else if (model.screen === "confirm") dispatch({ type: "cancel-confirm" });
       else if (model.screen === "review") dispatch({ type: "back-to-select" });
@@ -106,7 +133,7 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
       else leave();
       return;
     }
-    if (model.screen === "loading" || model.screen === "planning" || model.screen === "applying") return;
+    if (model.screen === "loading" || model.screen === "planning" || model.screen === "applying" || model.screen === "checking") return;
     if (key.tab) { if (sidebarMode && (model.screen === "select" || model.screen === "review")) dispatch({ type: "toggle-sidebar" }); return; }
     if (model.screen === "audit") {
       if (key.upArrow || input === "k") dispatch({ type: "move-audit", direction: "up", lineCount: auditLineCount, viewport: layout.detailViewport });
@@ -120,7 +147,8 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
       else if (key.return) dispatch({ type: audit?.recommendations.some((recommendation) => recommendation.actionable) ? "begin-selection" : "show-empty" });
       return;
     }
-    if (model.screen === "success" || model.screen === "empty" || model.screen === "error") { result.code = model.screen === "error" ? 2 : 0; exit(); return; }
+    if (model.screen === "success") { dispatch({ type: "begin-check" }); return; }
+    if (model.screen === "empty" || model.screen === "error") { result.code = model.screen === "error" ? 2 : 0; exit(); return; }
     if (model.screen === "select") {
       const sidebarFocused = sidebarMode ? !model.sidebarCollapsed : true;
       if (sidebarFocused && (key.upArrow || input === "k")) dispatch({ type: "move", direction: "up", itemCount: items.length });
@@ -147,6 +175,10 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
       if (key.upArrow || input === "k") dispatch({ type: "move-detail", direction: "up", lineCount: detailLineCount, viewport: layout.detailViewport });
       else if (key.downArrow || input === "j") dispatch({ type: "move-detail", direction: "down", lineCount: detailLineCount, viewport: layout.detailViewport });
     }
+    if (model.screen === "check-details") {
+      if (key.upArrow || input === "k") dispatch({ type: "move-check", direction: "up", lineCount: checkLineCount, viewport: layout.detailViewport });
+      else if (key.downArrow || input === "j") dispatch({ type: "move-check", direction: "down", lineCount: checkLineCount, viewport: layout.detailViewport });
+    }
   });
 
   return <Box flexDirection="column" width="100%" height={height} paddingX={1} overflow="hidden">
@@ -161,8 +193,10 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
       {model.screen === "review" && plan ? <ReviewView plan={plan} model={model} paneLayout={paneLayout} theme={theme} /> : null}
       {model.screen === "details" && plan ? <DetailsView plan={plan} model={model} width={width} layout={layout} theme={theme} /> : null}
       {model.screen === "confirm" && audit && plan ? <ConfirmView audit={audit} plan={plan} model={model} compact={compact} theme={theme} /> : null}
-      {model.screen === "applying" ? <Panel title="Applying safely" theme={theme} borderColor={theme.warning}><Text color={theme.warning}>◌ {model.progress ?? "Installing selected checks and writing reviewed files…"}</Text></Panel> : null}
-      {model.screen === "success" ? <Panel title="Setup complete" theme={theme} borderColor={theme.success}><Text color={theme.success}>● Repository health setup completed successfully.</Text><Newline /><Text>{model.progress}</Text><Text>Run `repnix check --details` to review findings.</Text></Panel> : null}
+      {model.screen === "applying" && plan ? <ApplyView plan={plan} model={model} theme={theme} /> : null}
+      {model.screen === "checking" ? <Panel title="Running check" theme={theme} borderColor={theme.info}><Text color={theme.info}>◌ Running `repnix check`…</Text><Text color={theme.muted}>Output will appear here when the check completes.</Text></Panel> : null}
+      {model.screen === "success" ? <Panel title="Setup complete" theme={theme} borderColor={theme.success}><Text color={theme.success}>● Repository health setup completed successfully.</Text><Newline /><Text>{model.progress}</Text><Text color={theme.primary} bold>Press Enter to run `repnix check` now.</Text><Text color={theme.muted}>Run a category with --details later when you need more context.</Text></Panel> : null}
+      {model.screen === "check-details" ? <CheckDetailsView model={model} width={width} layout={layout} theme={theme} /> : null}
       {model.screen === "error" ? <Panel title="Setup stopped" theme={theme} borderColor={theme.danger}><Text color={theme.danger}>◆ {model.error ?? "An unexpected error occurred."}</Text><Newline /><Text color={theme.muted}>No further changes will be applied.</Text></Panel> : null}
     </Box>
     <Footer model={model} sidebarMode={sidebarMode} hasManualRecommendations={Boolean(audit?.recommendations.some((recommendation) => !recommendation.actionable))} theme={theme} />
@@ -183,4 +217,5 @@ export async function runSetupTui(options: DiagnosticOptions = {}): Promise<numb
 export { supportsTui, createSetupTuiTheme, diffLineColor, normalizeTuiDiffLine, selectionIndicator, selectionRowPresentation, setupPaneLayout, setupStepIndex, tuiLayoutMetrics, clampTuiScroll, auditContentLineCount, auditPageSummary, auditRecommendationSummary, auditSetupOptions, auditStatusPresentation, manualContentLineCount, manualRecommendationLines, manualRecommendationSteps, manualRecommendationViewport, selectedSetupOptions, setupCheckDetails };
 export type { AuditPageSummary, SetupCheckDetails, ColorOutput, SetupPaneLayout, SetupTuiTheme, ThemeEnvironment, TuiLayoutMetrics };
 export { AUDIT_LABEL_COLUMN_WIDTH, AUDIT_TWO_COLUMN_MIN_WIDTH, auditUsesSingleColumn };
+export { setupCheckOutputLines, setupCheckRows } from "./setup-views.js";
 export { COMPACT_LAYOUT_HEIGHT, COMPACT_LAYOUT_WIDTH, HORIZONTAL_PANE_MIN_WIDTH } from "./setup-theme.js";

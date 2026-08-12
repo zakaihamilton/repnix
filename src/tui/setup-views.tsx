@@ -1,7 +1,7 @@
 import React from "react";
 import { Box, Newline, Text } from "ink";
 import { CATEGORY_LABELS } from "../core/health-category.js";
-import type { InstallPlan } from "../core/types.js";
+import type { HealthResult, HealthRun, InstallPlan } from "../core/types.js";
 import type { AuditModel } from "../recommendations/recommendation-engine.js";
 import { renderFileDiff } from "../setup/file-plan.js";
 import { selectionItems, type SetupSelectionItem, type SetupTuiModel } from "./setup-state.js";
@@ -91,6 +91,100 @@ export function DetailsView({ plan, model, width, layout, theme }: { plan: Insta
   const scroll = clampTuiScroll(model.detailScroll, diff.length, layout.detailViewport);
   const visible = diff.slice(scroll, scroll + layout.detailViewport);
   return <Panel title={`File detail · ${file.path}`} theme={theme} borderColor={theme.info}><Text color={theme.muted}>{file.reason}</Text><Newline />{visible.map((line, index) => <Text key={`${index}-${line}`} {...foregroundColor(diffLineColor(line, theme))}>{line}</Text>)}{scroll + visible.length < diff.length ? <Text color={theme.muted}>↓ more</Text> : null}</Panel>;
+}
+
+export function ApplyView({ plan, model, theme }: { plan: InstallPlan; model: SetupTuiModel; theme: SetupTuiTheme }): React.ReactElement {
+  const activity = model.progressLog ?? [model.progress ?? "Starting safe apply…"];
+  return <Panel title="Applying safely" theme={theme} borderColor={theme.warning}>
+    <Text color={theme.warning}>◌ Changes are being revalidated and applied in the reviewed order.</Text>
+    <Text color={theme.muted}>{planStats(plan)}  ·  {plan.commands.length} install command{plan.commands.length === 1 ? "" : "s"}</Text>
+    <Newline />
+    <Text color={theme.secondary} bold>ACTIVITY</Text>
+    {activity.map((message, index) => <Text key={`${index}-${message}`} color={index === activity.length - 1 ? theme.primary : theme.muted}>{index === activity.length - 1 ? "▸" : "·"} {message}</Text>)}
+  </Panel>;
+}
+
+export function setupCheckOutputLines(output: string, width: number): string[] {
+  const normalized = output.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trimEnd();
+  return normalized ? wrapTerminalText(normalized, Math.max(width - 6, 20)) : ["The check produced no output."];
+}
+
+export interface SetupCheckRow {
+  category: string;
+  status: HealthResult["status"];
+  result: string;
+  providers: string;
+}
+
+const CHECK_STATUS_RANK = { skipped: 0, pass: 1, warn: 2, fail: 3, error: 4 } as const;
+
+function parseHealthRun(output: string): HealthRun | null {
+  try {
+    const parsed: unknown = JSON.parse(output);
+    return parsed && typeof parsed === "object" && "results" in parsed && Array.isArray((parsed as { results?: unknown }).results)
+      ? parsed as HealthRun
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export function setupCheckRows(output: string): SetupCheckRow[] {
+  const run = parseHealthRun(output);
+  if (!run) return [];
+  const categories = new Map<string, HealthResult[]>();
+  for (const result of run.results) categories.set(result.category, [...(categories.get(result.category) ?? []), result]);
+  return [...categories.entries()].map(([category, results]) => {
+    const status = results.reduce((current, item) => CHECK_STATUS_RANK[item.status] > CHECK_STATUS_RANK[current] ? item.status : current, "skipped" as HealthResult["status"]);
+    const findings = results.reduce((total, item) => total + item.findings.length, 0);
+    return {
+      category: run.repository.categories?.find((item) => item.id === category)?.label ?? CATEGORY_LABELS[category] ?? category,
+      status,
+      result: status === "pass" ? "Passed" : status === "error" ? "Setup needed" : status === "skipped" ? "Not run" : `${findings} finding${findings === 1 ? "" : "s"}`,
+      providers: results.map((item) => item.name).join(", "),
+    };
+  });
+}
+
+function checkStatusColor(status: HealthResult["status"], theme: SetupTuiTheme): string {
+  return status === "pass" ? theme.success : status === "error" ? theme.danger : status === "skipped" ? theme.muted : theme.warning;
+}
+
+function checkStatusLabel(status: HealthResult["status"]): string {
+  return status === "pass" ? "PASS" : status === "error" ? "ERROR" : status === "skipped" ? "SKIP" : "WARN";
+}
+
+function conciseCheckError(result: HealthResult): string {
+  if (/output exceeded/i.test(result.message ?? "")) return `${result.name} produced too much output to display. Run the documentation check directly to inspect it.`;
+  if (/ENOENT|local executable is unavailable/i.test(result.message ?? "")) return `${result.name} is unavailable. Install dependencies, then run this check again.`;
+  return `${result.name} needs attention. Run repnix check ${result.category} --details for the cause.`;
+}
+
+export function CheckDetailsView({ model, width, layout, theme }: { model: SetupTuiModel; width: number; layout: TuiLayoutMetrics; theme: SetupTuiTheme }): React.ReactElement {
+  const rows = setupCheckRows(model.checkOutput ?? "");
+  const run = parseHealthRun(model.checkOutput ?? "");
+  if (rows.length) {
+    const scroll = clampTuiScroll(model.checkScroll ?? 0, rows.length, Math.max(layout.detailViewport - 4, 1));
+    const visible = rows.slice(scroll, scroll + Math.max(layout.detailViewport - 4, 1));
+    const errors = run?.results.filter((result) => result.status === "error") ?? [];
+    return <Panel title="Check results" theme={theme} borderColor={errors.length ? theme.warning : theme.success}>
+      <Text color={errors.length ? theme.warning : theme.success} bold>{errors.length ? `${errors.length} check${errors.length === 1 ? " needs" : "s need"} setup` : "All checks completed"}</Text>
+      <Box flexDirection="row" marginTop={1}><Box width={9} flexShrink={0}><Text color={theme.muted} bold>STATUS</Text></Box><Box width={27} flexShrink={0}><Text color={theme.muted} bold>CHECK</Text></Box><Box width={17} flexShrink={0}><Text color={theme.muted} bold>RESULT</Text></Box><Box flexGrow={1} overflow="hidden"><Text color={theme.muted} bold>PROVIDER</Text></Box></Box>
+      {visible.map((row) => <Box key={row.category} flexDirection="row"><Box width={9} flexShrink={0}><Text color={checkStatusColor(row.status, theme)} bold>{checkStatusLabel(row.status)}</Text></Box><Box width={27} flexShrink={0}><Text {...textColor(theme)} wrap="truncate-end">{row.category}</Text></Box><Box width={17} flexShrink={0}><Text color={checkStatusColor(row.status, theme)} wrap="truncate-end">{row.result}</Text></Box><Box flexGrow={1} overflow="hidden"><Text {...textColor(theme)} wrap="truncate-end">{row.providers}</Text></Box></Box>)}
+      {errors.length && scroll === 0 ? <><Newline /><Text color={theme.secondary} bold>ACTION NEEDED</Text>{errors.slice(0, 2).map((result) => <Text key={result.provider} color={theme.warning} wrap="truncate-end">• {conciseCheckError(result)}</Text>)}</> : null}
+      {scroll + visible.length < rows.length ? <Text color={theme.muted}>↓ more · use ↑↓ to scroll</Text> : null}
+    </Panel>;
+  }
+  const lines = setupCheckOutputLines(model.checkOutput ?? "", width);
+  const scroll = clampTuiScroll(model.checkScroll ?? 0, lines.length, layout.detailViewport);
+  const visible = lines.slice(scroll, scroll + layout.detailViewport);
+  const passed = model.checkExitCode === 0;
+  const exitLabel = model.checkExitCode === null ? "could not start" : `finished with exit code ${model.checkExitCode ?? "unknown"}`;
+  return <Panel title="Check results · repnix check" theme={theme} borderColor={passed ? theme.success : theme.warning}>
+    <Text color={passed ? theme.success : theme.warning}>{passed ? "● Check completed successfully." : `◆ Check ${exitLabel}.`}</Text>
+    {visible.map((line, index) => line ? <Text key={`${scroll + index}-${line}`} {...textColor(theme)}>{line}</Text> : <Newline key={`${scroll + index}-blank`} />)}
+    {scroll + visible.length < lines.length ? <Text color={theme.muted}>↓ more · use ↑↓ to scroll</Text> : null}
+  </Panel>;
 }
 
 export function ConfirmView({ audit, plan, model, compact, theme }: { audit: AuditModel; plan: InstallPlan; model: SetupTuiModel; compact: boolean; theme: SetupTuiTheme }): React.ReactElement {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AUDIT_LABEL_COLUMN_WIDTH, AUDIT_TWO_COLUMN_MIN_WIDTH, COMPACT_LAYOUT_HEIGHT, COMPACT_LAYOUT_WIDTH, HORIZONTAL_PANE_MIN_WIDTH, auditContentLineCount, auditPageSummary, auditRecommendationSummary, auditSetupOptions, auditStatusPresentation, auditUsesSingleColumn, clampTuiScroll, createSetupTuiTheme, diffLineColor, manualContentLineCount, manualRecommendationLines, manualRecommendationSteps, manualRecommendationViewport, normalizeTuiDiffLine, selectedSetupOptions, selectionIndicator, selectionRowPresentation, setupCheckDetails, setupPaneLayout, setupStepIndex, tuiLayoutMetrics } from "../src/tui/setup-app.js";
+import { AUDIT_LABEL_COLUMN_WIDTH, AUDIT_TWO_COLUMN_MIN_WIDTH, COMPACT_LAYOUT_HEIGHT, COMPACT_LAYOUT_WIDTH, HORIZONTAL_PANE_MIN_WIDTH, auditContentLineCount, auditPageSummary, auditRecommendationSummary, auditSetupOptions, auditStatusPresentation, auditUsesSingleColumn, clampTuiScroll, createSetupTuiTheme, diffLineColor, manualContentLineCount, manualRecommendationLines, manualRecommendationSteps, manualRecommendationViewport, normalizeTuiDiffLine, selectedSetupOptions, selectionIndicator, selectionRowPresentation, setupCheckDetails, setupCheckOutputLines, setupCheckRows, setupPaneLayout, setupStepIndex, tuiLayoutMetrics } from "../src/tui/setup-app.js";
 import { createSetupTuiModel, selectionItems, setupTuiReducer } from "../src/tui/setup-state.js";
 import type { AuditModel, Recommendation } from "../src/recommendations/recommendation-engine.js";
 import type { RepositoryContext } from "../src/core/types.js";
@@ -208,6 +208,29 @@ describe("setup TUI presentation", () => {
     expect(manualRecommendationSteps(manual, details)).toContain("Install the OSV-Scanner binary in your local toolchain or CI image.");
     expect(manualRecommendationSteps(manual, details)).toHaveLength(3);
   });
+
+  it("wraps check details to the setup viewport without discarding output", () => {
+    const output = "Repository health\nA deliberately long finding message that must be readable in a narrow terminal viewport.";
+    const lines = setupCheckOutputLines(output, 32);
+
+    expect(lines).toContain("Repository health");
+    expect(lines.join(" ")).toContain("deliberately long finding message");
+    expect(lines.every((line) => line.length <= 26)).toBe(true);
+  });
+
+  it("turns structured check output into clear status rows", () => {
+    const output = JSON.stringify({
+      repository: { categories: [] },
+      results: [
+        { provider: "typescript", name: "TypeScript", category: "types", status: "pass", findings: [] },
+        { provider: "c8", name: "c8", category: "coverage", status: "error", findings: [] },
+      ],
+    });
+    expect(setupCheckRows(output)).toEqual([
+      { category: "Type safety", status: "pass", result: "Passed", providers: "TypeScript" },
+      { category: "Test coverage", status: "error", result: "Setup needed", providers: "c8" },
+    ]);
+  });
 });
 
 describe("setup TUI state", () => {
@@ -313,5 +336,18 @@ describe("setup TUI state", () => {
       model = setupTuiReducer(model, { type: "move-detail", direction: "down", lineCount: 10, viewport: 4 });
     }
     expect(model.detailScroll).toBe(6);
+  });
+
+  it("runs a detailed check after setup and scrolls its output", () => {
+    let model = createSetupTuiModel(recommendations);
+    model = setupTuiReducer(model, { type: "complete" });
+    model = setupTuiReducer(model, { type: "begin-check" });
+    expect(model.screen).toBe("checking");
+    model = setupTuiReducer(model, { type: "check-complete", output: "first\nsecond\nthird", exitCode: 1 });
+    expect(model.screen).toBe("check-details");
+    model = setupTuiReducer(model, { type: "move-check", direction: "down", lineCount: 3, viewport: 2 });
+    expect(model.checkScroll).toBe(1);
+    model = setupTuiReducer(model, { type: "back-to-success" });
+    expect(model.screen).toBe("success");
   });
 });

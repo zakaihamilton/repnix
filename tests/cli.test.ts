@@ -258,4 +258,19 @@ describe("CLI", () => {
       documentationUrl: "https://www.typescriptlang.org/docs/",
     }));
   });
+
+  it("normalizes absolute finding paths against the repository root from a workspace directory", async () => {
+    const root = await copyFixture("pnpm-monorepo");
+    temporary.push(root);
+    const manifestPath = path.join(root, "package.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as { scripts?: Record<string, string> };
+    manifest.scripts = { typecheck: "tsc --noEmit" };
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    await fakeBinary(root, "tsc", "process.stdout.write(`${process.cwd()}/packages/a/src/index.ts(3,7): error TS2322: bad\\n`); process.exitCode = 2;");
+
+    const result = await runCli(path.join(root, "packages", "a"), ["check", "types", "--format", "json"]);
+    const report = JSON.parse(result.stdout) as { results: Array<{ findings: Array<{ file?: string }> }> };
+    expect(result.code).toBe(1);
+    expect(report.results.flatMap((entry) => entry.findings)).toContainEqual(expect.objectContaining({ file: "packages/a/src/index.ts" }));
+  });
 });

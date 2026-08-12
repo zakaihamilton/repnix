@@ -86,7 +86,9 @@ export async function runCommand(
     });
     child.on("error", (error) => {
       clearTimers();
-      logger.error("command.spawn-error", `Could not start ${displayCommand}: ${error.message}`, { command: displayCommand, cwd: options.cwd });
+      // The health reporter turns this into a concise, actionable check error. Keep
+      // the command line in debug logs so normal output does not repeat it twice.
+      logger.debug("command.spawn-error", `Could not start ${displayCommand}: ${error.message}`, { command: displayCommand, cwd: options.cwd });
       resolve({
         command,
         args,

@@ -10,8 +10,10 @@ import type { ProviderRegistry } from "../providers/registry.js";
 import { foregroundColor, setupStepIndex, textColor, type SetupTuiTheme } from "./setup-theme.js";
 
 export function progressMessage(progress: InstallProgress): string {
-  if (progress.phase === "writing-files") return `Writing ${progress.total ?? 0} reviewed file${progress.total === 1 ? "" : "s"}…`;
-  if (progress.phase === "running-command") return `Running command ${progress.current ?? 0}/${progress.total ?? 0}…`;
+  if (progress.phase === "validating") return `Validating ${progress.total ?? 0} reviewed file${progress.total === 1 ? "" : "s"}…`;
+  if (progress.phase === "snapshotting") return `Saving rollback snapshots for ${progress.total ?? 0} file${progress.total === 1 ? "" : "s"}…`;
+  if (progress.phase === "writing-files") return progress.label ? `${progress.current ?? 0}/${progress.total ?? 0} files · ${progress.label}` : "No reviewed files need writing.";
+  if (progress.phase === "running-command") return `Running command ${progress.current ?? 0}/${progress.total ?? 0}: ${progress.label ?? ""}`;
   if (progress.phase === "rollback") return "Apply failed; rolling back reviewed changes…";
   return "Finishing setup…";
 }
@@ -48,9 +50,10 @@ export function Footer({ model, sidebarMode, hasManualRecommendations, theme }: 
       ? [["↑↓/jk", "move"], ["Space", "toggle"], ...(sidebarMode ? [["Tab", model.sidebarCollapsed ? "show checks" : "show details"] as [string, string]] : []), ["Enter", "review"], ["Esc/Delete", "back"], ["q", "quit"]]
       : model.screen === "review"
         ? [["↑↓", "move"], ["Space", "inspect"], ...(sidebarMode ? [["Tab", model.sidebarCollapsed ? "show files" : "show details"] as [string, string]] : []), ["Enter", "confirm"], ["Esc/Delete", "back"], ["q", "quit"]]
-        : model.screen === "details" ? [["↑↓/jk", "scroll"], ["Esc/Delete", "back"], ["q", "quit"]]
+        : model.screen === "details" || model.screen === "check-details" ? [["↑↓/jk", "scroll"], ["Esc/Delete", "back"], ["q", "quit"]]
           : model.screen === "confirm" ? [["←→", "focus"], ["Enter", "select"], ["Esc/Delete", "back"], ["q", "quit"]]
-            : model.screen === "success" || model.screen === "error" ? [["Enter/q", "exit"]] : [["…", "Please wait"]];
+            : model.screen === "success" ? [["Enter", "run check"], ["q/Esc", "exit"]]
+            : model.screen === "error" ? [["Enter/q", "exit"]] : [["…", "Please wait"]];
   return <Box borderStyle="single" borderColor={theme.borderStrong} paddingX={1} marginTop={1} flexShrink={0}><Box flexDirection="row" flexWrap="wrap">{hints.map(([label, description], index) => <Box key={label} flexDirection="row" marginRight={index < hints.length - 1 ? 2 : 0} flexShrink={0}>{index > 0 ? <Text color={theme.border}>·  </Text> : null}<KeyHint label={label} theme={theme}>{description}</KeyHint></Box>)}</Box></Box>;
 }
 

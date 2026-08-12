@@ -302,8 +302,28 @@ describe("setup planning", () => {
     };
 
     await expect(applyInstallPlan(context, plan, createDiagnosticLogger({ quiet: true }), 1000, (event) => progress.push(event.phase))).rejects.toThrow("rolled back");
-    expect(progress).toEqual(["writing-files", "running-command", "rollback"]);
+    expect(progress).toEqual(["validating", "snapshotting", "writing-files", "running-command", "rollback"]);
     expect(await readFile(packagePath, "utf8")).toBe(before);
     expect(await readFile(lockfilePath, "utf8")).toBe(lockfileBefore);
+  });
+
+  it("restores a binary Bun lockfile byte-for-byte when installation fails", async () => {
+    const root = await copyFixture("minimal-js");
+    temporary.push(root);
+    const lockfilePath = path.join(root, "bun.lockb");
+    const before = Buffer.from([0, 255, 128, 65, 10]);
+    await writeFile(lockfilePath, before);
+    const context = await detectRepository(root);
+    const plan = {
+      schemaVersion: 1 as const,
+      packages: [],
+      files: [],
+      commands: [{ command: process.execPath, args: ["-e", "require('node:fs').writeFileSync('bun.lockb', 'changed'); process.exit(1)"], reason: "test failure" }],
+      warnings: [],
+      conflicts: [],
+    };
+
+    await expect(applyInstallPlan(context, plan, createDiagnosticLogger({ quiet: true }), 1000)).rejects.toThrow("rolled back");
+    expect(await readFile(lockfilePath)).toEqual(before);
   });
 });

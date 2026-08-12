@@ -157,12 +157,12 @@ function commandLine(runnable: RunnableCommand): string {
   return [runnable.command, ...runnable.args].map((part) => JSON.stringify(part)).join(" ");
 }
 
-function normalizeCommandOutput(runnable: RunnableCommand, output: string): HealthFinding[] {
+function normalizeCommandOutput(runnable: RunnableCommand, output: string, root = process.cwd()): HealthFinding[] {
   const findings: HealthFinding[] = [];
   if (runnable.category === "types") {
     const pattern = /^(.+?)\((\d+),(\d+)\):\s+(error|warning)\s+(TS\d+):\s+(.+)$/gm;
     for (const match of output.matchAll(pattern)) {
-      const file = path.isAbsolute(match[1]!) ? path.relative(process.cwd(), match[1]!) : match[1]!;
+      const file = path.isAbsolute(match[1]!) ? path.relative(root, match[1]!) : match[1]!;
       findings.push(createFinding({
         provider: runnable.name,
         category: "types",
@@ -185,7 +185,7 @@ function normalizeCommandOutput(runnable: RunnableCommand, output: string): Heal
     for (const line of output.split("\n")) {
       const trimmed = line.trim();
       if (trimmed && !/^\d+:\d+\s/.test(trimmed) && /\.[cm]?[jt]sx?$/.test(trimmed)) {
-        currentFile = path.isAbsolute(trimmed) ? path.relative(process.cwd(), trimmed) : trimmed;
+        currentFile = path.isAbsolute(trimmed) ? path.relative(root, trimmed) : trimmed;
         continue;
       }
       const match = /^(\d+):(\d+)\s+(error|warning)\s+(.+?)(?:\s{2,}|\s)([@\w/-]+)$/.exec(trimmed);
@@ -228,6 +228,7 @@ function commandResult(
     };
   }
   if (result.spawnError) {
+    const missingLocalBinary = /node_modules[\\/]+\.bin[\\/].+\bENOENT\b/i.test(result.spawnError);
     return {
       provider: runnable.provider,
       name: runnable.name,
@@ -235,7 +236,9 @@ function commandResult(
       status: "error",
       findings: [],
       durationMs: result.durationMs,
-      message: `${runnable.name} could not start. Command: ${commandLine(runnable)}. ${result.spawnError}`,
+      message: missingLocalBinary
+        ? `${runnable.name} is configured, but its local executable is unavailable. Install this project's dependencies, then try again.`
+        : `${runnable.name} could not start. ${result.spawnError}`,
     };
   }
   if (result.exitCode === 0) {
@@ -266,7 +269,7 @@ function commandResult(
   }
   const normalized = normalize && context
     ? normalize({ output: excerpt, result, context })
-    : normalizeCommandOutput(runnable, excerpt);
+    : normalizeCommandOutput(runnable, excerpt, context?.root);
   if (normalized.length) {
     return {
       provider: runnable.provider,
@@ -918,7 +921,7 @@ export async function runHealth(
         env: { ...HEALTH_OFFLINE_ENV, ...runnable.env },
         ...(runnable.timeoutMs === undefined ? {} : { timeoutMs: runnable.timeoutMs }),
       });
-      return commandResult(runnable, result);
+      return commandResult(runnable, result, context);
     });
     results.push(...await runBounded(commandTasks, options.jobs ?? config.execution.jobs));
     const providerTasks: Array<() => Promise<HealthResult>> = [];
