@@ -3,3 +3,6 @@ dist/
 coverage/
 *.tgz
 .DS_Store
+
+# The launch fixture needs a lockfile so its dependency-security recommendation is reproducible.
+!examples/underprotected-typescript/package-lock.json

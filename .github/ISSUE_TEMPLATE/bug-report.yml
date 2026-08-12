@@ -1,0 +1,51 @@
+name: Bug report
+description: Report incorrect detection, recommendations, setup plans, or check execution.
+title: "bug: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include secrets, private source code, or credentials. For a security issue, use private vulnerability reporting instead.
+  - type: input
+    id: version
+    attributes:
+      label: RepNix version
+      description: Include the output of `repnix --version`.
+      placeholder: 0.3.3
+    validations:
+      required: true
+  - type: dropdown
+    id: package-manager
+    attributes:
+      label: Package manager
+      options:
+        - npm
+        - pnpm
+        - Yarn
+        - Bun
+        - None detected
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: repository-shape
+    attributes:
+      label: Repository shape
+      description: Describe the language, framework, workspace layout, and relevant scripts/configuration.
+      placeholder: TypeScript npm library with Vitest and a package-lock.json.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior and safe-to-share output
+      description: Include the command, output from `repnix audit --format json` or `repnix setup --plan --format json`, and the exit code when possible.
+    validations:
+      required: true

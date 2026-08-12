@@ -26,6 +26,16 @@ All notable changes to RepNix are documented here. The project follows semantic 
 
 - Remove the standalone `repnix explain` command and the legacy `repnix check --json` shortcut in favor of `--format`.
 
+## 0.3.3 - 2026-08-12
+
+### Added
+
+- Add a reproducible under-protected TypeScript launch demo, a security reporting policy, and GitHub issue forms for bugs and provider requests.
+
+### Changed
+
+- Clarify the README first-run path and document that audits are local read-only inspections after installation.
+
 ## 0.3.2 - 2026-08-11
 
 - Publish new package versions automatically after pushes to `main`, while skipping versions already present on npm.
