@@ -4,6 +4,16 @@ All notable changes to RepNix are documented here. The project follows semantic 
 
 ## Unreleased
 
+_No unreleased changes._
+
+## 0.3.5 - 2026-08-12
+
+### Changed
+
+- Bump the package and CLI version to `0.3.5`.
+
+## 0.3.4 - 2026-08-12
+
 ### Added
 
 - Add reproducible checked-in and public-OSS compatibility-pilot corpora for CLI, Node, library, React, Next.js, and pnpm-workspace repository shapes. Audit and read-only setup plans are asserted for both the built and packed CLI; a scheduled workflow validates pinned third-party repositories.
