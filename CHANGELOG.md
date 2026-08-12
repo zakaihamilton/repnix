@@ -16,6 +16,7 @@ All notable changes to RepNix are documented here. The project follows semantic 
 ### Changed
 
 - Reduce the product workflow to `audit`, `setup`, and `check`; detailed findings now use `repnix check --details` without a separate rerun command.
+- Rebuild and compare saved setup plans before applying them, including their selected providers and CI option; saved plans can no longer supply arbitrary commands or file paths.
 - Update the existing repository, audit, health, finding, result, plan, and configuration models in place without parallel version-suffixed types.
 - Limit default audit output to the three highest-priority actionable recommendations and hide categories that do not apply.
 - Make setup create an explicit repository-health configuration and re-audit coverage after applying changes.

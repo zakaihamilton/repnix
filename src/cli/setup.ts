@@ -9,6 +9,7 @@ import { applyInstallPlan } from "../setup/apply-plan.js";
 import { buildInstallPlan, type SetupProviderId } from "../setup/install-plan.js";
 import { renderFileDiff } from "../setup/file-plan.js";
 import type { InstallPlan } from "../core/types.js";
+import { assertSavedPlanMatches, parseSavedInstallPlan, serializeInstallPlan } from "../setup/saved-plan.js";
 import { runSetupTui, supportsTui } from "../tui/setup-app.js";
 import { resolveDiagnosticLogger, type DiagnosticOptions } from "./options.js";
 
@@ -110,37 +111,37 @@ async function setupWithPrompts(options: SetupOptions = {}): Promise<number> {
   return 0;
 }
 
-function isInstallPlan(value: unknown): value is InstallPlan {
-  if (!value || typeof value !== "object") return false;
-  const plan = value as Partial<InstallPlan>;
-  return plan.schemaVersion === 1 && Array.isArray(plan.packages) && Array.isArray(plan.files) && Array.isArray(plan.commands) && Array.isArray(plan.warnings) && Array.isArray(plan.conflicts);
-}
-
-async function createDefaultPlan(options: SetupOptions): Promise<{ audit: Awaited<ReturnType<typeof auditRepository>>; plan: InstallPlan }> {
+async function createDefaultPlan(options: SetupOptions): Promise<{ audit: Awaited<ReturnType<typeof auditRepository>>; plan: InstallPlan; selected: SetupProviderId[] }> {
   const audit = await auditRepository(process.cwd(), options);
   const selected = audit.recommendations
     .filter((recommendation) => recommendation.actionable && recommendation.priority === "baseline")
     .map((recommendation) => recommendation.provider as SetupProviderId);
-  return { audit, plan: await buildInstallPlan(audit.context, selected, false) };
+  return { audit, plan: await buildInstallPlan(audit.context, selected, false), selected };
 }
 
 export async function setupCommand(options: SetupOptions = {}): Promise<number> {
   if (options.format && !["text", "json"].includes(options.format)) throw new Error(`Unknown setup format '${options.format}'. Use text or json.`);
   if (options.plan && options.applyPlan) throw new Error("Use either --plan or --apply-plan, not both.");
   if (options.plan) {
-    const { audit, plan } = await createDefaultPlan(options);
-    process.stdout.write(options.format === "json" ? `${JSON.stringify(plan, null, 2)}\n` : `${renderSetupPreview(plan) || "No setup changes are needed."}\n`);
+    const { audit, plan, selected } = await createDefaultPlan(options);
+    const saved = serializeInstallPlan(plan, { providers: selected, includeCi: false });
+    process.stdout.write(options.format === "json" ? `${JSON.stringify(saved, null, 2)}\n` : `${renderSetupPreview(plan) || "No setup changes are needed."}\n`);
     return audit.context.diagnostics.some((diagnostic) => diagnostic.severity === "error") ? 2 : 0;
   }
   if (options.applyPlan) {
     if (!process.stdin.isTTY || !process.stdout.isTTY) throw new Error("Applying a saved setup plan requires an interactive terminal for confirmation.");
     const raw: unknown = JSON.parse(await readFile(path.resolve(options.applyPlan), "utf8"));
-    if (!isInstallPlan(raw)) throw new Error(`Invalid RepNix setup plan: ${options.applyPlan}`);
-    note(renderSetupPreview(raw), "Saved setup plan");
+    const saved = parseSavedInstallPlan(raw);
+    const audit = await auditRepository(process.cwd(), options);
+    if (saved.selection.providers.some((provider) => !audit.registry?.get(provider))) {
+      throw new Error("Saved setup plan selects a provider that is not available in this repository. Generate a new plan before applying it.");
+    }
+    const plan = await buildInstallPlan(audit.context, saved.selection.providers, saved.selection.includeCi, audit.registry);
+    assertSavedPlanMatches(saved, plan);
+    note(renderSetupPreview(plan), "Saved setup plan");
     const apply = await confirm({ message: "Apply this saved and revalidated setup plan?", initialValue: false });
     if (isCancel(apply) || !apply) return 0;
-    const audit = await auditRepository(process.cwd(), options);
-    await applyInstallPlan(audit.context, raw, resolveDiagnosticLogger(options), options.timeout === undefined ? undefined : options.timeout * 1000);
+    await applyInstallPlan(audit.context, plan, resolveDiagnosticLogger(options), options.timeout === undefined ? undefined : options.timeout * 1000);
     outro(pc.green("Repository health setup complete. Run `repnix check --details` to verify the checks."));
     return 0;
   }

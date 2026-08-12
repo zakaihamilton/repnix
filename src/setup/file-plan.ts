@@ -1,11 +1,55 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import pc from "picocolors";
 import type { FileChange } from "../core/types.js";
 
 export function contentHash(content: string | null): string | null {
   return content === null ? null : createHash("sha256").update(content).digest("hex");
+}
+
+/** Resolve a planned file only when it is a non-root path contained by the repository. */
+export function resolveRepositoryPath(root: string, relativePath: string): string {
+  const repositoryRoot = path.resolve(root);
+  const target = path.resolve(repositoryRoot, relativePath);
+  const relative = path.relative(repositoryRoot, target);
+  if (!relative || relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    throw new Error(`Planned file path must stay inside the repository: ${relativePath}`);
+  }
+  return target;
+}
+
+async function assertNoSymlinkComponents(root: string, target: string): Promise<void> {
+  const relative = path.relative(path.resolve(root), target);
+  let current = path.resolve(root);
+  for (const component of relative.split(path.sep)) {
+    current = path.join(current, component);
+    try {
+      if ((await lstat(current)).isSymbolicLink()) {
+        throw new Error(`Planned file path must not traverse a symbolic link: ${relative}`);
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+      throw error;
+    }
+  }
+}
+
+async function createSafeParentDirectory(root: string, target: string): Promise<void> {
+  const relative = path.relative(path.resolve(root), path.dirname(target));
+  let current = path.resolve(root);
+  for (const component of relative.split(path.sep)) {
+    current = path.join(current, component);
+    try {
+      await mkdir(current);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+    }
+    const status = await lstat(current);
+    if (!status.isDirectory() || status.isSymbolicLink()) {
+      throw new Error(`Planned file path must not traverse a symbolic link: ${relative}`);
+    }
+  }
 }
 
 export async function readOptional(file: string): Promise<string | null> {
@@ -36,7 +80,9 @@ export function fileChange(
 
 export async function validateChanges(root: string, changes: FileChange[]): Promise<void> {
   for (const change of changes) {
-    const current = await readOptional(path.join(root, change.path));
+    const target = resolveRepositoryPath(root, change.path);
+    await assertNoSymlinkComponents(root, target);
+    const current = await readOptional(target);
     if (contentHash(current) !== change.expectedHash) {
       throw new Error(`Planned file changed after preview: ${change.path}. Run setup again.`);
     }
@@ -47,8 +93,8 @@ export async function writeChanges(root: string, changes: FileChange[]): Promise
   const written: FileChange[] = [];
   try {
     for (const change of changes) {
-      const target = path.join(root, change.path);
-      await mkdir(path.dirname(target), { recursive: true });
+      const target = resolveRepositoryPath(root, change.path);
+      await createSafeParentDirectory(root, target);
       const temporary = `${target}.repnix-${process.pid}-${Date.now()}.tmp`;
       await writeFile(temporary, change.after, "utf8");
       await rename(temporary, target);
@@ -66,7 +112,8 @@ export async function writeChanges(root: string, changes: FileChange[]): Promise
 
 export async function restoreChanges(root: string, changes: FileChange[]): Promise<void> {
   for (const change of [...changes].reverse()) {
-    const target = path.join(root, change.path);
+    const target = resolveRepositoryPath(root, change.path);
+    await assertNoSymlinkComponents(root, target);
     if (change.before === null) {
       try {
         await unlink(target);
@@ -75,7 +122,7 @@ export async function restoreChanges(root: string, changes: FileChange[]): Promi
       }
       continue;
     }
-    await mkdir(path.dirname(target), { recursive: true });
+    await createSafeParentDirectory(root, target);
     const temporary = `${target}.repnix-rollback-${process.pid}-${Date.now()}.tmp`;
     await writeFile(temporary, change.before, "utf8");
     await rename(temporary, target);

@@ -238,7 +238,7 @@ describe("CLI", () => {
 
     const planned = await runCli(root, ["setup", "--plan", "--format", "json"]);
     expect(planned.code).toBe(0);
-    expect(JSON.parse(planned.stdout)).toMatchObject({ schemaVersion: 1, files: expect.arrayContaining([expect.objectContaining({ path: "repnix.config.json" })]) });
+    expect(JSON.parse(planned.stdout)).toMatchObject({ schemaVersion: 1, selection: { providers: ["knip", "jscpd", "c8"], includeCi: false }, files: expect.arrayContaining([expect.objectContaining({ path: "repnix.config.json" })]) });
   });
 
   it("normalizes TypeScript command output into located, actionable findings", async () => {
