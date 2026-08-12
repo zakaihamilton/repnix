@@ -41,6 +41,14 @@ function stringList(value: unknown): string[] | null {
   return Array.isArray(value) && value.every((item) => typeof item === "string") ? value as string[] : null;
 }
 
+function addRepnixIgnore(before: string | null): string | null {
+  const entry = ".repnix/";
+  if (before === null || before.trim() === "") return `${entry}\n`;
+  if (before.split(/\r?\n/).some((line) => /^\/?\.repnix\/?$/.test(line.trim()))) return null;
+  const eol = before.includes("\r\n") ? "\r\n" : "\n";
+  return `${before.endsWith("\n") ? before : `${before}${eol}`}${entry}${eol}`;
+}
+
 function changesetsConfig(baseBranch: string): string {
   return `${JSON.stringify({
     changelog: "@changesets/cli/changelog",
@@ -158,6 +166,14 @@ export async function buildInstallPlan(
   }
   const packageChange = fileChange("package.json", packageBefore, packageAfter, "Add RepNix health scripts");
   if (packageChange) plan.files.push(packageChange);
+
+  const gitignorePath = path.join(context.root, ".gitignore");
+  const gitignoreBefore = await readOptional(gitignorePath);
+  const gitignoreAfter = addRepnixIgnore(gitignoreBefore);
+  if (gitignoreAfter !== null) {
+    const change = fileChange(".gitignore", gitignoreBefore, gitignoreAfter, "Ignore generated RepNix setup reports");
+    if (change) plan.files.push(change);
+  }
 
   const repnixConfigPath = path.join(context.root, "repnix.config.json");
   const repnixConfigBefore = await readOptional(repnixConfigPath);

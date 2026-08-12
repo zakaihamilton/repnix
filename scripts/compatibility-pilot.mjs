@@ -11,7 +11,7 @@ const pilots = [
     scopes: [{ path: ".", roles: ["node-app"], frameworks: [] }],
     recommendations: ["knip", "jscpd", "osv-scanner", "dependency-cruiser", "c8", "stryker", "gitleaks"],
     packages: ["repnix", "knip", "jscpd", "c8"],
-    files: ["package.json", "repnix.config.json", ".jscpd.json"],
+    files: ["package.json", ".gitignore", "repnix.config.json", ".jscpd.json"],
   },
   {
     id: "node-typescript",
@@ -19,7 +19,7 @@ const pilots = [
     scopes: [{ path: ".", roles: ["node-app"], frameworks: [] }],
     recommendations: ["knip", "osv-scanner", "gitleaks", "license-checker"],
     packages: ["repnix", "knip"],
-    files: ["package.json", "repnix.config.json"],
+    files: ["package.json", ".gitignore", "repnix.config.json"],
   },
   {
     id: "npm-library",
@@ -27,7 +27,7 @@ const pilots = [
     scopes: [{ path: ".", roles: ["library"], frameworks: [] }],
     recommendations: ["knip", "osv-scanner", "publint", "attw", "gitleaks", "license-checker", "changesets"],
     packages: ["repnix", "knip", "publint", "@arethetypeswrong/cli"],
-    files: ["package.json", "repnix.config.json"],
+    files: ["package.json", ".gitignore", "repnix.config.json"],
   },
   {
     id: "react-eslint",
@@ -35,7 +35,7 @@ const pilots = [
     scopes: [{ path: ".", roles: ["node-app"], frameworks: ["React"] }],
     recommendations: ["knip", "jscpd", "osv-scanner", "eslint-boundaries", "c8", "stryker", "gitleaks", "license-checker"],
     packages: ["repnix", "knip", "jscpd", "c8"],
-    files: ["package.json", "repnix.config.json", ".jscpd.json"],
+    files: ["package.json", ".gitignore", "repnix.config.json", ".jscpd.json"],
   },
   {
     id: "next-biome",
@@ -43,7 +43,7 @@ const pilots = [
     scopes: [{ path: ".", roles: ["web-app"], frameworks: ["Next.js", "React"] }],
     recommendations: ["knip", "osv-scanner", "size-limit", "jsx-a11y", "gitleaks", "license-checker", "lhci"],
     packages: ["repnix", "knip"],
-    files: ["package.json", "repnix.config.json"],
+    files: ["package.json", ".gitignore", "repnix.config.json"],
   },
   {
     id: "pnpm-monorepo",
@@ -55,7 +55,7 @@ const pilots = [
     ],
     recommendations: ["knip", "jscpd", "osv-scanner", "dependency-cruiser", "syncpack", "gitleaks", "license-checker"],
     packages: ["repnix", "knip", "jscpd", "syncpack"],
-    files: ["package.json", "repnix.config.json", ".jscpd.json"],
+    files: ["package.json", ".gitignore", "repnix.config.json", ".jscpd.json"],
   },
 ];
 
