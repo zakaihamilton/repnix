@@ -1,0 +1,42 @@
+name: Provider request
+description: Suggest a repository-health tool RepNix should detect, recommend, or run.
+title: "provider: "
+labels: [provider]
+body:
+  - type: input
+    id: provider
+    attributes:
+      label: Provider name and URL
+      placeholder: Example Tool — https://example.dev
+    validations:
+      required: true
+  - type: dropdown
+    id: category
+    attributes:
+      label: Health category
+      options:
+        - Type safety
+        - Linting or formatting
+        - Tests or coverage
+        - Dead code or duplication
+        - Security or secrets
+        - Architecture or bundle size
+        - Monorepo, package health, licenses, documentation, release, or CI
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What repository gap would this provider cover?
+      description: Explain when it is useful and how it complements, rather than overlaps, existing providers.
+    validations:
+      required: true
+  - type: textarea
+    id: integration
+    attributes:
+      label: CLI and machine-readable output
+      description: Include install command, non-mutating execution command, supported output format, and configuration requirements.
+      placeholder: The tool is installed with …, runs with …, and emits JSON with …
+    validations:
+      required: true

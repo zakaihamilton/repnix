@@ -21,17 +21,22 @@ RepNix orchestrates the tools you choose. It does not replace your existing Type
 
 Requirements: **Node.js 20+** and one of **npm, pnpm, Yarn, or Bun**.
 
-Install RepNix as a development dependency:
+### Try it on an existing repository
+
+Install RepNix as a development dependency, then run a read-only inventory:
 
 ```bash
 npm install --save-dev repnix
-```
-
-Then inspect your repository. This is read-only and does not install packages or edit files:
-
-```bash
 npx repnix audit
 ```
+
+After the initial installation, `audit` reads only local project files. It does not install packages, edit files, or access a package registry.
+
+![RepNix auditing an existing TypeScript repository, then previewing setup changes](https://raw.githubusercontent.com/zakaihamilton/repnix/main/docs/repnix-launch-demo.gif)
+
+The demo uses an intentionally under-protected TypeScript project. RepNix identifies the relevant gaps, then `setup --plan` previews the packages, scripts, and configuration it would add without applying anything.
+
+Already have RepNix installed? Run `npx repnix audit` from the repository root.
 
 If RepNix recommends checks you want to add, run the interactive setup. It explains why each check matters and previews every package, script, configuration file, and CI change before applying anything:
 
@@ -454,6 +459,8 @@ pnpm test:phase3
 - [npm package](https://www.npmjs.com/package/repnix)
 - [GitHub repository](https://github.com/zakaihamilton/repnix)
 - [Report an issue](https://github.com/zakaihamilton/repnix/issues)
+- [Request a provider](https://github.com/zakaihamilton/repnix/issues/new?template=provider-request.yml)
+- [Report a security vulnerability](SECURITY.md)
 - [Contributing guide](CONTRIBUTING.md)
 - [Release history](CHANGELOG.md)
 - [MIT license](LICENSE)
