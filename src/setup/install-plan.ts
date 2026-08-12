@@ -20,6 +20,12 @@ const JSCPD_IGNORES = [
   "**/*.generated.*",
 ];
 
+const GENERATED_SCRIPT_MIGRATIONS: Record<string, Record<string, string>> = {
+  "health:documentation": {
+    "markdownlint-cli2 \"**/*.md\"": "markdownlint-cli2 \"**/*.md\" \"#node_modules\"",
+  },
+};
+
 function formattingOptions(raw: string) {
   const indent = raw.match(/\n([\t ]+)\S/)?.[1] ?? "  ";
   return { insertSpaces: !indent.includes("\t"), tabSize: indent.includes("\t") ? 1 : indent.length, eol: raw.includes("\r\n") ? "\r\n" : "\n" };
@@ -139,6 +145,12 @@ export async function buildInstallPlan(
   for (const [name, command] of Object.entries(desiredScripts)) {
     const existing = context.scripts[name];
     if (existing && existing !== command) {
+      // Update only a byte-for-byte match of an older RepNix-generated script.
+      // Any user-customized command remains a conflict and is never overwritten.
+      if (GENERATED_SCRIPT_MIGRATIONS[name]?.[existing] === command) {
+        packageAfter = setJsonValue(packageAfter, ["scripts", name], command);
+        continue;
+      }
       plan.conflicts.push(`package.json script '${name}' already exists and was preserved.`);
       continue;
     }

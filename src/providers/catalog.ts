@@ -252,7 +252,7 @@ export const PROVIDERS: ProviderDescriptor[] = [
     scriptPattern: /(^|\s|&&|\|)markdownlint(?:-cli2)?(?:\s|$)/,
     scriptNames: ["health:documentation", "documentation", "docs", "markdownlint"],
     capabilities: { documentation: true },
-    command: { binary: "markdownlint-cli2", args: ["**/*.md"] },
+    command: { binary: "markdownlint-cli2", args: ["**/*.md", "#node_modules"] },
     zeroConfig: true,
   },
   {
@@ -352,11 +352,12 @@ export async function detectProvider(
   const scriptEntries = Object.entries(context.scripts).filter(([name, command]) => {
     if (!descriptor.scriptNames) return descriptor.scriptPattern.test(command);
     const safe = descriptor.scriptKind === "quality" ? isNonMutatingQualityCommand(command) : isNonMutatingTestCommand(command);
-    // A conventional script name such as test:coverage does not identify the
-    // coverage provider. In particular, Vitest's --coverage mode is not c8.
-    // Only credit c8 when the command itself invokes c8.
+    // A conventional script name does not always identify its provider. In
+    // particular, Vitest's --coverage mode is not c8, and an unrestricted
+    // Markdown glob would lint dependency documentation as well as the app.
     const invokesNamedProvider = descriptor.id !== "c8" || descriptor.scriptPattern.test(command);
-    return descriptor.scriptNames.includes(name) && safe && invokesNamedProvider;
+    const excludesDependencyDocs = descriptor.id !== "markdownlint" || /(?:^|\s)["']?#node_modules["']?(?:\s|$)/.test(command);
+    return descriptor.scriptNames.includes(name) && safe && invokesNamedProvider && excludesDependencyDocs;
   });
   const packageConfigKey = descriptor.packageJsonConfigKey ?? descriptor.id;
   const packageJsonConfig = Object.hasOwn(context.packageJson, packageConfigKey);

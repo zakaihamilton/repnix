@@ -129,6 +129,24 @@ describe("repository detection", () => {
     expect(providers.get("c8")?.activeCapabilities.testCoverage).toBeUndefined();
   });
 
+  it("does not credit an unrestricted Markdown glob as a safe documentation check", async () => {
+    const root = await copyFixture("minimal-js");
+    temporary.push(root);
+    const manifestPath = path.join(root, "package.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as { scripts: Record<string, string>; devDependencies?: Record<string, string> };
+    manifest.devDependencies ??= {};
+    manifest.devDependencies["markdownlint-cli2"] = "^0.23.0";
+    manifest.scripts["health:documentation"] = "markdownlint-cli2 \"**/*.md\"";
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    let providers = await detectAllProviders(await detectRepository(root));
+    expect(providers.get("markdownlint")?.activeCapabilities.documentation).toBeUndefined();
+
+    manifest.scripts["health:documentation"] = "markdownlint-cli2 \"**/*.md\" \"#node_modules\"";
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    providers = await detectAllProviders(await detectRepository(root));
+    expect(providers.get("markdownlint")?.activeCapabilities.documentation).toBe(true);
+  });
+
   it("credits configured accessibility rules and workspace consistency", async () => {
     const reactRoot = await copyFixture("react-eslint");
     temporary.push(reactRoot);
