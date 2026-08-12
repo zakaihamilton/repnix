@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AUDIT_LABEL_COLUMN_WIDTH, AUDIT_TWO_COLUMN_MIN_WIDTH, COMPACT_LAYOUT_HEIGHT, COMPACT_LAYOUT_WIDTH, HORIZONTAL_PANE_MIN_WIDTH, auditContentLineCount, auditPageSummary, auditRecommendationSummary, auditSetupOptions, auditStatusPresentation, auditUsesSingleColumn, clampTuiScroll, createSetupTuiTheme, diffLineColor, normalizeTuiDiffLine, selectedSetupOptions, selectionIndicator, selectionRowPresentation, setupCheckDetails, setupPaneLayout, setupStepIndex, tuiLayoutMetrics } from "../src/tui/setup-app.js";
+import { AUDIT_LABEL_COLUMN_WIDTH, AUDIT_TWO_COLUMN_MIN_WIDTH, COMPACT_LAYOUT_HEIGHT, COMPACT_LAYOUT_WIDTH, HORIZONTAL_PANE_MIN_WIDTH, auditContentLineCount, auditPageSummary, auditRecommendationSummary, auditSetupOptions, auditStatusPresentation, auditUsesSingleColumn, clampTuiScroll, createSetupTuiTheme, diffLineColor, manualContentLineCount, manualRecommendationLines, manualRecommendationSteps, manualRecommendationViewport, normalizeTuiDiffLine, selectedSetupOptions, selectionIndicator, selectionRowPresentation, setupCheckDetails, setupPaneLayout, setupStepIndex, tuiLayoutMetrics } from "../src/tui/setup-app.js";
 import { createSetupTuiModel, selectionItems, setupTuiReducer } from "../src/tui/setup-state.js";
 import type { AuditModel, Recommendation } from "../src/recommendations/recommendation-engine.js";
 import type { RepositoryContext } from "../src/core/types.js";
@@ -136,6 +136,14 @@ describe("setup TUI presentation", () => {
     expect(auditRecommendationSummary(recommendations)).toEqual({ baseline: 2, optional: 1, advanced: 0, total: 3 });
     expect(auditRecommendationSummary(recommendations, true)).toEqual({ baseline: 1, optional: 1, advanced: 0, total: 2 });
     expect(auditSetupOptions(audit)).toEqual(["jscpd", "dependency-cruiser", "GitHub Actions health step"]);
+    const manualLines = manualRecommendationLines(audit, 80);
+    expect(manualLines.join("\n")).toContain("1. OSV-Scanner");
+    expect(manualLines.join("\n")).toContain("HOW TO DO IT");
+    expect(manualLines[1]).toBe("Review the guidance below. Then add the provider and its configuration to your normal development or CI workflow.");
+    expect(manualLines[2]).toBe("");
+    expect(manualContentLineCount(audit, 80)).toBeGreaterThan(2);
+    expect(manualRecommendationViewport(10)).toBe(9);
+    expect(manualRecommendationViewport(1)).toBe(1);
     expect(auditContentLineCount(audit, true)).toBe(12);
     expect(auditContentLineCount(audit, false)).toBe(11);
     expect(auditContentLineCount(audit, true, 40)).toBeGreaterThan(auditContentLineCount(audit, true, 80));
@@ -148,11 +156,12 @@ describe("setup TUI presentation", () => {
     expect(auditStatusPresentation("missing", theme)).toMatchObject({ symbol: "✗" });
   });
 
-  it("maps the four setup steps to the correct active header step", () => {
+  it("maps the five setup steps to the correct active header step", () => {
     expect(setupStepIndex("audit")).toBe(0);
-    expect(setupStepIndex("select")).toBe(1);
-    expect(setupStepIndex("review")).toBe(2);
-    expect(setupStepIndex("applying")).toBe(3);
+    expect(setupStepIndex("manual")).toBe(1);
+    expect(setupStepIndex("select")).toBe(2);
+    expect(setupStepIndex("review")).toBe(3);
+    expect(setupStepIndex("applying")).toBe(4);
     expect(AUDIT_LABEL_COLUMN_WIDTH).toBe(25);
   });
 
@@ -192,6 +201,13 @@ describe("setup TUI presentation", () => {
     expect(details.caveat).toContain("Existing rules in .dependency-cruiser.cjs are preserved");
     expect(details.command).toBe("pnpm run health:architecture");
   });
+
+  it("gives manual recommendations concrete project-specific steps", () => {
+    const manual = recommendations[2]!;
+    const details = setupCheckDetails(manual, context);
+    expect(manualRecommendationSteps(manual, details)).toContain("Install the OSV-Scanner binary in your local toolchain or CI image.");
+    expect(manualRecommendationSteps(manual, details)).toHaveLength(3);
+  });
 });
 
 describe("setup TUI state", () => {
@@ -200,6 +216,17 @@ describe("setup TUI state", () => {
     expect(model.screen).toBe("audit");
     model = setupTuiReducer(model, { type: "begin-selection" });
     expect(model.screen).toBe("select");
+  });
+
+  it("opens and scrolls the manual recommendations page", () => {
+    let model = createSetupTuiModel(recommendations);
+    model = setupTuiReducer(model, { type: "begin-manual" });
+    expect(model.screen).toBe("manual");
+    model = setupTuiReducer(model, { type: "move-manual", direction: "down", lineCount: 20, viewport: 5 });
+    expect(model.manualScroll).toBe(1);
+    model = setupTuiReducer(model, { type: "back-to-audit" });
+    expect(model.screen).toBe("audit");
+    expect(model.manualScroll).toBe(0);
   });
 
   it("shows the empty state after an audit with no actionable recommendations", () => {

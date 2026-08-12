@@ -5,7 +5,7 @@ import type { InstallPlan } from "../core/types.js";
 import type { AuditModel } from "../recommendations/recommendation-engine.js";
 import { renderFileDiff } from "../setup/file-plan.js";
 import { selectionItems, type SetupSelectionItem, type SetupTuiModel } from "./setup-state.js";
-import { auditContentLineCount, auditPageSummary, auditRecommendationSummary, auditSetupOptions, selectedSetupOptions } from "./setup-helpers.js";
+import { auditContentLineCount, auditPageSummary, auditRecommendationSummary, auditSetupOptions, manualRecommendationLines, manualRecommendationViewport, selectedSetupOptions } from "./setup-helpers.js";
 import { clampTuiScroll, diffLineColor, foregroundColor, normalizeTuiDiffLine, selectionRowPresentation, SIDEBAR_CONTENT_WIDTH, SIDEBAR_WIDTH, textColor, type SetupPaneLayout, type SetupTuiTheme, type TuiLayoutMetrics } from "./setup-theme.js";
 import { CheckDetailView, CiDetailView, ConfirmButton, Panel, planStats, ReviewNotes } from "./setup-components.js";
 import { wrapTerminalText } from "../reporting/console-reporter.js";
@@ -34,13 +34,29 @@ export function AuditView({ audit, singleColumn, scroll, viewport, theme }: { au
     <Text key="facts" {...textColor(theme)} wrap="truncate-end">Roles: {page.roles.join(", ") || "none detected"}  ·  Languages: {page.languages.join(", ") || "none detected"}  ·  Workspaces: {page.workspaceCount}</Text>,
     <Newline key="facts-gap" />, <Text key="coverage-heading" color={theme.secondary} bold>HEALTH COVERAGE</Text>, ...coverageLines,
     <Newline key="coverage-gap" />, <Text key="next-steps-heading" color={theme.secondary} bold>NEXT STEPS</Text>,
-    <Text key="recommendations" {...textColor(theme)}>Recommendations: {summary.baseline} baseline  ·  {summary.optional} optional  ·  {summary.advanced} advanced</Text>,
+    <Text key="recommendations" {...textColor(theme)}>Actionable recommendations: {summary.baseline} baseline  ·  {summary.optional} optional  ·  {summary.advanced} advanced</Text>,
     ...(setupOptions.length ? [<Text key="setup-options" {...textColor(theme)} wrap="wrap">Setup options: {setupOptions.join(" · ")}</Text>] : []),
     <Text key="prompt" color={setupOptions.length ? theme.primary : theme.success} bold>{setupOptions.length ? "Press Enter to choose checks and continue setup." : "No actionable setup changes were found. Press Enter to finish."}</Text>,
   ];
   const start = clampTuiScroll(scroll, lines.length, Math.max(viewport, 1));
   const visible = lines.slice(start, start + Math.max(viewport, 1));
   return <Panel title="Repository audit" theme={theme} borderColor={theme.info}>{visible}{start + visible.length < lines.length ? <Text color={theme.muted}>↓ more · use ↑↓ to scroll</Text> : null}</Panel>;
+}
+
+export function ManualRecommendationsView({ audit, scroll, viewport, width, theme }: { audit: AuditModel; scroll: number; viewport: number; width: number; theme: SetupTuiTheme }): React.ReactElement {
+  const lines = manualRecommendationLines(audit, Math.max(width - 6, 20));
+  const contentViewport = manualRecommendationViewport(viewport);
+  const start = clampTuiScroll(scroll, lines.length, contentViewport);
+  const visible = lines.slice(start, start + contentViewport);
+  const hasMore = start + visible.length < lines.length;
+  return <Panel title={`Manual recommendations (${audit.recommendations.filter((recommendation) => !recommendation.actionable).length})`} theme={theme} borderColor={theme.warning}>
+    <Box flexDirection="column" flexGrow={1} flexShrink={1} overflow="hidden">
+      {visible.map((line, index) => line === ""
+        ? <Newline key={`${start + index}-blank`} />
+        : <Text key={`${start + index}-${line}`} {...(line.includes("HOW TO DO IT") ? { color: theme.secondary, bold: true } : line.match(/ · (baseline|optional|advanced)$/) ? { color: theme.warning, bold: true } : textColor(theme))}>{line}</Text>)}
+    </Box>
+    <Box height={1} flexShrink={0}><Text color={theme.muted}>{hasMore ? "↓ more · use ↑↓ to scroll" : " "}</Text></Box>
+  </Panel>;
 }
 
 export function SelectView({ audit, model, theme, paneLayout }: { audit: AuditModel; model: SetupTuiModel; theme: SetupTuiTheme; paneLayout: SetupPaneLayout }): React.ReactElement {

@@ -57,7 +57,98 @@ export function auditContentLineCount(audit: AuditModel, singleColumn: boolean, 
 
 export interface SetupCheckDetails { checks: string[]; scope: string; setup: string[]; command: string; caveat?: string }
 
+const MANUAL_GUIDANCE: Record<string, string[]> = {
+  "osv-scanner": [
+    "Install the OSV-Scanner binary in your local toolchain or CI image.",
+    "Make its local vulnerability database available to the environment that runs health checks.",
+    "Add the scan command to the repository health script, then decide whether existing vulnerabilities are baselined or fixed before enabling CI failures.",
+  ],
+  "eslint-boundaries": [
+    "Install eslint-plugin-boundaries as a development dependency.",
+    "Add the plugin to the existing ESLint configuration.",
+    "Define your folder or module element types and the allowed dependency relationships; start with a small set of rules that reflects the repository’s architecture.",
+  ],
+  "size-limit": [
+    "Choose the built JavaScript file or entry point whose size matters to users.",
+    "Add a Size Limit configuration with that artifact and an explicit limit based on the current measured size plus an agreed growth margin.",
+    "Run the check after the build and decide whether the limit should fail pull requests.",
+  ],
+  "jsx-a11y": [
+    "Install eslint-plugin-jsx-a11y as a development dependency.",
+    "Enable its recommended rules in the existing ESLint configuration.",
+    "Review any existing violations and tune only rules that do not match the project’s UI patterns.",
+  ],
+  c8: [
+    "Choose the test command that should produce coverage and install c8 as a development dependency.",
+    "Add a coverage script around that test command and set line, function, branch, and statement thresholds that reflect the project’s expectations.",
+    "Run the coverage command locally and in CI; raise thresholds deliberately as coverage improves.",
+  ],
+  stryker: [
+    "Install Stryker for the project’s test runner and create its project-specific configuration.",
+    "Limit mutation testing to the source paths and test command that matter most so runtime stays manageable.",
+    "Set a mutation score target after reviewing surviving mutants, then run it as a scheduled or opt-in CI check if it is too expensive for every pull request.",
+  ],
+  gitleaks: [
+    "Install the Gitleaks binary locally or add it to the CI image.",
+    "Run a repository scan and review any matches carefully; rotate real credentials immediately.",
+    "Add the scan to pre-commit or CI, and create a narrowly scoped allowlist only for reviewed false positives.",
+  ],
+  lhci: [
+    "Choose a stable deployed URL or a build-and-serve command that Lighthouse CI can measure.",
+    "Create a Lighthouse CI configuration with representative pages and explicit LCP, CLS, and TBT budgets.",
+    "Run the audit against that URL or build in CI and review the first measurements before making the budgets blocking.",
+  ],
+  actionlint: [
+    "Install actionlint locally or add it to the CI image.",
+    "Run it against .github/workflows and fix syntax, expression, and common workflow mistakes.",
+    "Add the command to CI so workflow changes are checked before merge.",
+  ],
+  changesets: [
+    "Install and initialize Changesets, which creates the .changeset directory and project configuration.",
+    "Decide which package changes require a changeset and document the expected release workflow.",
+    "Add a status check to CI and use the generated version/changelog flow when publishing.",
+  ],
+};
+
 function packageManagerRun(context: RepositoryContext, script: string): string { return context.packageManager ? `${context.packageManager} run ${script}` : `run ${script}`; }
+
+export function manualRecommendationSteps(recommendation: AuditModel["recommendations"][number], details: SetupCheckDetails, registry?: ProviderRegistry): string[] {
+  const configured = MANUAL_GUIDANCE[recommendation.provider];
+  if (configured) return configured;
+  const provider = registry?.get(recommendation.provider) ?? builtinProvider(recommendation.provider);
+  return [...details.setup, provider?.nextStep ?? "Review the provider documentation and add its command to the repository health workflow."];
+}
+
+export function manualRecommendationLines(audit: AuditModel, width: number): string[] {
+  const recommendations = audit.recommendations.filter((recommendation) => !recommendation.actionable);
+  const wrapWidth = Math.max(width, 20);
+  if (!recommendations.length) return ["No manual recommendations were found for this repository."];
+  const lines = [
+    "These checks apply to this repository but need a project-specific decision before RepNix can configure them safely.",
+    "Review the guidance below. Then add the provider and its configuration to your normal development or CI workflow.",
+  ];
+  recommendations.forEach((recommendation, index) => {
+    const details = setupCheckDetails(recommendation, audit.context, audit.registry);
+    const provider = audit.registry?.get(recommendation.provider) ?? builtinProvider(recommendation.provider);
+    lines.push("", `${index + 1}. ${recommendation.name} · ${CATEGORY_LABELS[recommendation.category] ?? recommendation.category} · ${recommendation.priority}`);
+    lines.push(...wrapTerminalText(`Why: ${recommendation.reason}`, wrapWidth, "  ", "  "));
+    lines.push("  HOW TO DO IT");
+    manualRecommendationSteps(recommendation, details, audit.registry).forEach((step, index) => {
+      lines.push(...wrapTerminalText(`${index + 1}. ${step}`, wrapWidth, "  ", "  "));
+    });
+    lines.push(...wrapTerminalText(`When ready: ${details.command}`, wrapWidth, "  ", "  "));
+    if (provider?.documentationUrl) lines.push(...wrapTerminalText(`Docs: ${provider.documentationUrl}`, wrapWidth, "  ", "  "));
+  });
+  return lines;
+}
+
+export function manualContentLineCount(audit: AuditModel, width: number): number {
+  return manualRecommendationLines(audit, Math.max(width - 6, 20)).length;
+}
+
+export function manualRecommendationViewport(viewport: number): number {
+  return Math.max(viewport - 1, 1);
+}
 
 function sourceScope(context: RepositoryContext): string {
   const fileCount = `${context.sourceFiles.length} source file${context.sourceFiles.length === 1 ? "" : "s"}`;

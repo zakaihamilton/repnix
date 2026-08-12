@@ -1,6 +1,6 @@
 import type { Recommendation } from "../recommendations/recommendation-engine.js";
 
-export type SetupScreen = "loading" | "audit" | "empty" | "select" | "planning" | "review" | "details" | "confirm" | "applying" | "success" | "error";
+export type SetupScreen = "loading" | "audit" | "manual" | "empty" | "select" | "planning" | "review" | "details" | "confirm" | "applying" | "success" | "error";
 
 export type SetupSelectionItem =
   | { kind: "provider"; provider: string; name: string }
@@ -10,6 +10,7 @@ export interface SetupTuiModel {
   screen: SetupScreen;
   cursor: number;
   auditScroll: number;
+  manualScroll: number;
   reviewCursor: number;
   detailScroll: number;
   confirmFocus: "cancel" | "apply";
@@ -25,6 +26,8 @@ export type SetupTuiAction =
   | { type: "toggle"; item?: SetupSelectionItem }
   | { type: "toggle-sidebar" }
   | { type: "move-audit"; direction: "up" | "down"; lineCount: number; viewport: number }
+  | { type: "begin-manual" }
+  | { type: "move-manual"; direction: "up" | "down"; lineCount: number; viewport: number }
   | { type: "begin-selection" }
   | { type: "show-empty" }
   | { type: "back-to-audit" }
@@ -73,6 +76,7 @@ export function createSetupTuiModel(recommendations: Recommendation[]): SetupTui
     screen: "audit",
     cursor: 0,
     auditScroll: 0,
+    manualScroll: 0,
     reviewCursor: 0,
     detailScroll: 0,
     confirmFocus: "cancel",
@@ -102,12 +106,16 @@ export function setupTuiReducer(model: SetupTuiModel, action: SetupTuiAction): S
       return { ...model, sidebarCollapsed: !model.sidebarCollapsed };
     case "move-audit":
       return { ...model, auditScroll: moveScroll(model.auditScroll, action.direction, action.lineCount, action.viewport) };
+    case "begin-manual":
+      return { ...model, screen: "manual", manualScroll: 0 };
+    case "move-manual":
+      return { ...model, manualScroll: moveScroll(model.manualScroll, action.direction, action.lineCount, action.viewport) };
     case "begin-selection":
       return { ...model, screen: "select", cursor: 0, sidebarCollapsed: false };
     case "show-empty":
       return { ...model, screen: "empty" };
     case "back-to-audit":
-      return { ...model, screen: "audit", cursor: 0, auditScroll: 0 };
+      return { ...model, screen: "audit", cursor: 0, auditScroll: 0, manualScroll: 0 };
     case "begin-planning":
       return { ...model, screen: "planning" };
     case "planning-complete":

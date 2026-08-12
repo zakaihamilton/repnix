@@ -24,7 +24,7 @@ export function Panel({ title, children, theme, flexGrow = 1, flexShrink, width,
 }
 
 export function Header({ model, repositoryName, packageManager, compact, theme }: { model: SetupTuiModel; repositoryName: string; packageManager: string | null; compact: boolean; theme: SetupTuiTheme }): React.ReactElement {
-  const steps = ["Audit", "Select checks", "Review changes", "Apply safely"];
+  const steps = ["Audit", "Manual guidance", "Select checks", "Review changes", "Apply safely"];
   const active = setupStepIndex(model.screen);
   return <Box flexDirection="column" marginBottom={1} flexShrink={0}>
     <Box flexDirection={compact ? "column" : "row"} justifyContent="space-between">
@@ -39,15 +39,17 @@ function KeyHint({ label, children, theme }: { label: string; children: React.Re
   return <Text><Text color={theme.primary} backgroundColor={theme.panelRaised} bold>{` ${label} `}</Text> <Text color={theme.muted}>{children}</Text></Text>;
 }
 
-export function Footer({ model, sidebarMode, theme }: { model: SetupTuiModel; sidebarMode: boolean; theme: SetupTuiTheme }): React.ReactElement {
+export function Footer({ model, sidebarMode, hasManualRecommendations, theme }: { model: SetupTuiModel; sidebarMode: boolean; hasManualRecommendations?: boolean; theme: SetupTuiTheme }): React.ReactElement {
   const hints: Array<[string, string]> = model.screen === "audit"
-    ? [["↑↓/jk", "scroll"], ["Enter", "continue to checks"], ["q/Esc", "exit"]]
+    ? [["↑↓/jk", "scroll"], ["Enter", hasManualRecommendations ? "continue to guidance" : "continue to checks"], ["q/Esc", "exit"]]
+    : model.screen === "manual"
+      ? [["↑↓/jk", "scroll"], ["Enter", "continue to checks"], ["Esc/Delete", "back to audit"], ["q", "quit"]]
     : model.screen === "select"
-      ? [["↑↓/jk", "move"], ["Space", "toggle"], ...(sidebarMode ? [["Tab", model.sidebarCollapsed ? "show checks" : "show details"] as [string, string]] : []), ["Enter", "review"], ["Esc/Backspace", "back"], ["q", "quit"]]
+      ? [["↑↓/jk", "move"], ["Space", "toggle"], ...(sidebarMode ? [["Tab", model.sidebarCollapsed ? "show checks" : "show details"] as [string, string]] : []), ["Enter", "review"], ["Esc/Delete", "back"], ["q", "quit"]]
       : model.screen === "review"
-        ? [["↑↓", "move"], ["Space", "inspect"], ...(sidebarMode ? [["Tab", model.sidebarCollapsed ? "show files" : "show details"] as [string, string]] : []), ["Enter", "confirm"], ["Esc/Backspace", "back"], ["q", "quit"]]
-        : model.screen === "details" ? [["↑↓/jk", "scroll"], ["Esc/Backspace", "back"], ["q", "quit"]]
-          : model.screen === "confirm" ? [["←→", "focus"], ["Enter", "select"], ["Esc/Backspace", "back"], ["q", "quit"]]
+        ? [["↑↓", "move"], ["Space", "inspect"], ...(sidebarMode ? [["Tab", model.sidebarCollapsed ? "show files" : "show details"] as [string, string]] : []), ["Enter", "confirm"], ["Esc/Delete", "back"], ["q", "quit"]]
+        : model.screen === "details" ? [["↑↓/jk", "scroll"], ["Esc/Delete", "back"], ["q", "quit"]]
+          : model.screen === "confirm" ? [["←→", "focus"], ["Enter", "select"], ["Esc/Delete", "back"], ["q", "quit"]]
             : model.screen === "success" || model.screen === "error" ? [["Enter/q", "exit"]] : [["…", "Please wait"]];
   return <Box borderStyle="single" borderColor={theme.borderStrong} paddingX={1} marginTop={1} flexShrink={0}><Box flexDirection="row" flexWrap="wrap">{hints.map(([label, description], index) => <Box key={label} flexDirection="row" marginRight={index < hints.length - 1 ? 2 : 0} flexShrink={0}>{index > 0 ? <Text color={theme.border}>·  </Text> : null}<KeyHint label={label} theme={theme}>{description}</KeyHint></Box>)}</Box></Box>;
 }

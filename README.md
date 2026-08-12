@@ -111,16 +111,16 @@ If `repnix check` says that no applicable health checks ran, RepNix did not find
 `repnix setup` is an interactive, opt-in change flow:
 
 - In a capable terminal, setup opens a full-screen keyboard-driven dashboard that starts with an audit page showing detected project facts, category coverage, and recommendation priorities. Press **Enter** to continue to provider selection, review the planned changes, and explicitly confirm apply.
-- On the audit page, use **Enter** to continue or **q/Esc** to leave without changing files. If no actionable recommendations exist, the audit page explains that there is nothing to add before setup exits.
+- After the audit page, setup opens a manual-recommendations step when checks need project-specific decisions. It lists those checks with concrete setup steps and the command to run when ready. Press **Enter** to continue to installable checks or **q/Esc** to leave without changing files. If no recommendations exist, the audit page explains that there is nothing to add before setup exits.
 - Baseline recommendations are preselected because they are useful for most JavaScript and TypeScript repositories.
 - Optional and advanced recommendations are not automatically enabled when they need project-specific rules or budgets.
-- Use **↑/↓** or **j/k** to move after the audit page. On the selection screen, **Space** selects or clears a provider and **Enter** continues. Press **Esc** or **Backspace** to return to the previous page; use **q** to quit. On the review screen, **↑/↓** moves between files, **Space** inspects the focused file, and **Enter** opens confirmation. In the confirmation dialog, focus starts on **Cancel**; press **→** to focus **Apply**, then **Enter**. While changes are being applied, exit keys are disabled until the rollback-safe operation finishes.
+- Use **↑/↓** or **j/k** to move after the audit page. On the selection screen, **Space** selects or clears a provider and **Enter** continues. Press **Esc** or **Delete** to return to the previous page; use **q** to quit. On the review screen, **↑/↓** moves between files, **Space** inspects the focused file, and **Enter** opens confirmation. In the confirmation dialog, focus starts on **Cancel**; press **→** to focus **Apply**, then **Enter**. While changes are being applied, exit keys are disabled until the rollback-safe operation finishes.
 - Before confirmation, RepNix shows the packages, scripts, configuration files, and optional CI changes it plans to apply. Existing files are preserved and conflicts are shown for review.
 - Some recommendations need preparation outside RepNix: OSV-Scanner needs its binary and local vulnerability database, architecture checks need module-boundary rules, and bundle checks need an explicit size budget.
 
 If the terminal is too small or does not support the full-screen dashboard, RepNix falls back to sequential prompts. Non-interactive environments can use `repnix setup --plan --format json` for a read-only plan.
 
-The interactive setup flow is: `audit → select checks → review changes → apply safely`.
+The interactive setup flow is: `audit → manual guidance (when needed) → select checks → review changes → apply safely`.
 
 After setup completes, run `repnix check --details` to verify coverage and review findings.
 

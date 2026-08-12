@@ -9,10 +9,10 @@ import { applyInstallPlan } from "../setup/apply-plan.js";
 import { buildInstallPlan } from "../setup/install-plan.js";
 import { renderFileDiff } from "../setup/file-plan.js";
 import { createSetupTuiModel, selectionItems, setupTuiReducer, type SetupTuiModel } from "./setup-state.js";
-import { auditContentLineCount, auditPageSummary, auditRecommendationSummary, auditSetupOptions, auditStatusPresentation, selectedSetupOptions, setupCheckDetails, type AuditPageSummary, type SetupCheckDetails } from "./setup-helpers.js";
+import { auditContentLineCount, auditPageSummary, auditRecommendationSummary, auditSetupOptions, auditStatusPresentation, manualContentLineCount, manualRecommendationLines, manualRecommendationSteps, manualRecommendationViewport, selectedSetupOptions, setupCheckDetails, type AuditPageSummary, type SetupCheckDetails } from "./setup-helpers.js";
 import { createSetupTuiTheme, diffLineColor, normalizeTuiDiffLine, selectionIndicator, selectionRowPresentation, setupPaneLayout, setupStepIndex, tuiLayoutMetrics, clampTuiScroll, type ColorOutput, type SetupPaneLayout, type SetupTuiTheme, type ThemeEnvironment, type TuiLayoutMetrics } from "./setup-theme.js";
 import { Footer, Header, Panel, progressMessage } from "./setup-components.js";
-import { AuditView, ConfirmView, DetailsView, ReviewView, SelectView, auditUsesSingleColumn, AUDIT_LABEL_COLUMN_WIDTH, AUDIT_TWO_COLUMN_MIN_WIDTH } from "./setup-views.js";
+import { AuditView, ConfirmView, DetailsView, ManualRecommendationsView, ReviewView, SelectView, auditUsesSingleColumn, AUDIT_LABEL_COLUMN_WIDTH, AUDIT_TWO_COLUMN_MIN_WIDTH } from "./setup-views.js";
 
 export interface SetupTuiDependencies {
   audit: typeof auditRepository;
@@ -35,7 +35,7 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
   const { stdout } = useStdout();
   const [audit, setAudit] = useState<AuditModel>();
   const [plan, setPlan] = useState<InstallPlan>();
-  const [model, setModel] = useState<SetupTuiModel>({ screen: "loading", cursor: 0, auditScroll: 0, reviewCursor: 0, detailScroll: 0, confirmFocus: "cancel", selectedProviders: [], includeCi: false, sidebarCollapsed: false });
+  const [model, setModel] = useState<SetupTuiModel>({ screen: "loading", cursor: 0, auditScroll: 0, manualScroll: 0, reviewCursor: 0, detailScroll: 0, confirmFocus: "cancel", selectedProviders: [], includeCi: false, sidebarCollapsed: false });
   const [dimensions, setDimensions] = useState({ width: stdout.columns ?? 100, height: stdout.rows ?? 24 });
   const startedApply = useRef(false);
   const theme = useMemo(() => createSetupTuiTheme(stdout), [stdout]);
@@ -87,6 +87,7 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
   const auditSingleColumn = auditUsesSingleColumn(width);
   const layout = tuiLayoutMetrics(height, compact);
   const auditLineCount = audit ? auditContentLineCount(audit, auditSingleColumn, width) : 0;
+  const manualLineCount = audit ? manualContentLineCount(audit, width) : 0;
   const detailFile = plan?.files[model.reviewCursor];
   const detailLineCount = detailFile ? renderFileDiff(detailFile, Math.max(width - 8, 32)).split("\n").length : 0;
   const busy = model.screen === "loading" || model.screen === "planning" || model.screen === "applying";
@@ -95,9 +96,10 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
   useInput((input, key) => {
     if (input === "\u0003" || (key.ctrl && input === "c")) { if (!busy) leave(); return; }
     if (input === "q") { if (!busy) leave(); return; }
-    if (key.escape || key.backspace) {
+    if (key.escape || key.backspace || key.delete) {
       if (busy) return;
       if (model.screen === "details") dispatch({ type: "close-details" });
+      else if (model.screen === "manual") dispatch({ type: "back-to-audit" });
       else if (model.screen === "confirm") dispatch({ type: "cancel-confirm" });
       else if (model.screen === "review") dispatch({ type: "back-to-select" });
       else if (model.screen === "select") dispatch({ type: "back-to-audit" });
@@ -109,6 +111,12 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
     if (model.screen === "audit") {
       if (key.upArrow || input === "k") dispatch({ type: "move-audit", direction: "up", lineCount: auditLineCount, viewport: layout.detailViewport });
       else if (key.downArrow || input === "j") dispatch({ type: "move-audit", direction: "down", lineCount: auditLineCount, viewport: layout.detailViewport });
+      else if (key.return) dispatch({ type: audit?.recommendations.some((recommendation) => !recommendation.actionable) ? "begin-manual" : audit?.recommendations.some((recommendation) => recommendation.actionable) ? "begin-selection" : "show-empty" });
+      return;
+    }
+    if (model.screen === "manual") {
+      if (key.upArrow || input === "k") dispatch({ type: "move-manual", direction: "up", lineCount: manualLineCount, viewport: manualRecommendationViewport(layout.detailViewport) });
+      else if (key.downArrow || input === "j") dispatch({ type: "move-manual", direction: "down", lineCount: manualLineCount, viewport: manualRecommendationViewport(layout.detailViewport) });
       else if (key.return) dispatch({ type: audit?.recommendations.some((recommendation) => recommendation.actionable) ? "begin-selection" : "show-empty" });
       return;
     }
@@ -146,6 +154,7 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
     <Box flexDirection="column" flexGrow={1} flexShrink={1} minHeight={1} overflow="hidden">
       {model.screen === "loading" ? <Panel title="Scanning repository" theme={theme} borderColor={theme.info}><Text color={theme.info}>◌ Detecting checks, project structure, and recommendations…</Text></Panel> : null}
       {model.screen === "audit" && audit ? <AuditView audit={audit} singleColumn={auditSingleColumn} scroll={model.auditScroll} viewport={layout.detailViewport} theme={theme} /> : null}
+      {model.screen === "manual" && audit ? <ManualRecommendationsView audit={audit} scroll={model.manualScroll} viewport={layout.detailViewport} width={width} theme={theme} /> : null}
       {model.screen === "empty" ? <Panel title="Nothing to add" theme={theme} borderColor={theme.success}><Text color={theme.success}>● Your active checks already cover the gaps RepNix found.</Text></Panel> : null}
       {model.screen === "select" && audit ? <SelectView audit={audit} model={model} paneLayout={paneLayout} theme={theme} /> : null}
       {model.screen === "planning" ? <Panel title="Preparing review" theme={theme} borderColor={theme.info}><Text color={theme.info}>◌ Building a safe setup plan…</Text></Panel> : null}
@@ -156,7 +165,7 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
       {model.screen === "success" ? <Panel title="Setup complete" theme={theme} borderColor={theme.success}><Text color={theme.success}>● Repository health setup completed successfully.</Text><Newline /><Text>{model.progress}</Text><Text>Run `repnix check --details` to review findings.</Text></Panel> : null}
       {model.screen === "error" ? <Panel title="Setup stopped" theme={theme} borderColor={theme.danger}><Text color={theme.danger}>◆ {model.error ?? "An unexpected error occurred."}</Text><Newline /><Text color={theme.muted}>No further changes will be applied.</Text></Panel> : null}
     </Box>
-    <Footer model={model} sidebarMode={sidebarMode} theme={theme} />
+    <Footer model={model} sidebarMode={sidebarMode} hasManualRecommendations={Boolean(audit?.recommendations.some((recommendation) => !recommendation.actionable))} theme={theme} />
   </Box>;
 }
 
@@ -171,7 +180,7 @@ export async function runSetupTui(options: DiagnosticOptions = {}): Promise<numb
   finally { process.stdout.write("\u001b[?25h\u001b[?1049l"); }
 }
 
-export { supportsTui, createSetupTuiTheme, diffLineColor, normalizeTuiDiffLine, selectionIndicator, selectionRowPresentation, setupPaneLayout, setupStepIndex, tuiLayoutMetrics, clampTuiScroll, auditContentLineCount, auditPageSummary, auditRecommendationSummary, auditSetupOptions, auditStatusPresentation, selectedSetupOptions, setupCheckDetails };
+export { supportsTui, createSetupTuiTheme, diffLineColor, normalizeTuiDiffLine, selectionIndicator, selectionRowPresentation, setupPaneLayout, setupStepIndex, tuiLayoutMetrics, clampTuiScroll, auditContentLineCount, auditPageSummary, auditRecommendationSummary, auditSetupOptions, auditStatusPresentation, manualContentLineCount, manualRecommendationLines, manualRecommendationSteps, manualRecommendationViewport, selectedSetupOptions, setupCheckDetails };
 export type { AuditPageSummary, SetupCheckDetails, ColorOutput, SetupPaneLayout, SetupTuiTheme, ThemeEnvironment, TuiLayoutMetrics };
 export { AUDIT_LABEL_COLUMN_WIDTH, AUDIT_TWO_COLUMN_MIN_WIDTH, auditUsesSingleColumn };
 export { COMPACT_LAYOUT_HEIGHT, COMPACT_LAYOUT_WIDTH, HORIZONTAL_PANE_MIN_WIDTH } from "./setup-theme.js";

@@ -120,7 +120,8 @@ export function clampTuiScroll(scroll: number, lineCount: number, viewport: numb
 
 export function setupStepIndex(screen: SetupTuiModel["screen"]): number {
   if (screen === "loading" || screen === "audit" || screen === "empty") return 0;
-  if (screen === "select" || screen === "planning") return 1;
-  if (screen === "review" || screen === "details" || screen === "confirm") return 2;
-  return 3;
+  if (screen === "manual") return 1;
+  if (screen === "select" || screen === "planning") return 2;
+  if (screen === "review" || screen === "details" || screen === "confirm") return 3;
+  return 4;
 }
