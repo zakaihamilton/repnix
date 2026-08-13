@@ -3,6 +3,7 @@ import { normalizeDependencyCruiser } from "../src/providers/dependency-cruiser/
 import { normalizeOsv } from "../src/providers/osv/normalizer.js";
 import { normalizePublint } from "../src/providers/publint/normalizer.js";
 import { normalizeAttw } from "../src/providers/attw/normalizer.js";
+import { normalizeMarkdownlint } from "../src/providers/markdownlint/normalizer.js";
 import { normalizeJscpd, normalizeKnip } from "../src/runners/health-runner.js";
 
 describe("provider normalizers", () => {
@@ -100,5 +101,33 @@ describe("provider normalizers", () => {
       },
     };
     expect(normalizeAttw(report, { ignoreRules: ["named-exports"], profile: "esm-only" })).toEqual([]);
+  });
+
+  it("normalizes markdownlint-cli2 text output into per-rule findings", () => {
+    const findings = normalizeMarkdownlint([
+      "README.md:8:81 error MD013/line-length Line length [Expected: 80; Actual: 286]",
+      "docs/guide.md:7 error MD025/single-title/single-h1 Multiple top-level headings in the same document [Context: \"Test info\"]",
+      "docs/guide.md:14 error MD040/fenced-code-language Fenced code blocks should have a language specified [Context: \"```\"]",
+      "markdownlint-cli2 v0.18.1 (markdownlint v0.38.0)",
+    ].join("\n"), "/repo");
+    expect(findings).toHaveLength(3);
+    expect(findings[0]).toMatchObject({
+      provider: "markdownlint",
+      category: "documentation",
+      type: "markdown-style",
+      ruleId: "MD013/line-length",
+      severity: "error",
+      file: "README.md",
+      line: 8,
+      column: 81,
+      message: "Line length [Expected: 80; Actual: 286]",
+    });
+    expect(findings[1]).toMatchObject({
+      ruleId: "MD025/single-title/single-h1",
+      file: "docs/guide.md",
+      line: 7,
+    });
+    expect(findings[1]?.column).toBeUndefined();
+    expect(findings[2]?.ruleId).toBe("MD040/fenced-code-language");
   });
 });

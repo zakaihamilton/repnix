@@ -1,6 +1,6 @@
 {
   "name": "repnix",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "description": "Local-first repository health orchestration for JavaScript and TypeScript projects",
   "repository": {
     "type": "git",
@@ -11,6 +11,8 @@
     "url": "https://github.com/zakaihamilton/repnix/issues"
   },
   "type": "module",
+  "main": "./dist/cli.js",
+  "types": "./dist/cli.d.ts",
   "bin": {
     "repnix": "dist/cli.js"
   },
@@ -44,7 +46,16 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
-    "verify": "pnpm lint && pnpm typecheck && pnpm build && pnpm test:run && pnpm test:compatibility"
+    "health": "node dist/cli.js check",
+    "verify": "pnpm lint && pnpm typecheck && pnpm build && pnpm test:run && pnpm test:compatibility",
+    "health:dead-code": "knip",
+    "health:duplication": "jscpd src",
+    "health:package:publint": "publint",
+    "health:package:types": "attw --pack .",
+    "health:coverage": "c8 --all --reporter=text pnpm run test",
+    "health:licenses": "license-checker --json",
+    "health:documentation": "markdownlint-cli2 \"**/*.md\" \"#node_modules\" \"#playwright-report\" \"#test-results\" \"#coverage\" \"#dist\" \"#build\" \"#.next\" \"#.turbo\" \"#.git\" \"#generated\"",
+    "health:release": "changeset status"
   },
   "engines": {
     "node": ">=20"
@@ -73,10 +84,18 @@
     "zod": "^4.0.0"
   },
   "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.5",
+    "@changesets/cli": "^3.0.0",
     "@eslint/js": "^9.34.0",
     "@types/node": "^20.19.11",
     "@types/react": "^18.3.31",
+    "c8": "^12.0.0",
     "eslint": "^9.34.0",
+    "jscpd": "^5.0.14",
+    "knip": "^6.32.2",
+    "license-checker": "^25.0.1",
+    "markdownlint-cli2": "^0.23.2",
+    "publint": "^0.3.23",
     "typescript": "^5.9.2",
     "typescript-eslint": "^8.41.0",
     "vitest": "^3.2.4"

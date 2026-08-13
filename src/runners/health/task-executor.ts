@@ -42,9 +42,7 @@ export async function expectedLocalBinary(root: string, binary: string): Promise
   return (await localBinary(root, binary)) ?? path.join(root, "node_modules", ".bin", `${binary}${process.platform === "win32" ? ".cmd" : ""}`);
 }
 
-export async function executableBinary(root: string, binary: string, searchPath = false): Promise<string | null> {
-  const local = await localBinary(root, binary);
-  if (local || !searchPath) return local;
+export async function executableOnPath(binary: string): Promise<string | null> {
   for (const directory of (process.env.PATH ?? "").split(path.delimiter)) {
     if (!directory) continue;
     const candidate = path.join(directory, `${binary}${process.platform === "win32" ? ".exe" : ""}`);
@@ -56,6 +54,12 @@ export async function executableBinary(root: string, binary: string, searchPath 
     }
   }
   return null;
+}
+
+export async function executableBinary(root: string, binary: string, searchPath = false): Promise<string | null> {
+  const local = await localBinary(root, binary);
+  if (local || !searchPath) return local;
+  return executableOnPath(binary);
 }
 
 export function outputExcerpt(result: CommandResult): string {
@@ -118,18 +122,6 @@ export async function runRunnableCommand(runnable: RunnableCommand, context: Rep
   return commandResult(runnable, result, context, normalize);
 }
 
-export async function runBounded<T>(tasks: Array<() => Promise<T>>, jobs: number): Promise<T[]> {
-  const results = new Array<T>(tasks.length);
-  let cursor = 0;
-  const workers = Array.from({ length: Math.min(Math.max(jobs, 1), Math.max(tasks.length, 1)) }, async () => {
-    while (cursor < tasks.length) {
-      const index = cursor++;
-      results[index] = await tasks[index]!();
-    }
-  });
-  await Promise.all(workers);
-  return results;
-}
 
 export interface DependentTask<T> {
   id: string;

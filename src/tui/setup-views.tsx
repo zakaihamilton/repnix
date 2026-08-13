@@ -5,7 +5,7 @@ import type { HealthResult, HealthRun, InstallPlan } from "../core/types.js";
 import type { AuditModel } from "../recommendations/recommendation-engine.js";
 import { renderFileDiff } from "../setup/file-plan.js";
 import { selectionItems, type SetupSelectionItem, type SetupTuiModel } from "./setup-state.js";
-import { auditContentLineCount, auditPageSummary, auditRecommendationSummary, auditSetupOptions, manualRecommendationLines, manualRecommendationViewport, selectedSetupOptions } from "./setup-helpers.js";
+import { auditPageSummary, auditRecommendationSummary, auditSetupOptions, manualRecommendationLines, manualRecommendationViewport, selectedSetupOptions } from "./setup-helpers.js";
 import { clampTuiScroll, diffLineColor, foregroundColor, normalizeTuiDiffLine, selectionRowPresentation, SIDEBAR_CONTENT_WIDTH, SIDEBAR_WIDTH, textColor, type SetupPaneLayout, type SetupTuiTheme, type TuiLayoutMetrics } from "./setup-theme.js";
 import { CheckDetailView, CiDetailView, ConfirmButton, Panel, planStats, ReviewNotes } from "./setup-components.js";
 import { wrapTerminalText } from "../reporting/console-reporter.js";
@@ -253,5 +253,3 @@ export function ConfirmView({ audit, plan, model, compact, theme }: { audit: Aud
   const selectedOptions = selectedSetupOptions(audit, model);
   return <Panel title="Confirm setup" theme={theme} borderColor={theme.warning}><Text color={theme.warning} bold>◆ Apply these reviewed changes?</Text><Newline /><Text color={theme.primary} bold>{planStats(plan)}</Text><Newline /><Text color={theme.secondary} bold>SELECTED OPTIONS</Text>{selectedOptions.length ? selectedOptions.map((option) => <Text key={option} {...textColor(theme)}>  + {option}</Text>) : <Text color={theme.muted}>  No setup options selected.</Text>}<Newline /><Text color={theme.secondary} bold>REVIEW NOTES</Text><ReviewNotes plan={plan} theme={theme} /><Newline /><Box flexDirection={compact ? "column" : "row"} gap={1}><ConfirmButton label="CANCEL" focused={model.confirmFocus === "cancel"} theme={theme} /><ConfirmButton label="APPLY" focused={model.confirmFocus === "apply"} theme={theme} /></Box><Text color={theme.muted}>Use the arrow keys to choose an action, then press Enter.</Text></Panel>;
 }
-
-export { auditContentLineCount, wrapTerminalText };

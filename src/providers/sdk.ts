@@ -47,6 +47,11 @@ export interface ProviderHookContext {
   runtime: ProviderRuntime;
 }
 
+export interface RecommendHelpers {
+  detections: Map<string, ProviderDetection>;
+  coverageStatus?: "covered" | "partial" | "missing" | "not-applicable" | "off";
+}
+
 export interface ProviderModule {
   apiVersion?: typeof PROVIDER_API_VERSION;
   id: string;
@@ -71,7 +76,9 @@ export interface ProviderModule {
   nextStep?: string;
   setup?: ProviderSetup;
   detect?: (context: RepositoryContext) => Promise<ProviderDetection>;
-  recommend?: (context: RepositoryContext) => ProviderRecommendation | null;
+  /** Lower values appear first in audit output. Plugins without an order follow built-ins. */
+  recommendOrder?: number;
+  recommend?: (context: RepositoryContext, helpers?: RecommendHelpers) => ProviderRecommendation | null;
   planInstall?: (context: RepositoryContext) => Promise<InstallPlan>;
   run?: (input: ProviderHookContext) => Promise<HealthResult>;
   normalize?: (input: { output: string; result: { exitCode: number | null; stderr: string; stdout: string }; context: RepositoryContext }) => HealthFinding[];

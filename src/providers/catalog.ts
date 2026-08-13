@@ -1,9 +1,11 @@
-import { constants } from "node:fs";
-import { access, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { ProviderDetection, RepositoryContext } from "../core/types.js";
 import { isNonMutatingQualityCommand, isNonMutatingTestCommand } from "../repository/script-detection.js";
+import { MARKDOWNLINT_CLI_ARGS } from "./markdownlint/command.js";
+import { normalizeMarkdownlintResult } from "./markdownlint/normalizer.js";
 import type { ProviderModule } from "./sdk.js";
+import { executableOnPath } from "../runners/health/task-executor.js";
 
 export type ProviderDescriptor = ProviderModule;
 
@@ -252,7 +254,8 @@ export const PROVIDERS: ProviderDescriptor[] = [
     scriptPattern: /(^|\s|&&|\|)markdownlint(?:-cli2)?(?:\s|$)/,
     scriptNames: ["health:documentation", "documentation", "docs", "markdownlint"],
     capabilities: { documentation: true },
-    command: { binary: "markdownlint-cli2", args: ["**/*.md", "#node_modules"] },
+    command: { binary: "markdownlint-cli2", args: [...MARKDOWNLINT_CLI_ARGS] },
+    normalize: normalizeMarkdownlintResult,
     zeroConfig: true,
   },
   {
@@ -313,20 +316,6 @@ export const PROVIDERS: ProviderDescriptor[] = [
     zeroConfig: true,
   },
 ];
-
-async function executableOnPath(binary: string): Promise<string | null> {
-  for (const directory of (process.env.PATH ?? "").split(path.delimiter)) {
-    if (!directory) continue;
-    const candidate = path.join(directory, `${binary}${process.platform === "win32" ? ".exe" : ""}`);
-    try {
-      await access(candidate, constants.X_OK);
-      return candidate;
-    } catch {
-      // Keep searching PATH.
-    }
-  }
-  return null;
-}
 
 export async function detectProvider(
   descriptor: ProviderDescriptor,

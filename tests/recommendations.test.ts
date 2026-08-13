@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { readConfig } from "../src/config/repo-health-config.js";
 import { detectAllProviders } from "../src/providers/catalog.js";
+import { createBuiltinRegistry, ProviderRegistry } from "../src/providers/registry.js";
+import { defineProvider } from "../src/providers/sdk.js";
 import { buildAuditModel } from "../src/recommendations/recommendation-engine.js";
 import { detectRepository } from "../src/repository/detect-repository.js";
 import { fixturePath } from "./helpers.js";
@@ -70,5 +72,34 @@ describe("recommendation engine", () => {
     context.gitDefaultBranch = "main";
     model = buildAuditModel(context, await detectAllProviders(context), config);
     expect(model.recommendations.find((item) => item.provider === "changesets")).toMatchObject({ actionable: true, priority: "optional" });
+  });
+
+  it("uses provider.recommend from the registry", async () => {
+    const context = await detectRepository(fixturePath("minimal-js"));
+    const { config } = await readConfig(context.root);
+    const builtin = createBuiltinRegistry();
+    const provider = defineProvider({
+      id: "synthetic-recommend",
+      name: "Synthetic Recommend",
+      category: "synthetic-health",
+      packages: [],
+      configPatterns: [],
+      scriptPattern: /synthetic-recommend/,
+      capabilities: { syntheticCheck: true },
+      recommendOrder: 5,
+      recommend: () => ({
+        recommended: true,
+        priority: "baseline",
+        actionable: true,
+        reason: "Synthetic coverage is missing from this repository on purpose for the registry hook test.",
+      }),
+    });
+    const registry = new ProviderRegistry(
+      [...builtin.providers, provider],
+      [...builtin.categories, { id: "synthetic-health", label: "Synthetic health", description: "Test-only category", requiredCapabilities: ["syntheticCheck"], applicable: () => ({ applicable: true, scopes: ["."], evidence: ["test"] }) }],
+    );
+    const model = buildAuditModel(context, await detectAllProviders(context, registry.providers), config, registry);
+    expect(model.recommendations[0]).toMatchObject({ provider: "synthetic-recommend", name: "Synthetic Recommend", category: "synthetic-health", priority: "baseline", actionable: true });
+    expect(model.recommendations.map((item) => item.provider)).toContain("knip");
   });
 });
