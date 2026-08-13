@@ -20,7 +20,7 @@ jobs:
           if [ "$(git branch --show-current)" != "main" ]; then
             git branch --force main refs/remotes/origin/main
           fi
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 10.15.0
       - uses: actions/setup-node@v4
