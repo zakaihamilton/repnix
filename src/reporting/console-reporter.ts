@@ -317,6 +317,8 @@ export function renderHealthDetails(run: HealthRun): string {
   return lines.join("\n").trimEnd();
 }
 
+export const renderExplain = renderHealthDetails;
+
 export function renderSarif(run: HealthRun): string {
   const findings = run.results.flatMap((result) => result.findings);
   const rules = [...new Map(findings.map((finding) => {

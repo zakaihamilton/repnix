@@ -1,5 +1,4 @@
-import { constants } from "node:fs";
-import { access, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { ProviderDetection, RepositoryContext } from "../core/types.js";
 import { isNonMutatingQualityCommand, isNonMutatingTestCommand } from "../repository/script-detection.js";

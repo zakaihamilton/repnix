@@ -1,4 +1,4 @@
-import { CATEGORY_DESCRIPTIONS, CATEGORY_LABELS } from "../core/health-category.js";
+import { CATEGORY_LABELS } from "../core/health-category.js";
 import { builtinProvider } from "../providers/registry.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import type { RepositoryContext } from "../core/types.js";
@@ -182,4 +182,3 @@ export function setupCheckDetails(recommendation: AuditModel["recommendations"][
     }
   }
 }
-

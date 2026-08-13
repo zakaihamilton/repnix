@@ -8,7 +8,7 @@ import { markdownlintScriptCommand } from "./markdownlint/command.js";
 import { PROVIDER_RECOMMENDATIONS } from "./recommend.js";
 import type { RepositoryContext } from "../core/types.js";
 import { safeTestScript } from "../repository/script-detection.js";
-import { definePlugin, PROVIDER_API_VERSION, type CategoryModule, type ProviderModule, type RepnixProviderPlugin } from "./sdk.js";
+import { PROVIDER_API_VERSION, type CategoryModule, type ProviderModule, type RepnixProviderPlugin } from "./sdk.js";
 
 export type ProviderSupport = "detectable" | "runnable" | "installable";
 
@@ -151,4 +151,3 @@ const byId = new Map(BUILTIN_PROVIDERS.map((provider) => [provider.id, provider]
 const byName = new Map(BUILTIN_PROVIDERS.map((provider) => [provider.name, provider]));
 export function builtinProvider(id: string): BuiltinProviderDefinition | undefined { return byId.get(id); }
 export function builtinProviderByName(name: string): BuiltinProviderDefinition | undefined { return byName.get(name); }
-

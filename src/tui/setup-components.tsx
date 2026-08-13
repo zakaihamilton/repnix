@@ -7,7 +7,7 @@ import type { AuditModel } from "../recommendations/recommendation-engine.js";
 import { setupCheckDetails } from "./setup-helpers.js";
 import type { SetupTuiModel } from "./setup-state.js";
 import type { ProviderRegistry } from "../providers/registry.js";
-import { foregroundColor, setupStepIndex, textColor, type SetupTuiTheme } from "./setup-theme.js";
+import { setupStepIndex, textColor, type SetupTuiTheme } from "./setup-theme.js";
 
 export function progressMessage(progress: InstallProgress): string {
   if (progress.phase === "validating") return `Validating ${progress.total ?? 0} reviewed file${progress.total === 1 ? "" : "s"}…`;
@@ -100,4 +100,3 @@ export function ReviewNotes({ plan, theme }: { plan: InstallPlan; theme: SetupTu
 export function ConfirmButton({ label, focused, theme }: { label: string; focused: boolean; theme: SetupTuiTheme }): React.ReactElement {
   return <Text color={focused ? theme.primary : theme.muted} backgroundColor={focused ? theme.active : theme.panelRaised} bold={focused}>{` ${label} `}</Text>;
 }
-
