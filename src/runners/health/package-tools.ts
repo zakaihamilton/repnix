@@ -26,12 +26,20 @@ export interface PackedPackage {
   error?: string;
 }
 
+function isPackReportEntry(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value) && typeof (value as Record<string, unknown>).filename === "string");
+}
+
 export function packFilenameFromReport(report: unknown): string {
-  const entry = Array.isArray(report) ? report[0] : report;
-  if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw new Error("npm pack returned an unsupported report.");
-  const filename = (entry as Record<string, unknown>).filename;
-  if (typeof filename !== "string") throw new Error("npm pack returned an unsupported report.");
-  return filename;
+  const entry = Array.isArray(report)
+    ? report[0]
+    : isPackReportEntry(report)
+      ? report
+      : report && typeof report === "object"
+        ? Object.values(report).find(isPackReportEntry)
+        : undefined;
+  if (!isPackReportEntry(entry)) throw new Error("npm pack returned an unsupported report.");
+  return entry.filename as string;
 }
 
 export async function packLocalPackage(context: RepositoryContext, temporary: string, logger: DiagnosticLogger, timeoutMs?: number): Promise<PackedPackage> {
