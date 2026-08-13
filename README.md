@@ -139,6 +139,8 @@ If `repnix check` says that no applicable health checks ran, RepNix did not find
 
 If the terminal is too small or does not support the full-screen dashboard, RepNix falls back to sequential prompts. Non-interactive environments can use `repnix setup --plan --format json` for a read-only plan.
 
+When you run setup from a local Git checkout of an unreleased RepNix build, it installs that checkout with a local `file:` dependency instead of trying to fetch the unreleased version from npm. Published RepNix installations continue to use the version from the npm registry.
+
 The interactive setup flow is: `audit → manual guidance (when needed) → select checks → review changes → apply safely`.
 
 After setup completes, run `repnix check --details` to verify coverage and review findings. If the interactive check saved `.repnix/health-report.md`, attach that file to an AI coding assistant for the fix-and-verify workflow described above.
