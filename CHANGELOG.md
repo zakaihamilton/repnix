@@ -6,6 +6,12 @@ All notable changes to RepNix are documented here. The project follows semantic 
 
 _No unreleased changes._
 
+## 0.3.10 - 2026-08-13
+
+### Fixed
+
+- Support npm pack report formats used by different npm releases during package-health checks.
+
 ## 0.3.9 - 2026-08-13
 
 ### Changed

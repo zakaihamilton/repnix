@@ -26,6 +26,14 @@ export interface PackedPackage {
   error?: string;
 }
 
+export function packFilenameFromReport(report: unknown): string {
+  const entry = Array.isArray(report) ? report[0] : report;
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw new Error("npm pack returned an unsupported report.");
+  const filename = (entry as Record<string, unknown>).filename;
+  if (typeof filename !== "string") throw new Error("npm pack returned an unsupported report.");
+  return filename;
+}
+
 export async function packLocalPackage(context: RepositoryContext, temporary: string, logger: DiagnosticLogger, timeoutMs?: number): Promise<PackedPackage> {
   const result = await runCommand(process.platform === "win32" ? "npm.cmd" : "npm", ["pack", "--json", "--ignore-scripts", "--pack-destination", temporary, "."], {
     cwd: context.root,
@@ -36,9 +44,8 @@ export async function packLocalPackage(context: RepositoryContext, temporary: st
   if (result.spawnError || result.exitCode !== 0) return { durationMs: result.durationMs, error: `The package could not be packed locally with lifecycle scripts disabled. ${result.spawnError ?? outputExcerpt(result)}`.trim() };
   try {
     const report = parseJsonOutput(result.stdout);
-    if (!Array.isArray(report) || !report[0] || typeof report[0] !== "object") throw new Error("npm pack returned an unsupported report.");
-    const filename = (report[0] as Record<string, unknown>).filename;
-    if (typeof filename !== "string" || path.basename(filename) !== filename) throw new Error("npm pack returned an unsafe tarball name.");
+    const filename = packFilenameFromReport(report);
+    if (path.basename(filename) !== filename) throw new Error("npm pack returned an unsafe tarball name.");
     const tarball = path.join(temporary, filename);
     await access(tarball);
     return { tarball, durationMs: result.durationMs };

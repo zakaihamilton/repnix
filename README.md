@@ -30,7 +30,7 @@ npm install --save-dev repnix
 npx repnix audit
 ```
 
-After the initial installation, `audit` reads only local project files. It does not install packages, edit files, or access a package registry.
+After the initial installation, `audit` reads only local project files. RepNix does not install packages, edit files, or access a package registry during an audit. If your repository has provider plugins, importing their modules and running their detection hooks is trusted project code that may execute according to its own behavior.
 
 ![RepNix auditing an existing TypeScript repository, then previewing setup changes](https://raw.githubusercontent.com/zakaihamilton/repnix/main/docs/repnix-launch-demo.gif)
 
@@ -91,7 +91,7 @@ RepNix gives you a clear inventory and a deliberate next step:
 - **Adds only useful gaps.** Recommendations are based on the repository’s shape and existing tools, with baseline, optional, and advanced priorities.
 - **Preserves your choices.** Setup keeps existing scripts and configuration, creates only the files it needs, and shows conflicts instead of overwriting them blindly.
 - **Understands repository roles.** CLI, library, web application, Node application, and tooling scopes receive different recommendations; a React dependency alone does not make a CLI a web app.
-- **Stays local-first.** `audit` and `check` do not install packages or access a package registry. Security and package-health checks use local/offline execution paths.
+- **Stays local-first.** RepNix itself does not install packages or access a package registry during `audit` or `check`. Active repository scripts and provider plugins are still executable project code; security and package-health providers use local/offline execution paths where supported.
 - **Produces one report.** Human-readable output groups findings by category and provider; JSON and SARIF formats support automation and code scanning.
 - **Supports gradual adoption.** A reviewed baseline can record current debt so CI fails only on new findings.
 - **Scales across workspaces.** Root and workspace quality scripts can run as separate, attributed results instead of hiding failures behind one aggregate command.
@@ -100,6 +100,18 @@ RepNix gives you a clear inventory and a deliberate next step:
 ## Compatibility
 
 RepNix continuously validates its first-run workflow against a checked-in compatibility corpus covering CLI/Node applications, TypeScript projects, npm libraries, React and Next.js web applications, and pnpm workspaces. Each pilot must complete `audit` and read-only `setup --plan` with an expected result; the packaged CLI runs the same corpus on every supported operating system. See [the compatibility guide](docs/compatibility.md) for the supported shapes and how to report a mismatch.
+
+## Safety and trust boundaries
+
+RepNix is local-first, but it is not a sandbox. Treat the repository and its installed tools as trusted code:
+
+- `audit`, `setup --plan`, and `check` may load direct `repnix-provider-*` dependencies. Importing a plugin can run its module initialization; selected plugin hooks can also run during planning, setup, or checks.
+- `check` may run configured, non-mutating repository quality scripts. “Non-mutating” describes RepNix's script detection, not a security sandbox or guarantee about arbitrary script behavior.
+- `setup` can run the selected package manager to install development dependencies. Package-manager lifecycle scripts may run during that installation, so review the plan and worktree before confirming.
+- Package-health checks pack the repository with lifecycle scripts disabled. They do not run `prepack`; build generated files first when your published package depends on a build step.
+- Security tools such as OSV-Scanner require a locally prepared database or binary. RepNix does not download one implicitly.
+
+RepNix does not promise that a repository's own scripts or third-party provider plugins are network-free or harmless. Run it with the same trust and permissions you would give those tools directly.
 
 ## The workflow
 
@@ -315,7 +327,7 @@ Publishable npm packages can also use:
 - **Publint** for exports, entry points, module formats, package metadata, and published files.
 - **Are The Types Wrong?** for TypeScript consumer compatibility across Node and bundler resolution modes.
 
-Package-health checks analyze a local packed artifact with lifecycle scripts disabled. They do not implicitly run a repository `prepack` script or fetch registry data.
+Package-health checks analyze a local packed artifact with lifecycle scripts disabled. They do not implicitly run a repository `prepack` script or fetch registry data. If the package normally builds during `prepack`, run that build explicitly before `repnix check package-health` so the packed artifact matches the one you intend to publish.
 
 ## Configuration
 
@@ -435,6 +447,7 @@ The audit and reporting pipeline is designed to be safe to run locally and in CI
 - Workspace package scripts are executed separately when they use recognized non-mutating type, lint, format, or test commands. RepNix does not invent a workspace task graph or rewrite package scripts automatically.
 - Existing repository scripts are only run when they look like non-mutating quality checks. Scripts containing fix, write, watch, install, publish, deployment, or other mutating commands are skipped and the configured provider fallback is used where available.
 - Setup applies planned files atomically and restores planned files plus package-manager lockfiles if dependency installation fails. Package-manager lifecycle scripts can still run during a normal dependency installation.
+- `audit` and `check` do not make RepNix network requests, but configured repository scripts and provider plugins are executable code and may have their own side effects or network behavior.
 - Specialist lint, type, formatting, test, `eslint-plugin-boundaries`, and Size Limit output is represented as a provider-attributed command finding. Knip, jscpd, OSV-Scanner, dependency-cruiser, Publint, and Are The Types Wrong? receive detailed normalization.
 - Accessibility, workspace consistency, coverage, secret scanning, license policy, documentation, release, performance, and CI workflow providers are available when their provider is installed and configured. Setup can add report-only c8 coverage, compatible legacy JSX accessibility rules, and Changesets configuration when its base branch is known. Other providers intentionally remain manual because they need project-specific URLs, budgets, binaries, or policy rules.
 - OSV-Scanner must be installed separately with its local vulnerability database prepared before security coverage can be required.
