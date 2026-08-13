@@ -10,8 +10,13 @@ describe("npm pack report parsing", () => {
     expect(packFilenameFromReport({ filename: "repnix-0.3.9.tgz" })).toBe("repnix-0.3.9.tgz");
   });
 
+  it("accepts the package-name map emitted by npm 12", () => {
+    expect(packFilenameFromReport({ repnix: { filename: "repnix-0.3.9.tgz" } })).toBe("repnix-0.3.9.tgz");
+  });
+
   it("rejects reports without a package filename", () => {
     expect(() => packFilenameFromReport([])).toThrow("npm pack returned an unsupported report");
     expect(() => packFilenameFromReport({ files: [] })).toThrow("npm pack returned an unsupported report");
+    expect(() => packFilenameFromReport({ repnix: { files: [] } })).toThrow("npm pack returned an unsupported report");
   });
 });
