@@ -477,4 +477,4 @@ pnpm test:phase3
 
 ## Releases
 
-Every push to `main` triggers the publish workflow. It runs the full project verification, checks whether the package version is already on npm, and publishes only new versions through npm trusted publishing. The workflow can also be started manually from GitHub Actions.
+Every push to `main` triggers the publish workflow. It runs the full project verification, checks whether the package version is already on npm, publishes only new versions through npm trusted publishing, and creates the matching `v<version>` Git tag when it is missing. The workflow can also be started manually from GitHub Actions.

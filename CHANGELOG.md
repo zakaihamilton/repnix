@@ -6,6 +6,19 @@ All notable changes to RepNix are documented here. The project follows semantic 
 
 _No unreleased changes._
 
+## 0.3.9 - 2026-08-13
+
+### Changed
+
+- Use the local RepNix checkout when setup is run from an unreleased build.
+- Guard Changesets CI branch preparation on non-main refs.
+
+## 0.3.8 - 2026-08-13
+
+### Added
+
+- Document the AI-ready health report handoff for repository fixes.
+
 ## 0.3.7 - 2026-08-12
 
 ### Changed
