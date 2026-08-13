@@ -1,4 +1,6 @@
 import path from "node:path";
+import { access } from "node:fs/promises";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { applyEdits, modify, parse, type ParseError } from "jsonc-parser";
 import type { InstallPlan, RepositoryContext } from "../core/types.js";
 import { VERSION } from "../core/version.js";
@@ -28,6 +30,17 @@ const GENERATED_SCRIPT_MIGRATIONS: Record<string, Record<string, string>> = {
     "markdownlint-cli2 \"**/*.md\" \"#node_modules\"": MARKDOWNLINT_SCRIPT,
   },
 };
+
+async function localRepnixPackageSpec(): Promise<string | undefined> {
+  const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+  try {
+    await access(path.join(packageRoot, ".git"));
+    await access(path.join(packageRoot, "package.json"));
+    return pathToFileURL(packageRoot).href;
+  } catch {
+    return undefined;
+  }
+}
 
 function formattingOptions(raw: string) {
   const indent = raw.match(/\n([\t ]+)\S/)?.[1] ?? "  ";
@@ -97,7 +110,8 @@ export async function buildInstallPlan(
   }
   const installedAtRoot = (name: string) => context.installedPackageOrigins.get(name)?.includes("package.json") === true;
   if (context.packageJson.name !== "repnix" && !installedAtRoot("repnix")) {
-    plan.packages.push({ name: "repnix", version: `^${VERSION}`, dev: true, reason: "Keep the generated health script locally runnable" });
+    const version = await localRepnixPackageSpec() ?? `^${VERSION}`;
+    plan.packages.push({ name: "repnix", version, dev: true, reason: "Keep the generated health script locally runnable" });
   }
   for (const provider of selected) {
     if (customProviders.has(provider)) continue;

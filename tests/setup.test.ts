@@ -14,7 +14,7 @@ import { fileChange, renderFileDiff, resolveRepositoryPath, validateChanges, wri
 import { buildInstallPlan } from "../src/setup/install-plan.js";
 import { applyInstallPlan } from "../src/setup/apply-plan.js";
 import { assertSavedPlanMatches, parseSavedInstallPlan, serializeInstallPlan } from "../src/setup/saved-plan.js";
-import { copyFixture } from "./helpers.js";
+import { copyFixture, projectRoot } from "./helpers.js";
 
 const temporary: string[] = [];
 afterEach(async () => {
@@ -79,6 +79,17 @@ describe("setup planning", () => {
     expect(packageJson.scripts).toMatchObject({ health: "repnix check", "health:dead-code": "knip", "health:duplication": "jscpd src" });
     const second = await buildInstallPlan(await detectRepository(root), ["knip", "jscpd"], false);
     expect(second.files).toEqual([]);
+  });
+
+  it("uses the local checkout when setup is run from an unpublished RepNix build", async () => {
+    const root = await copyFixture("minimal-js");
+    temporary.push(root);
+
+    const plan = await buildInstallPlan(await detectRepository(root), ["knip"], false);
+    const repnix = plan.packages.find((item) => item.name === "repnix");
+
+    expect(repnix?.version).toBe(`file://${projectRoot}`);
+    expect(plan.commands[0]?.args).toContain(`repnix@file://${projectRoot}`);
   });
 
   it("adds the RepNix report directory to an existing gitignore without duplicating it", async () => {
