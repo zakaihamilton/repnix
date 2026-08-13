@@ -58,6 +58,14 @@ For detailed findings and remediation, use:
 npx repnix check --details
 ```
 
+The full-screen setup check also saves an AI-ready handoff at `.repnix/health-report.md`. Attach or drop that file into an AI coding assistant while it is working in the repository, then ask it to inspect the referenced files, make the smallest safe fixes, and run the verification commands included in the report. Review the proposed changes and run `npx repnix check` yourself afterward. The companion `.repnix/check-results.md` file is a short human-readable runbook.
+
+You can use this prompt as-is:
+
+```text
+Read .repnix/health-report.md, inspect the referenced files, and fix the reported repository-health issues. Make the smallest safe changes, preserve intended behavior, and do not suppress or baseline findings. Run the verification commands in the report, then summarize the changes and any remaining issues.
+```
+
 ## A beginner-friendly workflow
 
 Think of repository health as a set of safety nets:
@@ -133,7 +141,7 @@ If the terminal is too small or does not support the full-screen dashboard, RepN
 
 The interactive setup flow is: `audit → manual guidance (when needed) → select checks → review changes → apply safely`.
 
-After setup completes, run `repnix check --details` to verify coverage and review findings.
+After setup completes, run `repnix check --details` to verify coverage and review findings. If the interactive check saved `.repnix/health-report.md`, attach that file to an AI coding assistant for the fix-and-verify workflow described above.
 
 ## See it in action
 
