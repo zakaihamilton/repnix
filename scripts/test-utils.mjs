@@ -70,11 +70,12 @@ export async function packProject(destination) {
   const result = await run("npm", ["pack", "--ignore-scripts", "--json", "--pack-destination", destination], {
     env: { npm_config_cache: path.join(destination, "npm-cache") },
   });
-  const packages = JSON.parse(result.stdout);
-  if (!Array.isArray(packages) || typeof packages[0]?.filename !== "string") {
+  const report = JSON.parse(result.stdout);
+  const packageReport = Array.isArray(report) ? report[0] : report;
+  if (!packageReport || typeof packageReport !== "object" || Array.isArray(packageReport) || typeof packageReport.filename !== "string") {
     throw new Error(`npm pack returned an unexpected result: ${result.stdout}`);
   }
-  return path.join(destination, packages[0].filename);
+  return path.join(destination, packageReport.filename);
 }
 
 export async function removeTemporary(directory) {
