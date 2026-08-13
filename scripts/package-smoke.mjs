@@ -17,7 +17,18 @@ try {
   await writeFile(path.join(consumer, "src", "index.js"), "export const answer = 42;\n");
 
   const tarball = await packProject(temporary);
-  await run("npm", ["install", "--no-audit", "--no-fund", "--save-dev", tarball], { cwd: consumer });
+  for (const staleArtifact of ["dist/cli/explain.js", "dist/cli/explain.d.ts", "dist/cli/explain.js.map"]) {
+    try {
+      await access(path.join(projectRoot, staleArtifact));
+      throw new Error(`Stale removed build artifact is present: ${staleArtifact}. Run the clean build before packaging.`);
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+    }
+  }
+  await run("npm", ["install", "--no-audit", "--no-fund", "--save-dev", tarball], {
+    cwd: consumer,
+    env: { npm_config_cache: path.join(temporary, "npm-cache") },
+  });
 
   const bin = path.join(consumer, "node_modules", ".bin", `repnix${process.platform === "win32" ? ".cmd" : ""}`);
   await access(bin);
