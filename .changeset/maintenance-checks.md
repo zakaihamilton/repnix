@@ -1,4 +1,4 @@
 ---
 ---
 
-Keep release metadata, compatibility aliases, and dependency maintenance checks synchronized.
+Keep release metadata and maintenance checks synchronized.

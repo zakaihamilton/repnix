@@ -22,10 +22,17 @@ export async function run(command, args, options = {}) {
     timeoutMs = 300_000,
   } = options;
 
+  const childEnv = { ...process.env, NO_COLOR: "1", FORCE_COLOR: "0", ...env };
+  if ((command === "npm" || command === "npm.cmd") && !Object.hasOwn(env, "npm_config_cache")) {
+    // Disposable acceptance tests must not depend on permissions in the user's
+    // global npm cache. The temporary cwd is removed with the test project.
+    childEnv.npm_config_cache = path.join(cwd, ".repnix-npm-cache");
+  }
+
   const result = await new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       cwd,
-      env: { ...process.env, NO_COLOR: "1", FORCE_COLOR: "0", ...env },
+      env: childEnv,
       shell,
       stdio: ["pipe", "pipe", "pipe"],
     });
@@ -60,12 +67,15 @@ export async function run(command, args, options = {}) {
 }
 
 export async function packProject(destination) {
-  const result = await run("npm", ["pack", "--ignore-scripts", "--json", "--pack-destination", destination]);
-  const packages = JSON.parse(result.stdout);
-  if (!Array.isArray(packages) || typeof packages[0]?.filename !== "string") {
+  const result = await run("npm", ["pack", "--ignore-scripts", "--json", "--pack-destination", destination], {
+    env: { npm_config_cache: path.join(destination, "npm-cache") },
+  });
+  const report = JSON.parse(result.stdout);
+  const packageReport = Array.isArray(report) ? report[0] : report;
+  if (!packageReport || typeof packageReport !== "object" || Array.isArray(packageReport) || typeof packageReport.filename !== "string") {
     throw new Error(`npm pack returned an unexpected result: ${result.stdout}`);
   }
-  return path.join(destination, packages[0].filename);
+  return path.join(destination, packageReport.filename);
 }
 
 export async function removeTemporary(directory) {
