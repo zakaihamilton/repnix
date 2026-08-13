@@ -33,7 +33,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && node scripts/make-executable.mjs",
+    "build": "node scripts/clean-dist.mjs && tsc -p tsconfig.build.json && node scripts/make-executable.mjs",
     "lint": "eslint .",
     "prepack": "npm run build",
     "prepublishOnly": "npm run lint && npm run typecheck && npm run test:run",

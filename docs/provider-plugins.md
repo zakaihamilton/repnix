@@ -53,6 +53,8 @@ External providers are loaded only from direct `dependencies`, `devDependencies`
 
 Provider IDs and category IDs must be unique. Invalid exports, duplicate IDs, unsupported API versions, or missing exports stop audit with an actionable error instead of silently omitting a provider.
 
+Provider plugins are trusted project dependencies. RepNix imports them during audit, setup planning, and checks; module initialization can run immediately, and RepNix may invoke detection, recommendation, setup, and run hooks during setup or check. Do not install an unreviewed provider plugin merely to inspect a repository.
+
 ## Categories
 
 Plugins may register categories with a label, description, required capability IDs, ordering, and an applicability function. Category modes remain the configuration boundary: use `required`, `optional`, or `off`. Per-provider enablement is intentionally not supported.
