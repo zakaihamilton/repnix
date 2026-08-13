@@ -61,5 +61,6 @@ For a user-visible change, add a Changeset, update the package and CLI version
 when preparing the release, and add the matching release heading to
 `CHANGELOG.md`. Keep `package.json` and `src/core/version.ts` synchronized.
 Run `pnpm verify`, `pnpm health`, and the relevant packaged acceptance tests
-before merging. Pushes to `main` publish the synchronized package version
-automatically after the release checks pass.
+before merging. Pushes to `main` publish the synchronized package version and
+create its matching `v<version>` Git tag automatically after the release checks
+pass.

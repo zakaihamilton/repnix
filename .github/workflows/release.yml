@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write
   id-token: write
 
 jobs:
@@ -64,3 +64,14 @@ jobs:
       - name: Publish package
         if: steps.published.outputs.exists != 'true'
         run: npm publish
+      - name: Tag published version
+        env:
+          PACKAGE_VERSION: ${{ steps.package.outputs.version }}
+        run: |
+          tag="v${PACKAGE_VERSION}"
+          if git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null 2>&1; then
+            echo "${tag} already exists; skipping tag creation."
+          else
+            git tag "${tag}"
+            git push origin "${tag}"
+          fi
