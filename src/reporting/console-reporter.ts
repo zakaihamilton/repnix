@@ -317,7 +317,13 @@ export function renderHealthDetails(run: HealthRun): string {
   return lines.join("\n").trimEnd();
 }
 
-export const renderExplain = renderHealthDetails;
+/**
+ * Keep the historical renderer name as a compatibility entry point without
+ * creating a duplicate export alias that dead-code analysis reports.
+ */
+export function renderExplain(run: HealthRun): string {
+  return renderHealthDetails(run);
+}
 
 export function renderSarif(run: HealthRun): string {
   const findings = run.results.flatMap((result) => result.findings);

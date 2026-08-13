@@ -30,6 +30,7 @@ jobs:
       - run: npm install --global npm@latest
       - run: pnpm install --frozen-lockfile
       - run: pnpm verify
+      - run: pnpm health
       - name: Read package metadata
         id: package
         run: |
