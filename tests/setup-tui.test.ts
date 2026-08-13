@@ -254,7 +254,10 @@ describe("setup TUI presentation", () => {
     try {
       const saved = await saveSetupCheckReports(root, output);
       expect(saved).toEqual({ reportPath: ".repnix/health-report.md", summaryPath: ".repnix/check-results.md" });
-      expect(await readFile(path.join(root, saved!.reportPath), "utf8")).toContain("## Instructions for an AI assistant");
+      const report = await readFile(path.join(root, saved!.reportPath), "utf8");
+      expect(report).toContain("## How to use this report");
+      expect(report).toContain("attach or drop this file into your AI coding assistant");
+      expect(report).toContain("Read `.repnix/health-report.md`");
       expect(await readFile(path.join(root, saved!.summaryPath), "utf8")).toContain("yarn run health:duplication");
     } finally {
       await rm(root, { recursive: true, force: true });
@@ -264,6 +267,7 @@ describe("setup TUI presentation", () => {
   it("renders all finding context in the AI-ready health report", () => {
     const output = JSON.stringify({ repository: { root: "/repo", packageManager: "npm", categories: [] }, results: [{ provider: "script:lint", name: "Lint", category: "lint", status: "fail", findings: [{ id: "lint", fingerprint: "lint", type: "lint-rule", ruleId: "no-any", provider: "Lint", category: "lint", severity: "error", message: "Avoid any.", file: "src/index.ts", line: 4, column: 12, remediation: "Use a concrete type.", documentationUrl: "https://example.com/no-any", metadata: { source: "eslint" } }] }] });
     const report = renderSetupHealthReport(output);
+    expect(report).toContain("## How to use this report");
     expect(report).toContain("## Instructions for an AI assistant");
     expect(report).toContain("src/index.ts:4:12");
     expect(report).toContain("Suggested remediation: Use a concrete type.");

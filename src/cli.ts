@@ -12,7 +12,7 @@ const program = new Command()
   .description("Find missing checks and make software repositories safer to change")
   .version(VERSION)
   .showHelpAfterError()
-  .addHelpText("after", `\nStart here:\n  repnix audit   See what your repository already checks and what is missing.\n  repnix setup   Add recommended checks after reviewing a preview.\n  repnix check   Run active checks; add --details for remediation.\n\nHealth categories:\n${HEALTH_CATEGORIES.map((category) => `  ${category.padEnd(16)} ${CATEGORY_LABELS[category]} — ${CATEGORY_DESCRIPTIONS[category]}`).join("\n")}\n`);
+  .addHelpText("after", `\nStart here:\n  repnix audit   See what your repository already checks and what is missing.\n  repnix setup   Add recommended checks after reviewing a preview.\n  repnix check   Run active checks; add --details for remediation.\n\nAI-assisted fixes:\n  The full-screen setup check saves .repnix/health-report.md. Attach or drop that\n  file into an AI coding assistant, ask it to fix the reported issues, review its\n  changes, then run repnix check to verify them.\n\nHealth categories:\n${HEALTH_CATEGORIES.map((category) => `  ${category.padEnd(16)} ${CATEGORY_LABELS[category]} — ${CATEGORY_DESCRIPTIONS[category]}`).join("\n")}\n`);
 
 addDiagnosticOptions(program.command("audit").description("Read-only overview of active checks, missing coverage, and recommendations")
   .option("--format <format>", "output format: text or json", "text")
