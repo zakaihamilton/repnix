@@ -45,3 +45,5 @@ jobs:
           commit-message: "chore: version packages"
           create-github-releases: false
           push-git-tags: true
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
