@@ -39,7 +39,7 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           version-script: pnpm release:version
-          publish-script: node scripts/release-publish.mjs
+          publish-script: node .github/release-publish.mjs
           pr-title: "chore: version packages"
           commit-message: "chore: version packages"
           create-github-releases: false
