@@ -6,6 +6,12 @@ All notable changes to RepNix are documented here. The project follows semantic 
 
 _No unreleased changes._
 
+## 0.3.11 - 2026-08-13
+
+### Fixed
+
+- Keep the setup confirmation actions usable in compact terminal layouts.
+
 ## 0.3.10 - 2026-08-13
 
 ### Fixed

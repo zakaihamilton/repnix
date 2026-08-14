@@ -249,7 +249,24 @@ export function CheckDetailsView({ model, width, layout, theme }: { model: Setup
   </Panel>;
 }
 
-export function ConfirmView({ audit, plan, model, compact, theme }: { audit: AuditModel; plan: InstallPlan; model: SetupTuiModel; compact: boolean; theme: SetupTuiTheme }): React.ReactElement {
+export function ConfirmView({ audit, plan, model, theme }: { audit: AuditModel; plan: InstallPlan; model: SetupTuiModel; theme: SetupTuiTheme }): React.ReactElement {
   const selectedOptions = selectedSetupOptions(audit, model);
-  return <Panel title="Confirm setup" theme={theme} borderColor={theme.warning}><Text color={theme.warning} bold>◆ Apply these reviewed changes?</Text><Newline /><Text color={theme.primary} bold>{planStats(plan)}</Text><Newline /><Text color={theme.secondary} bold>SELECTED OPTIONS</Text>{selectedOptions.length ? selectedOptions.map((option) => <Text key={option} {...textColor(theme)}>  + {option}</Text>) : <Text color={theme.muted}>  No setup options selected.</Text>}<Newline /><Text color={theme.secondary} bold>REVIEW NOTES</Text><ReviewNotes plan={plan} theme={theme} /><Newline /><Box flexDirection={compact ? "column" : "row"} gap={1}><ConfirmButton label="CANCEL" focused={model.confirmFocus === "cancel"} theme={theme} /><ConfirmButton label="APPLY" focused={model.confirmFocus === "apply"} theme={theme} /></Box><Text color={theme.muted}>Use the arrow keys to choose an action, then press Enter.</Text></Panel>;
+  return <Panel title="Confirm setup" theme={theme} borderColor={theme.warning}>
+    <Box flexDirection="column" flexGrow={1} flexShrink={1} minHeight={0} overflow="hidden">
+      <Text color={theme.warning} bold>◆ Apply these reviewed changes?</Text>
+      <Newline />
+      <Text color={theme.primary} bold>{planStats(plan)}</Text>
+      <Newline />
+      <Text color={theme.secondary} bold>SELECTED OPTIONS</Text>
+      {selectedOptions.length ? selectedOptions.map((option) => <Text key={option} {...textColor(theme)}>  + {option}</Text>) : <Text color={theme.muted}>  No setup options selected.</Text>}
+      <Newline />
+      <Text color={theme.secondary} bold>REVIEW NOTES</Text>
+      <ReviewNotes plan={plan} theme={theme} />
+    </Box>
+    <Box flexDirection="row" gap={1} flexShrink={0}>
+      <ConfirmButton label="CANCEL" focused={model.confirmFocus === "cancel"} theme={theme} />
+      <ConfirmButton label="APPLY" focused={model.confirmFocus === "apply"} theme={theme} />
+    </Box>
+    <Box flexShrink={0}><Text color={theme.muted}>Use the arrow keys to choose an action, then press Enter.</Text></Box>
+  </Panel>;
 }
