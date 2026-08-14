@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.13
+
+### Patch Changes
+
+- 65d3c62: Automate package versioning and release metadata synchronization through Changesets.
+
 All notable changes to RepNix are documented here. The project follows semantic versioning.
 
 ## Unreleased
