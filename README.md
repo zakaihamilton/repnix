@@ -7,11 +7,9 @@
 
 **Keep your JavaScript and TypeScript repositories from missing the guardrails you meant to add.**
 
-RepNix is a local-first CLI that inventories the checks already protecting a repository, identifies useful gaps without duplicating your tooling, and helps you safely add a focused set of complementary tools. It supports JavaScript and TypeScript repositories first, while also covering workspace consistency, documentation, supply-chain policy, CI workflows, release readiness, and frontend performance.
+RepNix is a local-first CLI that inventories the checks already protecting a repository, identifies useful gaps without duplicating your tooling, and helps you safely add a focused set of complementary tools.
 
-It is for maintainers with existing repositories who want consistent guardrails without maintaining a personal checklist of packages, scripts, configuration, and CI changes for every project.
-
-If terms such as “dead code,” “dependency security,” or “package health” are new to you, start with `repnix audit`. It explains each category in plain language before recommending anything.
+It is for maintainers with existing repositories who want consistent guardrails without maintaining a personal checklist of packages, scripts, configuration, and CI changes for every project. RepNix supports JavaScript and TypeScript repositories first, while also covering workspace consistency, documentation, supply-chain policy, CI workflows, release readiness, and frontend performance.
 
 RepNix orchestrates the tools you choose. It does not replace your existing TypeScript, ESLint, Biome, Prettier, Vitest, Jest, Knip, OSV-Scanner, dependency-cruiser, or package-quality workflows.
 
@@ -21,22 +19,12 @@ RepNix orchestrates the tools you choose. It does not replace your existing Type
 
 Requirements: **Node.js 20+** and one of **npm, pnpm, Yarn, or Bun**.
 
-### Try it on an existing repository
-
 Install RepNix as a development dependency, then run a read-only inventory:
 
 ```bash
 npm install --save-dev repnix
 npx repnix audit
 ```
-
-After the initial installation, `audit` reads only local project files. RepNix does not install packages, edit files, or access a package registry during an audit. If your repository has provider plugins, importing their modules and running their detection hooks is trusted project code that may execute according to its own behavior.
-
-![RepNix auditing an existing TypeScript repository, then previewing setup changes](https://raw.githubusercontent.com/zakaihamilton/repnix/main/docs/repnix-launch-demo.gif)
-
-The demo uses an intentionally under-protected TypeScript project. RepNix identifies the relevant gaps, then `setup --plan` previews the packages, scripts, and configuration it would add without applying anything.
-
-Already have RepNix installed? Run `npx repnix audit` from the repository root.
 
 If RepNix recommends checks you want to add, run the interactive setup. It explains why each check matters and previews every package, script, configuration file, and CI change before applying anything:
 
@@ -58,15 +46,22 @@ For detailed findings and remediation, use:
 npx repnix check --details
 ```
 
-The full-screen setup check also saves an AI-ready handoff at `.repnix/health-report.md`. Attach or drop that file into an AI coding assistant while it is working in the repository, then ask it to inspect the referenced files, make the smallest safe fixes, and run the verification commands included in the report. Review the proposed changes and run `npx repnix check` yourself afterward. The companion `.repnix/check-results.md` file is a short human-readable runbook.
+Already have RepNix installed? Run `npx repnix audit` from the repository root.
 
-You can use this prompt as-is:
+The demo uses an intentionally under-protected TypeScript project. RepNix identifies relevant gaps, then `setup --plan` previews the packages, scripts, and configuration it would add without applying anything.
+
+![RepNix auditing an existing TypeScript repository, then previewing setup changes](https://raw.githubusercontent.com/zakaihamilton/repnix/main/docs/repnix-launch-demo.gif)
+
+## The workflow
 
 ```text
-Read .repnix/health-report.md, inspect the referenced files, and fix the reported repository-health issues. Make the smallest safe changes, preserve intended behavior, and do not suppress or baseline findings. Run the verification commands in the report, then summarize the changes and any remaining issues.
+audit → choose recommendations → setup → check
 ```
 
-## A beginner-friendly workflow
+1. **Audit** the repository without modifying it.
+2. **Choose** the providers that fit your project.
+3. **Set up** packages, scripts, configuration, and optional CI integration through a previewed plan.
+4. **Check** all active health providers with one command.
 
 Think of repository health as a set of safety nets:
 
@@ -80,6 +75,8 @@ Think of repository health as a set of safety nets:
 
 RepNix detects which of these apply to your repository and shows the next useful step. A recommendation is not automatically a problem: optional checks often need a project-specific rule or budget before they can be useful.
 
+![RepNix workflow from repository detection to actionable findings](docs/repnix-workflow.svg)
+
 ## Why RepNix?
 
 Most repositories accumulate quality tools one at a time. That makes it easy to miss important coverage, add overlapping analyzers, or leave CI with a collection of unrelated commands.
@@ -91,126 +88,11 @@ RepNix gives you a clear inventory and a deliberate next step:
 - **Adds only useful gaps.** Recommendations are based on the repository’s shape and existing tools, with baseline, optional, and advanced priorities.
 - **Preserves your choices.** Setup keeps existing scripts and configuration, creates only the files it needs, and shows conflicts instead of overwriting them blindly.
 - **Understands repository roles.** CLI, library, web application, Node application, and tooling scopes receive different recommendations; a React dependency alone does not make a CLI a web app.
-- **Stays local-first.** RepNix itself does not install packages or access a package registry during `audit` or `check`. Active repository scripts and provider plugins are still executable project code; security and package-health providers use local/offline execution paths where supported.
+- **Stays local-first.** RepNix itself does not install packages or access a package registry during `audit` or `check`. Active repository scripts and provider plugins are still executable project code.
 - **Produces one report.** Human-readable output groups findings by category and provider; JSON and SARIF formats support automation and code scanning.
 - **Supports gradual adoption.** A reviewed baseline can record current debt so CI fails only on new findings.
 - **Scales across workspaces.** Root and workspace quality scripts can run as separate, attributed results instead of hiding failures behind one aggregate command.
 - **Supports explicit policy.** License and coverage thresholds can be recorded in `repnix.config.json`.
-
-## Compatibility
-
-RepNix continuously validates its first-run workflow against a checked-in compatibility corpus covering CLI/Node applications, TypeScript projects, npm libraries, React and Next.js web applications, and pnpm workspaces. Each pilot must complete `audit` and read-only `setup --plan` with an expected result; the packaged CLI runs the same corpus on every supported operating system. See [the compatibility guide](docs/compatibility.md) for the supported shapes and how to report a mismatch.
-
-## Safety and trust boundaries
-
-RepNix is local-first, but it is not a sandbox. Treat the repository and its installed tools as trusted code:
-
-- `audit`, `setup --plan`, and `check` may load direct `repnix-provider-*` dependencies. Importing a plugin can run its module initialization; selected plugin hooks can also run during planning, setup, or checks.
-- `check` may run configured, non-mutating repository quality scripts. “Non-mutating” describes RepNix's script detection, not a security sandbox or guarantee about arbitrary script behavior.
-- `setup` can run the selected package manager to install development dependencies. Package-manager lifecycle scripts may run during that installation, so review the plan and worktree before confirming.
-- Package-health checks pack the repository with lifecycle scripts disabled. They do not run `prepack`; build generated files first when your published package depends on a build step.
-- Security tools such as OSV-Scanner require a locally prepared database or binary. RepNix does not download one implicitly.
-
-RepNix does not promise that a repository's own scripts or third-party provider plugins are network-free or harmless. Run it with the same trust and permissions you would give those tools directly.
-
-## The workflow
-
-```text
-audit → choose recommendations → setup → check
-```
-
-![RepNix workflow from repository detection to actionable findings](docs/repnix-workflow.svg)
-
-1. **Audit** the repository without modifying it.
-2. **Choose** the providers that fit your project.
-3. **Set up** packages, scripts, configuration, and optional CI integration through a previewed plan.
-4. **Check** all active health providers with one command.
-5. Use `check --details` for normalized messages, locations, remediation, baseline state, and provider attribution.
-
-### How to read the output
-
-- A **category** is the kind of protection being measured, such as tests or dependency security.
-- A **provider** is the tool that performs the check, such as Vitest, Knip, or OSV-Scanner.
-- **Covered** means an active provider contributes the capability. **Partly covered** means some related capabilities are active but a gap remains. **Missing** means no active provider was found.
-- A **finding** is an issue reported by a check. A **check error** means the tool could not finish, usually because setup or configuration needs attention.
-- `repnix audit` is for deciding what to add. `repnix check` is for a quick result, and `repnix check --details` explains what to do about findings.
-
-If `repnix check` says that no applicable health checks ran, RepNix did not find an active provider for that category. That is not the same as being covered; run `repnix audit` to see whether a provider is missing, disabled, or not relevant to the repository.
-
-### Setup guidance
-
-`repnix setup` is an interactive, opt-in change flow:
-
-- In a capable terminal, setup opens a full-screen keyboard-driven dashboard that starts with an audit page showing detected project facts, category coverage, and recommendation priorities. Press **Enter** to continue to provider selection, review the planned changes, and explicitly confirm apply.
-- After the audit page, setup opens a manual-recommendations step when checks need project-specific decisions. It lists those checks with concrete setup steps and the command to run when ready. RepNix can automatically add report-only c8 coverage around a safe test command, standard Changesets configuration when Git exposes the remote default branch, and jsx-a11y rules for a root legacy `.eslintrc.json`. Press **Enter** to continue to installable checks or **q/Esc** to leave without changing files. If no recommendations exist, the audit page explains that there is nothing to add before setup exits.
-- Baseline recommendations are preselected because they are useful for most JavaScript and TypeScript repositories.
-- Optional and advanced recommendations are not automatically enabled when they need project-specific rules or budgets.
-- Use **↑/↓** or **j/k** to move after the audit page. On the selection screen, **Space** selects or clears a provider and **Enter** continues. Press **Esc** or **Delete** to return to the previous page; use **q** to quit. On the review screen, **↑/↓** moves between files, **Space** inspects the focused file, and **Enter** opens confirmation. In the confirmation dialog, focus starts on **Cancel**; press **→** to focus **Apply**, then **Enter**. While changes are being applied, exit keys are disabled until the rollback-safe operation finishes.
-- Before confirmation, RepNix shows the packages, scripts, configuration files, and optional CI changes it plans to apply. Existing files are preserved and conflicts are shown for review.
-- Some recommendations need preparation outside RepNix: OSV-Scanner, Gitleaks, and actionlint need their binaries available; architecture checks need module-boundary rules; bundle and Lighthouse checks need explicit artifacts, budgets, or URLs; and Stryker needs test-specific configuration.
-
-If the terminal is too small or does not support the full-screen dashboard, RepNix falls back to sequential prompts. Non-interactive environments can use `repnix setup --plan --format json` for a read-only plan.
-
-When you run setup from a local Git checkout of an unreleased RepNix build, it installs that checkout with a local `file:` dependency instead of trying to fetch the unreleased version from npm. Published RepNix installations continue to use the version from the npm registry.
-
-The interactive setup flow is: `audit → manual guidance (when needed) → select checks → review changes → apply safely`.
-
-After setup completes, run `repnix check --details` to verify coverage and review findings. If the interactive check saved `.repnix/health-report.md`, attach that file to an AI coding assistant for the fix-and-verify workflow described above.
-
-## See it in action
-
-```text
-$ npx repnix audit
-
-Repository health audit
-
-RepNix looks at the checks already protecting this repository, then points out useful gaps.
-
-typescript
-react
-pnpm (lockfile)
-GitHub Actions
-
-Repository Guardrails
-────────────────────────────────────────────────
-✓ covered   ◐ partly covered   ✗ missing   – off = disabled   – n/a = not relevant
-Type safety                 ✓ TypeScript
-Linting                     ✓ ESLint
-Formatting                  ✓ Prettier
-Tests                       ✓ Vitest
-Dead code                   ✗ Missing
-Duplication                 ✗ Missing
-Dependency security         ✗ Missing
-
-Recommended baseline — start here
-────────────────────────────────────────────────
-+ Knip
-  What it checks: Finds unused files, exports, and dependencies.
-  Nothing currently checks for unused files, exports, or dependencies. This helps remove stale code and keeps dependencies intentional.
-
-+ jscpd
-  What it checks: Finds copy-and-paste code that may become inconsistent.
-  58 source files can accumulate copy-and-paste drift, and no duplication check is active. This helps you find repeated code before the copies start behaving differently.
-```
-
-After setup, the unified check stays intentionally small:
-
-```text
-$ npx repnix check
-
-Repository health check
-
-Type safety            ✓  TypeScript
-Linting                ✓  ESLint
-Formatting             ✓  Prettier
-Tests                  ✓  Vitest
-Dead code              ⚠  2  Knip
-Duplication            ✓  jscpd
-
-2 findings need attention at the configured severity threshold.
-
-Next: run repnix check --details to see what each finding means and where to start.
-```
 
 ## Commands
 
@@ -225,11 +107,6 @@ Next: run repnix check --details to see what each finding means and where to sta
 | `repnix check --details` | Show findings, locations, remediation, and baseline state. | No |
 | `repnix check --format json\|sarif` | Emit machine-readable output to stdout. | No |
 | `repnix check --write-baseline` | Record reviewed current findings for gradual CI adoption. | Yes |
-| `repnix <command> --verbose` | Show debug diagnostics and stream provider output to stderr. | No |
-| `repnix <command> --quiet` | Suppress diagnostic output while keeping the command report. | No |
-| `repnix <command> --log-level <level>` | Set diagnostics to `silent`, `error`, `warn`, `info`, or `debug`. | No |
-| `repnix <command> --log-format json` | Emit newline-delimited structured diagnostics on stderr. | No |
-| `repnix <command> --timeout <seconds>` | Set the maximum runtime for each repository command; the default is five minutes. | No |
 
 Examples:
 
@@ -257,201 +134,15 @@ npx repnix check --details
 npx repnix check --write-baseline
 ```
 
-## What each health category means
+## Learn more
 
-RepNix separates repository health into categories so each capability has a clear home. The category name is also the value you can pass to `repnix check <category>`.
-
-| Category | What it protects | Typical tools |
-| --- | --- | --- |
-| `types` — Type safety | Catches mismatched values before runtime. | TypeScript |
-| `lint` — Linting | Finds suspicious or inconsistent code patterns. | ESLint, Oxlint, Biome |
-| `format` — Formatting | Keeps code style consistent. | Prettier, Oxfmt, Biome |
-| `tests` — Tests | Protects existing behavior from regressions. | Jest, Vitest, safe test scripts |
-| `coverage` — Test coverage | Measures test reach and optional coverage thresholds. | c8, Stryker |
-| `dead-code` — Dead code | Finds unused files, exports, and dependencies. | Knip |
-| `duplication` — Duplication | Finds repeated code that can drift apart. | jscpd |
-| `security` — Dependency security | Finds known vulnerabilities in dependencies. | OSV-Scanner |
-| `architecture` — Architecture boundaries | Protects allowed relationships between modules. | dependency-cruiser, `eslint-plugin-boundaries` |
-| `bundle` — Bundle regression | Protects shipped JavaScript size. | Size Limit |
-| `accessibility` — Accessibility | Checks whether user interfaces can be used by people with different abilities. | eslint-plugin-jsx-a11y |
-| `monorepo` — Monorepo consistency | Checks whether packages in a monorepo follow shared rules. | syncpack, workspace scripts |
-| `secrets` — Secret scanning | Finds credentials and sensitive values committed to the repository. | Gitleaks |
-| `licenses` — License policy | Checks dependency licenses against an allow/deny policy. | license-checker |
-| `documentation` — Documentation | Checks Markdown structure and style. | markdownlint |
-| `performance` — Performance budgets | Protects configured web or build performance budgets. | Lighthouse CI, Size Limit |
-| `release` — Release readiness | Checks release metadata and package change intent. | Changesets |
-| `ci` — CI workflow health | Checks GitHub Actions workflow syntax and common mistakes. | actionlint |
-| `package-health` — Package publishing | Checks what npm consumers receive. | Publint, Are The Types Wrong? |
-
-### Existing project checks
-
-RepNix detects and runs the safe commands your repository already uses for:
-
-- Type safety — TypeScript.
-- Linting — ESLint, Oxlint, or Biome.
-- Formatting — Prettier, Oxfmt, or Biome.
-- Tests — Jest, Vitest, or a safe existing test script.
-- Test coverage — c8 or Stryker when a coverage or mutation command is configured.
-- Accessibility — active `eslint-plugin-jsx-a11y` rules in an ESLint configuration.
-- Monorepo consistency — syncpack or safe workspace scripts.
-- Secret scanning — Gitleaks when its binary or repository script is available.
-- License policy — license-checker with an optional allow/deny policy.
-- Documentation — markdownlint for Markdown files.
-- Performance — Lighthouse CI or existing performance scripts with an explicit configuration.
-- Release readiness — Changesets and its configuration.
-- CI workflow health — actionlint for GitHub Actions workflows.
-
-### Specialist checks
-
-When the repository needs additional coverage, RepNix can recommend and orchestrate:
-
-- **Dead code:** Knip for unused files, exports, and dependencies.
-- **Duplication:** jscpd for copy/paste drift.
-- **Dependency security:** OSV-Scanner using its offline vulnerability database.
-- **Architecture:** dependency-cruiser or active `eslint-plugin-boundaries` rules.
-- **Bundle size:** Size Limit when an explicit budget already exists.
-- **Accessibility:** eslint-plugin-jsx-a11y through an existing ESLint setup.
-- **Workspace consistency:** syncpack for dependency and package metadata drift.
-- **Coverage:** c8 for threshold checks and Stryker for mutation testing.
-- **Secret scanning:** Gitleaks, using a local binary or CI-provided binary.
-- **License policy:** license-checker with explicit allowed or denied licenses.
-- **Documentation:** markdownlint for Markdown files.
-- **Performance:** Lighthouse CI when a URL/build configuration and budgets exist.
-- **Release readiness:** Changesets when the repository uses changesets.
-- **CI workflow health:** actionlint for GitHub Actions workflow files.
-
-### Package publishing
-
-Publishable npm packages can also use:
-
-- **Publint** for exports, entry points, module formats, package metadata, and published files.
-- **Are The Types Wrong?** for TypeScript consumer compatibility across Node and bundler resolution modes.
-
-Package-health checks analyze a local packed artifact with lifecycle scripts disabled. They do not implicitly run a repository `prepack` script or fetch registry data. If the package normally builds during `prepack`, run that build explicitly before `repnix check package-health` so the packed artifact matches the one you intend to publish.
-
-## Configuration
-
-Configuration is optional. Add `repnix.config.json` when your team wants to make a category required, change which findings fail CI, or intentionally disable a category:
-
-```json
-{
-  "schemaVersion": 1,
-  "scopes": {
-    ".": {
-      "roles": ["cli", "library"]
-    },
-    "apps/web": {
-      "roles": ["web-app"],
-      "categories": {
-        "performance": { "mode": "required" }
-      }
-    }
-  },
-  "categories": {
-    "dead-code": { "mode": "required" },
-    "duplication": { "mode": "optional" },
-    "architecture": { "mode": "off" }
-  },
-  "severityThreshold": "warning",
-  "execution": {
-    "jobs": 2,
-    "timeoutSeconds": 300
-  },
-  "baseline": {
-    "path": ".repnix-baseline.json",
-    "failOn": "new"
-  },
-  "policies": {
-    "licenses": {
-      "allow": ["MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause"],
-      "deny": ["GPL-3.0-only"]
-    },
-    "coverage": {
-      "lines": 80,
-      "functions": 80,
-      "branches": 75,
-      "statements": 80
-    },
-    "performance": {
-      "maxLcpMs": 2500,
-      "maxCls": 0.1,
-      "maxTbtMs": 300
-    }
-  }
-}
-```
-
-Category modes are:
-
-- `required` — the category must have an active provider; otherwise the check fails with exit code `2`.
-- `optional` — run the category when a provider is active, but do not require setup.
-- `off` — skip the category intentionally.
-
-Severity thresholds are `info`, `warning`, and `error`. A finding at or above the threshold produces exit code `1`. Configuration is strict, so misspelled category names fail with a correction tip.
-
-Policies are optional and provider-aware. License `allow` and `deny` lists are enforced by license-checker; coverage thresholds are used when RepNix runs c8 around the configured test command. Performance values document the budgets expected by a configured Lighthouse CI provider; RepNix does not invent a URL or build command.
-
-Use `required` for coverage that must exist and `off` for categories that do not apply to your repository. Providers are discovered from the built-in registry and from direct `repnix-provider-*` dependencies.
-
-To add a provider module or publish an external provider plugin, see [Provider plugins](docs/provider-plugins.md).
-
-Scope roles normally come from repository evidence such as `package.json#bin`, publishable exports, framework configuration, source layout, and scripts. Add a scope override only when the repository intentionally differs from those signals.
-
-### Baseline existing findings
-
-For a repository with existing debt, review the current detailed report and then run:
-
-```bash
-npx repnix check --write-baseline
-```
-
-This writes `.repnix-baseline.json` and enables it in `repnix.config.json`. Findings are then classified as `new`, `existing`, or `resolved`, and only new findings fail by default. Provider errors and missing required coverage can never be hidden by a baseline. Ordinary checks never rewrite the file.
-
-## Exit codes and automation
-
-RepNix uses predictable exit codes so both people and CI can understand the result:
-
-- `0` — all configured checks passed at the configured severity threshold.
-- `1` — one or more new findings reached the configured threshold; run `repnix check --details` to understand them.
-- `2` — RepNix could not complete a check because of configuration, repository detection, or tool execution; this is different from a code finding.
-
-`repnix check --format json` writes the normalized report to stdout, while `--format sarif` produces SARIF 2.1.0. With debug diagnostics (`--verbose` or `--log-level debug`), child provider output goes to stderr so stdout remains machine-readable.
-All commands accept the diagnostic options. `--verbose` is shorthand for `--log-level debug`; `--quiet` takes precedence over the other level switches. Use `--log-format json` when a log collector needs stable event names and context fields. If an unexpected error occurs, verbose mode includes its stack trace.
-
-### GitHub Actions
-
-After installing dependencies, add the unified check to an existing GitHub Actions job:
-
-```yaml
-- name: Check repository health
-  run: npm run health
-```
-
-When `repnix setup` is asked to update CI, it looks for a workflow job with a checkout step and a supported package-manager install step, then inserts the health step immediately after that install using the job's package manager. It prefers a uniquely identified test, check, or CI job when several jobs qualify; ties are left unchanged and the candidate job locations are shown for manual review.
-
-For machine-readable CI integrations, use `npx repnix check --format json` or upload `--format sarif` output to a compatible code-scanning service.
-
-## How it works
-
-RepNix follows a detect → recommend → plan → run model:
-
-1. Detect scope roles, package manager, source roots, scripts, CI, configuration, and active provider capabilities.
-2. Use evidence-backed category applicability so CLI, library, browser, Node, and tooling scopes receive different recommendations.
-3. Build a minimal installation plan that preserves existing project choices.
-4. Run active providers and normalize their findings into a shared report with category, severity, provider, and location.
-
-The audit and reporting pipeline is designed to be safe to run locally and in CI. Setup changes require explicit confirmation after showing the planned commands and files. Baseline writing is the only explicitly mutating `check` option.
-
-## Notes and current limits
-
-- Workspace package scripts are executed separately when they use recognized non-mutating type, lint, format, or test commands. RepNix does not invent a workspace task graph or rewrite package scripts automatically.
-- Existing repository scripts are only run when they look like non-mutating quality checks. Scripts containing fix, write, watch, install, publish, deployment, or other mutating commands are skipped and the configured provider fallback is used where available.
-- Setup applies planned files atomically and restores planned files plus package-manager lockfiles if dependency installation fails. Package-manager lifecycle scripts can still run during a normal dependency installation.
-- `audit` and `check` do not make RepNix network requests, but configured repository scripts and provider plugins are executable code and may have their own side effects or network behavior.
-- Specialist lint, type, formatting, test, `eslint-plugin-boundaries`, and Size Limit output is represented as a provider-attributed command finding. Knip, jscpd, OSV-Scanner, dependency-cruiser, Publint, and Are The Types Wrong? receive detailed normalization.
-- Accessibility, workspace consistency, coverage, secret scanning, license policy, documentation, release, performance, and CI workflow providers are available when their provider is installed and configured. Setup can add report-only c8 coverage, compatible legacy JSX accessibility rules, and Changesets configuration when its base branch is known. Other providers intentionally remain manual because they need project-specific URLs, budgets, binaries, or policy rules.
-- OSV-Scanner must be installed separately with its local vulnerability database prepared before security coverage can be required.
-- Architecture rules and bundle budgets are repository-specific. RepNix does not invent boundary policies or size budgets.
+- [Health categories](docs/categories.md)
+- [Configuration and automation](docs/configuration.md)
+- [Setup and workflow](docs/setup.md)
+- [Security and trust](docs/security.md)
+- [Provider plugins](docs/provider-plugins.md)
+- [Compatibility pilots](docs/compatibility.md)
+- [Launch demo notes](docs/launch-demo.md)
 
 ## Development
 
@@ -477,7 +168,9 @@ pnpm test:phase2
 pnpm test:phase3
 ```
 
-## Learn more
+## Compatibility and support
+
+RepNix continuously validates its first-run workflow against a checked-in compatibility corpus covering CLI/Node applications, TypeScript projects, npm libraries, React and Next.js web applications, and pnpm workspaces. See [the compatibility guide](docs/compatibility.md) for the supported shapes and how to report a mismatch.
 
 - [npm package](https://www.npmjs.com/package/repnix)
 - [GitHub repository](https://github.com/zakaihamilton/repnix)
@@ -490,4 +183,12 @@ pnpm test:phase3
 
 ## Releases
 
-Every push to `main` triggers the publish workflow. It runs the full project verification, checks whether the package version is already on npm, publishes only new versions through npm trusted publishing, and creates the matching `v<version>` Git tag when it is missing. The workflow can also be started manually from GitHub Actions.
+Release intent is recorded in a Changeset file. Every push to `main` runs the full project verification; when pending Changesets exist, GitHub Actions opens a version-package pull request. Merging that pull request updates `package.json`, `CHANGELOG.md`, and the CLI version automatically. The resulting push publishes the package through npm trusted publishing and creates the matching `v<version>` Git tag. The workflow can also be started manually from GitHub Actions.
+
+For a user-facing change, add a Changeset before merging:
+
+```bash
+pnpm changeset
+```
+
+Choose `patch`, `minor`, or `major`, describe the change, and commit the generated `.changeset/*.md` file with your work. Maintenance-only changes can use a patch Changeset; documentation-only changes do not need a release unless they affect the published README or package documentation.

@@ -28,6 +28,7 @@
   },
   "files": [
     "dist",
+    "docs",
     "README.md",
     "CHANGELOG.md",
     "LICENSE"
@@ -46,6 +47,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
+    "version:sync": "node scripts/sync-version.mjs",
     "health": "node dist/cli.js check",
     "verify": "pnpm lint && pnpm typecheck && pnpm build && pnpm test:run && pnpm test:compatibility",
     "health:dead-code": "knip",
