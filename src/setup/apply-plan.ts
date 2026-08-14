@@ -66,7 +66,9 @@ export async function applyInstallPlan(
       onProgress?.({ phase: "running-command", current: index + 1, total: plan.commands.length, label: `${command.command} ${command.args.join(" ")}` });
       const result = await runCommand(command.command, command.args, { cwd: context.root, logger, timeoutMs });
       if (result.spawnError || result.exitCode !== 0) {
-        throw new Error(result.spawnError ?? (result.stderr.trim() || `exit ${result.exitCode}`));
+        const output = [result.stderr, result.stdout].map((value) => value.trim()).find(Boolean);
+        const invocation = [command.command, ...command.args].map((part) => JSON.stringify(part)).join(" ");
+        throw new Error(result.spawnError ?? output ?? `Command ${invocation} exited with code ${result.exitCode ?? "unknown"} without producing output.`);
       }
     }
     onProgress?.({ phase: "complete" });
