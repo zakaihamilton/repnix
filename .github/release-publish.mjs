@@ -12,7 +12,7 @@ const packageVersion = `${packageJson.name}@${packageJson.version}`;
 
 let alreadyPublished = false;
 try {
-  const { stdout } = await execFileAsync("npm", ["view", packageVersion, "version", "--silent"], {
+  const { stdout } = await execFileAsync("npm", ["view", packageVersion, "version", "--json"], {
     cwd: projectRoot,
     env: process.env,
   });
