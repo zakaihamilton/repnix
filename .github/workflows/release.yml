@@ -39,7 +39,7 @@ jobs:
         uses: changesets/action@v2
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          version-script: pnpm changeset version && pnpm version:sync && pnpm install --lockfile-only && pnpm health:release
+          version-script: pnpm release:version
           publish-script: pnpm changeset publish
           pr-title: "chore: version packages"
           commit-message: "chore: version packages"

@@ -47,6 +47,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
+    "release:version": "pnpm changeset version && pnpm version:sync && pnpm install --lockfile-only && pnpm health:release",
     "version:sync": "node scripts/sync-version.mjs",
     "health": "node dist/cli.js check",
     "verify": "pnpm lint && pnpm typecheck && pnpm build && pnpm test:run && pnpm test:compatibility",
