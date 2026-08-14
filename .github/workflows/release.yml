@@ -11,6 +11,7 @@ concurrency:
 
 permissions:
   contents: write
+  pull-requests: write
   id-token: write
 
 jobs:
@@ -31,47 +32,16 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm verify
       - run: pnpm health
-      - name: Read package metadata
-        id: package
-        run: |
-          package_name="$(node --input-type=module -e 'import fs from "node:fs"; process.stdout.write(JSON.parse(fs.readFileSync("package.json", "utf8")).name)')"
-          package_version="$(node --input-type=module -e 'import fs from "node:fs"; process.stdout.write(JSON.parse(fs.readFileSync("package.json", "utf8")).version)')"
-          {
-            echo "name=$package_name"
-            echo "version=$package_version"
-          } >> "$GITHUB_OUTPUT"
-      - name: Check whether the version is already published
-        id: published
-        env:
-          PACKAGE_NAME: ${{ steps.package.outputs.name }}
-          PACKAGE_VERSION: ${{ steps.package.outputs.version }}
-        run: |
-          set +e
-          output=$(npm view "${PACKAGE_NAME}@${PACKAGE_VERSION}" version 2>&1)
-          status=$?
-          set -e
-          if [ "$status" -eq 0 ]; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo "${PACKAGE_NAME}@${PACKAGE_VERSION} is already published; skipping."
-          elif printf '%s' "$output" | grep -qE 'E404|404 Not Found|is not in this registry'; then
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "${PACKAGE_NAME}@${PACKAGE_VERSION} is not published yet."
-          else
-            printf '%s\n' "$output"
-            echo "Unable to determine whether ${PACKAGE_NAME}@${PACKAGE_VERSION} is published." >&2
-            exit "$status"
-          fi
-      - name: Publish package
-        if: steps.published.outputs.exists != 'true'
-        run: npm publish
-      - name: Tag published version
-        env:
-          PACKAGE_VERSION: ${{ steps.package.outputs.version }}
-        run: |
-          tag="v${PACKAGE_VERSION}"
-          if git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null 2>&1; then
-            echo "${tag} already exists; skipping tag creation."
-          else
-            git tag "${tag}"
-            git push origin "${tag}"
-          fi
+      - name: Validate release metadata
+        run: pnpm health:release
+      - name: Version packages or publish the release
+        id: release
+        uses: changesets/action@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          version-script: pnpm changeset version && pnpm version:sync && pnpm install --lockfile-only && pnpm health:release
+          publish-script: pnpm changeset publish
+          pr-title: "chore: version packages"
+          commit-message: "chore: version packages"
+          create-github-releases: false
+          push-git-tags: true
