@@ -72,6 +72,33 @@ async function runSetupCheck(root: string, logger: DiagnosticLogger, timeoutMs?:
   return localResult.spawnError ? runCommand("repnix", args, commandOptions) : localResult;
 }
 
+export function setupCheckResultOutput(check: Pick<CommandResult, "command" | "args" | "exitCode" | "signal" | "stdout" | "stderr" | "spawnError">): string {
+  const stdout = check.stdout.trimEnd();
+  // Keep structured stdout parseable: the check details view uses it to render
+  // status rows. Stderr is a fallback for commands that fail before producing
+  // the JSON report.
+  if (stdout) return stdout;
+  const diagnostics = [check.stderr, check.spawnError ? `Error: ${check.spawnError}` : ""]
+    .map((value) => value.trimEnd())
+    .filter(Boolean)
+    .join("\n");
+  if (diagnostics) return diagnostics;
+  if (check.exitCode === 0) return "";
+
+  const command = [check.command, ...check.args].map((part) => JSON.stringify(part)).join(" ");
+  const reason = check.spawnError
+    ? `could not start: ${check.spawnError}`
+    : check.signal
+      ? `was terminated by ${check.signal}`
+      : `exited with code ${check.exitCode ?? "unknown"}`;
+  return [
+    "The check failed without producing output.",
+    `Command: ${command}`,
+    `Reason: ${reason}.`,
+    "Run the command above directly for more diagnostics.",
+  ].join("\n");
+}
+
 export interface SavedSetupCheckReports {
   reportPath: string;
   summaryPath: string;
@@ -269,7 +296,7 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
     if (model.screen !== "checking" || !audit || startedCheck.current) return;
     startedCheck.current = true;
     void deps.runCheck(audit.context.root, logger, options.timeout === undefined ? undefined : options.timeout * 1000, (message) => dispatch({ type: "check-progress", message })).then((check) => {
-      const output = [check.stdout.trimEnd(), check.spawnError ? `Error: ${check.spawnError}` : ""].filter(Boolean).join("\n");
+      const output = setupCheckResultOutput(check);
       return saveSetupCheckReports(audit.context.root, check.stdout).then((saved) => dispatch({ type: "check-complete", output, exitCode: check.exitCode, ...(saved ? saved : {}) }));
     }).catch((error: unknown) => dispatch({ type: "check-complete", output: `Error: ${error instanceof Error ? error.message : String(error)}`, exitCode: null }));
   }, [model.screen]);

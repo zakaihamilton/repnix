@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { AUDIT_LABEL_COLUMN_WIDTH, AUDIT_TWO_COLUMN_MIN_WIDTH, COMPACT_LAYOUT_HEIGHT, COMPACT_LAYOUT_WIDTH, HORIZONTAL_PANE_MIN_WIDTH, auditContentLineCount, auditPageSummary, auditRecommendationSummary, auditSetupOptions, auditStatusPresentation, auditUsesSingleColumn, clampTuiScroll, createSetupTuiTheme, diffLineColor, manualContentLineCount, manualRecommendationLines, manualRecommendationSteps, manualRecommendationViewport, normalizeTuiDiffLine, renderSetupCheckSummary, renderSetupHealthReport, saveSetupCheckReports, selectedSetupOptions, selectionIndicator, selectionRowPresentation, setupCheckActions, setupCheckDetails, setupCheckOutputLines, setupCheckRows, setupDetectionErrorMessage, setupPaneLayout, setupStepIndex, tuiLayoutMetrics } from "../src/tui/setup-app.js";
+import { AUDIT_LABEL_COLUMN_WIDTH, AUDIT_TWO_COLUMN_MIN_WIDTH, COMPACT_LAYOUT_HEIGHT, COMPACT_LAYOUT_WIDTH, HORIZONTAL_PANE_MIN_WIDTH, auditContentLineCount, auditPageSummary, auditRecommendationSummary, auditSetupOptions, auditStatusPresentation, auditUsesSingleColumn, clampTuiScroll, createSetupTuiTheme, diffLineColor, manualContentLineCount, manualRecommendationLines, manualRecommendationSteps, manualRecommendationViewport, normalizeTuiDiffLine, renderSetupCheckSummary, renderSetupHealthReport, saveSetupCheckReports, selectedSetupOptions, selectionIndicator, selectionRowPresentation, setupCheckActions, setupCheckDetails, setupCheckOutputLines, setupCheckResultOutput, setupCheckRows, setupDetectionErrorMessage, setupPaneLayout, setupStepIndex, tuiLayoutMetrics } from "../src/tui/setup-app.js";
 import { createSetupTuiModel, selectionItems, setupTuiReducer } from "../src/tui/setup-state.js";
 import type { AuditModel, Recommendation } from "../src/recommendations/recommendation-engine.js";
 import type { RepositoryContext } from "../src/core/types.js";
@@ -232,6 +232,13 @@ describe("setup TUI presentation", () => {
     expect(lines).toContain("Repository health");
     expect(lines.join(" ")).toContain("deliberately long finding message");
     expect(lines.every((line) => line.length <= 26)).toBe(true);
+  });
+
+  it("keeps stderr and explains silent check failures", () => {
+    expect(setupCheckResultOutput({ command: "repnix", args: ["check", "--format", "json"], exitCode: 1, signal: null, stdout: "", stderr: "configuration failed" })).toBe("configuration failed");
+    expect(setupCheckResultOutput({ command: "repnix", args: ["check", "--format", "json"], exitCode: 0, signal: null, stdout: "{\"results\":[]}", stderr: "diagnostic log" })).toBe("{\"results\":[]}");
+    expect(setupCheckResultOutput({ command: "repnix", args: ["check", "--format", "json"], exitCode: 1, signal: null, stdout: "", stderr: "", })).toContain("The check failed without producing output.");
+    expect(setupCheckResultOutput({ command: "repnix", args: ["check", "--format", "json"], exitCode: 1, signal: null, stdout: "", stderr: "", })).toContain("exited with code 1");
   });
 
   it("turns structured check output into clear status rows", () => {
