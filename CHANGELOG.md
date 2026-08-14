@@ -6,6 +6,12 @@ All notable changes to RepNix are documented here. The project follows semantic 
 
 _No unreleased changes._
 
+## 0.3.12 - 2026-08-14
+
+### Fixed
+
+- Support React 19 consumers in interactive setup by upgrading Ink and React dependencies.
+
 ## 0.3.11 - 2026-08-13
 
 ### Fixed
