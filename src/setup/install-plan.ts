@@ -1,7 +1,7 @@
 import path from "node:path";
 import { access } from "node:fs/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { applyEdits, modify, parse, type ParseError } from "jsonc-parser";
+import { applyEdits, modify } from "jsonc-parser";
 import type { InstallPlan, RepositoryContext } from "../core/types.js";
 import { VERSION } from "../core/version.js";
 import { installDevCommand } from "../package-manager/package-manager.js";
@@ -51,35 +51,12 @@ function setJsonValue(raw: string, jsonPath: (string | number)[], value: unknown
   return applyEdits(raw, modify(raw, jsonPath, value, { formattingOptions: formattingOptions(raw) }));
 }
 
-function stringList(value: unknown): string[] | null {
-  if (value === undefined) return [];
-  if (typeof value === "string") return [value];
-  return Array.isArray(value) && value.every((item) => typeof item === "string") ? value as string[] : null;
-}
-
 function addRepnixIgnore(before: string | null): string | null {
   const entry = ".repnix/";
   if (before === null || before.trim() === "") return `${entry}\n`;
   if (before.split(/\r?\n/).some((line) => /^\/?\.repnix\/?$/.test(line.trim()))) return null;
   const eol = before.includes("\r\n") ? "\r\n" : "\n";
   return `${before.endsWith("\n") ? before : `${before}${eol}`}${entry}${eol}`;
-}
-
-function changesetsConfig(baseBranch: string): string {
-  return `${JSON.stringify({
-    changelog: "@changesets/cli/changelog",
-    commit: false,
-    fixed: [],
-    linked: [],
-    access: "restricted",
-    baseBranch,
-    updateInternalDependencies: "patch",
-    ignore: [],
-    bumpVersionsWithWorkspaceProtocolOnly: false,
-    changedFilePatterns: ["**"],
-    format: "auto",
-    privatePackages: { version: false, tag: false },
-  }, null, 2)}\n`;
 }
 
 export async function buildInstallPlan(
@@ -94,19 +71,20 @@ export async function buildInstallPlan(
     return plan;
   }
   const providerRegistry = registry ?? await createProviderRegistry(context);
-  const customProviders = new Set<string>();
-  if (selected.includes("jsx-a11y")) customProviders.add("jsx-a11y");
-  if (selected.includes("changesets") && !context.gitDefaultBranch && !context.files.has(".changeset/config.json")) customProviders.add("changesets");
+  const skipGenericSetup = new Set<string>();
+  const customPackages = new Map<string, InstallPlan["packages"]>();
   for (const providerId of selected) {
     const definition = providerRegistry.get(providerId);
     if (!definition?.planInstall) continue;
     const customPlan = await definition.planInstall(context);
-    plan.packages.push(...customPlan.packages);
+    customPackages.set(providerId, customPlan.packages);
     plan.files.push(...customPlan.files);
     plan.commands.push(...customPlan.commands);
     plan.warnings.push(...customPlan.warnings);
     plan.conflicts.push(...customPlan.conflicts);
-    customProviders.add(providerId);
+    if (!definition.setup || (customPlan.conflicts.length > 0 && customPlan.files.length === 0 && customPlan.packages.length === 0)) {
+      skipGenericSetup.add(providerId);
+    }
   }
   const installedAtRoot = (name: string) => context.installedPackageOrigins.get(name)?.includes("package.json") === true;
   if (context.packageJson.name !== "repnix" && !installedAtRoot("repnix")) {
@@ -114,7 +92,8 @@ export async function buildInstallPlan(
     plan.packages.push({ name: "repnix", version, dev: true, reason: "Keep the generated health script locally runnable" });
   }
   for (const provider of selected) {
-    if (customProviders.has(provider)) continue;
+    plan.packages.push(...(customPackages.get(provider) ?? []));
+    if (skipGenericSetup.has(provider)) continue;
     const definition = providerRegistry.get(provider);
     if (!definition?.setup) {
       plan.conflicts.push(`Provider '${provider}' has no safe setup recipe and was not installed.`);
@@ -130,39 +109,9 @@ export async function buildInstallPlan(
   const packageBefore = await readOptional(packagePath);
   if (packageBefore === null) throw new Error("package.json disappeared while planning setup");
   let packageAfter = packageBefore;
-  if (selected.includes("jsx-a11y")) {
-    const eslintPath = ".eslintrc.json";
-    const eslintBefore = context.files.has(eslintPath) ? await readOptional(path.join(context.root, eslintPath)) : null;
-    if (eslintBefore === null) {
-      plan.conflicts.push("eslint-plugin-jsx-a11y requires a root .eslintrc.json configuration, which was not found.");
-    } else {
-      const errors: ParseError[] = [];
-      const parsed = parse(eslintBefore, errors, { allowTrailingComma: true, disallowComments: false });
-      if (errors.length || !parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-        plan.conflicts.push(".eslintrc.json is not a valid JSON object and was preserved.");
-      } else {
-        const config = parsed as Record<string, unknown>;
-        const plugins = stringList(config.plugins);
-        const extendsEntries = stringList(config.extends);
-        if (!plugins || !extendsEntries) {
-          plan.conflicts.push(".eslintrc.json has non-string plugins or extends entries and was preserved.");
-        } else {
-          const afterPlugins = [...new Set([...plugins, "jsx-a11y"])];
-          const afterExtends = [...new Set([...extendsEntries, "plugin:jsx-a11y/recommended"])];
-          let eslintAfter = setJsonValue(eslintBefore, ["plugins"], afterPlugins);
-          eslintAfter = setJsonValue(eslintAfter, ["extends"], afterExtends);
-          const change = fileChange(eslintPath, eslintBefore, eslintAfter, "Enable jsx-a11y recommended accessibility rules");
-          if (change) plan.files.push(change);
-          if (!installedAtRoot("eslint-plugin-jsx-a11y")) {
-            plan.packages.push({ name: "eslint-plugin-jsx-a11y", dev: true, reason: "Add JSX accessibility health coverage" });
-          }
-        }
-      }
-    }
-  }
   const desiredScripts: Record<string, string> = { health: "repnix check" };
   for (const provider of selected) {
-    if (customProviders.has(provider)) continue;
+    if (skipGenericSetup.has(provider)) continue;
     const setup = providerRegistry.get(provider)?.setup;
     if (!setup) continue;
     desiredScripts[setup.scriptName] = setup.scriptCommand(context);
@@ -248,18 +197,6 @@ export async function buildInstallPlan(
     } else {
       const config = `module.exports = {\n  forbidden: [\n    {\n      name: "no-circular",\n      comment: "Prevent dependency cycles.",\n      severity: "error",\n      from: {},\n      to: { circular: true },\n    },\n    {\n      name: "no-source-to-test",\n      comment: "Production source must not depend on tests.",\n      severity: "error",\n      from: { path: "^(src|app|pages)(/|$)" },\n      to: { path: "(^|/)(test|tests|__tests__)(/|$)|\\\\.(spec|test)\\\\.[cm]?[jt]sx?$" },\n    },\n  ],\n  options: {\n    doNotFollow: { path: "node_modules" },\n    exclude: { path: "(^|/)(dist|build|coverage|\\\\.next|generated)(/|$)" },\n  },\n};\n`;
       const change = fileChange(".dependency-cruiser.cjs", null, config, "Create conservative architecture rules");
-      if (change) plan.files.push(change);
-    }
-  }
-
-  if (selected.includes("changesets")) {
-    const configPath = ".changeset/config.json";
-    if (context.files.has(configPath)) {
-      plan.warnings.push(`${configPath} was preserved; its existing release policy will be used.`);
-    } else if (!context.gitDefaultBranch) {
-      plan.conflicts.push("Changesets needs the Git remote default branch, which could not be resolved safely.");
-    } else {
-      const change = fileChange(configPath, null, changesetsConfig(context.gitDefaultBranch), "Create standard Changesets release configuration");
       if (change) plan.files.push(change);
     }
   }
