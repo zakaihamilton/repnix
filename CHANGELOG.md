@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.14
+
+### Patch Changes
+
+- 9110e5b: Keep built-in provider detection, recommendations, setup, and documentation on the provider module, and schedule health checks from that registry instead of hardcoded provider IDs.
+
 ## 0.3.13
 
 ### Patch Changes
