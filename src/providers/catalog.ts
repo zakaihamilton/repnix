@@ -1,13 +1,41 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { ProviderDetection, RepositoryContext } from "../core/types.js";
-import { isNonMutatingQualityCommand, isNonMutatingTestCommand } from "../repository/script-detection.js";
-import { MARKDOWNLINT_CLI_ARGS } from "./markdownlint/command.js";
+import { isNonMutatingQualityCommand, isNonMutatingTestCommand, safeTestScript } from "../repository/script-detection.js";
+import { MARKDOWNLINT_CLI_ARGS, markdownlintScriptCommand } from "./markdownlint/command.js";
 import { normalizeMarkdownlintResult } from "./markdownlint/normalizer.js";
+import { planChangesetsInstall, planJsxA11yInstall } from "./plan-install.js";
+import {
+  recommendActionlint,
+  recommendAttw,
+  recommendC8,
+  recommendChangesets,
+  recommendDependencyCruiser,
+  recommendEslintBoundaries,
+  recommendGitleaks,
+  recommendJscpd,
+  recommendJsxA11y,
+  recommendKnip,
+  recommendLhci,
+  recommendLicenseChecker,
+  recommendMarkdownlint,
+  recommendOsv,
+  recommendPublint,
+  recommendSizeLimit,
+  recommendStryker,
+  recommendSyncpack,
+} from "./recommend.js";
 import type { ProviderModule } from "./sdk.js";
 import { executableOnPath } from "../runners/health/task-executor.js";
 
 export type ProviderDescriptor = ProviderModule;
+
+const quoteScriptArg = (value: string) => /\s/.test(value) ? `"${value.replaceAll('"', '\\"')}"` : value;
+
+function packageManagerRun(context: RepositoryContext, script: string): string {
+  if (!context.packageManager) return `run ${script}`;
+  return context.packageManager === "yarn" ? `${context.packageManager} ${script}` : `${context.packageManager} run ${script}`;
+}
 
 export const PROVIDERS: ProviderDescriptor[] = [
   {
@@ -18,6 +46,8 @@ export const PROVIDERS: ProviderDescriptor[] = [
     configPatterns: [/(^|\/)tsconfig(?:\.[^/]+)?\.json$/],
     scriptPattern: /(^|\s|&&|\|)tsc(?:\s|$)/,
     capabilities: { typeChecking: true },
+    description: "Type-checks your source code before it runs.",
+    documentationUrl: "https://www.typescriptlang.org/docs/",
   },
   {
     id: "eslint",
@@ -27,6 +57,8 @@ export const PROVIDERS: ProviderDescriptor[] = [
     configPatterns: [/(^|\/)eslint\.config\.[cm]?[jt]s$/, /(^|\/)\.eslintrc(?:\.[^/]+)?$/],
     scriptPattern: /(^|\s|&&|\|)eslint(?:\s|$)/,
     capabilities: { linting: true },
+    description: "Looks for bugs and risky or inconsistent coding patterns.",
+    documentationUrl: "https://eslint.org/docs/latest/",
   },
   {
     id: "oxlint",
@@ -37,6 +69,8 @@ export const PROVIDERS: ProviderDescriptor[] = [
     scriptPattern: /(^|\s|&&|\|)oxlint(?:\s|$)/,
     capabilities: { linting: true },
     zeroConfig: true,
+    description: "Looks for common JavaScript and TypeScript problems.",
+    documentationUrl: "https://oxc.rs/docs/guide/usage/linter.html",
   },
   {
     id: "biome",
@@ -46,6 +80,8 @@ export const PROVIDERS: ProviderDescriptor[] = [
     configPatterns: [/(^|\/)biome\.jsonc?$/],
     scriptPattern: /(^|\s|&&|\|)biome(?:\s|$)/,
     capabilities: { linting: true, formatting: true },
+    description: "Checks code quality and can enforce a consistent style.",
+    documentationUrl: "https://biomejs.dev/guides/getting-started/",
   },
   {
     id: "prettier",
@@ -55,6 +91,8 @@ export const PROVIDERS: ProviderDescriptor[] = [
     configPatterns: [/(^|\/)\.prettierrc(?:\.[^/]+)?$/, /(^|\/)prettier\.config\.[cm]?[jt]s$/],
     scriptPattern: /(^|\s|&&|\|)prettier(?:\s|$)/,
     capabilities: { formatting: true },
+    description: "Checks that files follow one consistent formatting style.",
+    documentationUrl: "https://prettier.io/docs/en/",
   },
   {
     id: "oxfmt",
@@ -65,6 +103,8 @@ export const PROVIDERS: ProviderDescriptor[] = [
     scriptPattern: /(^|\s|&&|\|)oxfmt(?:\s|$)/,
     capabilities: { formatting: true },
     zeroConfig: true,
+    description: "Checks that files follow one consistent formatting style.",
+    documentationUrl: "https://oxc.rs/docs/guide/usage/formatter.html",
   },
   {
     id: "jest",
@@ -75,6 +115,8 @@ export const PROVIDERS: ProviderDescriptor[] = [
     scriptPattern: /(^|\s|&&|\|)jest(?:\s|$)/,
     capabilities: { testing: true },
     zeroConfig: true,
+    description: "Runs automated tests for your project.",
+    documentationUrl: "https://jestjs.io/docs/getting-started",
   },
   {
     id: "vitest",
@@ -85,6 +127,8 @@ export const PROVIDERS: ProviderDescriptor[] = [
     scriptPattern: /(^|\s|&&|\|)vitest(?:\s|$)/,
     capabilities: { testing: true },
     zeroConfig: true,
+    description: "Runs automated tests for your project.",
+    documentationUrl: "https://vitest.dev/guide/",
   },
   {
     id: "test-script",
@@ -95,6 +139,7 @@ export const PROVIDERS: ProviderDescriptor[] = [
     scriptPattern: /$^/,
     scriptNames: ["test", "test:run", "check:test"],
     capabilities: { testing: true },
+    description: "Uses the project’s existing test command.",
   },
   {
     id: "c8",
@@ -106,6 +151,17 @@ export const PROVIDERS: ProviderDescriptor[] = [
     scriptNames: ["health:coverage", "coverage", "test:coverage", "check:coverage"],
     scriptKind: "test",
     capabilities: { testCoverage: true },
+    description: "Measures test coverage and can enforce coverage thresholds.",
+    documentationUrl: "https://github.com/bcoe/c8",
+    dependsOnCategory: "tests",
+    recommendOrder: 110,
+    recommend: recommendC8,
+    setup: {
+      packageName: "c8",
+      scriptName: "health:coverage",
+      scriptCommand: (context) => `c8 --all --reporter=text ${packageManagerRun(context, safeTestScript(context.scripts) ?? "test")}`,
+      checks: ["Test coverage reported for the repository's safe test command."],
+    },
   },
   {
     id: "stryker",
@@ -118,6 +174,10 @@ export const PROVIDERS: ProviderDescriptor[] = [
     capabilities: { mutationTesting: true },
     command: { binary: "stryker", args: ["run"] },
     requiresConfiguration: true,
+    description: "Mutates code to measure whether tests catch behavioral changes.",
+    documentationUrl: "https://stryker-mutator.io/docs/",
+    recommendOrder: 120,
+    recommend: recommendStryker,
   },
   {
     id: "knip",
@@ -134,6 +194,16 @@ export const PROVIDERS: ProviderDescriptor[] = [
       dependencyCycles: true,
     },
     zeroConfig: true,
+    description: "Finds unused files, exports, and dependencies.",
+    documentationUrl: "https://knip.dev/",
+    recommendOrder: 10,
+    recommend: recommendKnip,
+    setup: {
+      packageName: "knip",
+      scriptName: "health:dead-code",
+      scriptCommand: () => "knip",
+      checks: ["Unused files, exports, and dependencies not reachable from project entry points."],
+    },
   },
   {
     id: "jscpd",
@@ -145,6 +215,16 @@ export const PROVIDERS: ProviderDescriptor[] = [
     scriptPattern: /(^|\s|&&|\|)jscpd(?:\s|$)/,
     capabilities: { duplication: true },
     zeroConfig: true,
+    description: "Finds copy-and-paste code that may become inconsistent.",
+    documentationUrl: "https://github.com/kucherenko/jscpd",
+    recommendOrder: 20,
+    recommend: recommendJscpd,
+    setup: {
+      packageName: "jscpd",
+      scriptName: "health:duplication",
+      scriptCommand: (context) => `jscpd ${context.sourceRoots.map(quoteScriptArg).join(" ")}`,
+      checks: ["Repeated code blocks across detected source roots."],
+    },
   },
   {
     id: "osv-scanner",
@@ -158,6 +238,11 @@ export const PROVIDERS: ProviderDescriptor[] = [
     binary: "osv-scanner",
     searchPath: true,
     zeroConfig: true,
+    description: "Checks dependencies against the OSV vulnerability database.",
+    documentationUrl: "https://google.github.io/osv-scanner/",
+    nextStep: "Next step: install the OSV-Scanner binary and prepare its local vulnerability database.",
+    recommendOrder: 30,
+    recommend: recommendOsv,
   },
   {
     id: "jsx-a11y",
@@ -170,6 +255,13 @@ export const PROVIDERS: ProviderDescriptor[] = [
     capabilities: { accessibilityRules: true },
     activeConfigPattern: /jsx-a11y/,
     requiresConfiguration: true,
+    description: "Checks common accessibility problems in JSX.",
+    documentationUrl: "https://github.com/jsx-eslint/eslint-plugin-jsx-a11y",
+    nextStep: "Next step: enable the plugin’s recommended rules in the existing ESLint configuration.",
+    deriveFromCategory: "lint",
+    recommendOrder: 90,
+    recommend: recommendJsxA11y,
+    planInstall: planJsxA11yInstall,
   },
   {
     id: "eslint-boundaries",
@@ -182,6 +274,12 @@ export const PROVIDERS: ProviderDescriptor[] = [
     capabilities: { architectureRules: true },
     activeConfigPattern: /boundaries\/(?:dependencies|element-types|entry-point|external|no-private|no-unknown)/,
     requiresConfiguration: true,
+    description: "Checks dependency rules through your existing ESLint setup.",
+    documentationUrl: "https://github.com/javierbrea/eslint-plugin-boundaries",
+    nextStep: "Next step: define the folder or module boundary rules in your ESLint configuration.",
+    deriveFromCategory: "lint",
+    recommendOrder: 40,
+    recommend: recommendEslintBoundaries,
   },
   {
     id: "dependency-cruiser",
@@ -194,6 +292,16 @@ export const PROVIDERS: ProviderDescriptor[] = [
     capabilities: { dependencyCycles: true, architectureRules: true },
     activeConfigPattern: /(?:forbidden\s*:|"forbidden"\s*:)/,
     requiresConfiguration: true,
+    description: "Checks module boundaries and dependency cycles.",
+    documentationUrl: "https://github.com/sverweij/dependency-cruiser",
+    recommendOrder: 50,
+    recommend: recommendDependencyCruiser,
+    setup: {
+      packageName: "dependency-cruiser",
+      scriptName: "health:architecture",
+      scriptCommand: (context) => `depcruise --output-type json --config -- ${context.sourceRoots.map(quoteScriptArg).join(" ")}`,
+      checks: ["Circular dependencies and configured module-boundary violations."],
+    },
   },
   {
     id: "size-limit",
@@ -207,6 +315,11 @@ export const PROVIDERS: ProviderDescriptor[] = [
     packageJsonConfigKey: "size-limit",
     activeConfigPattern: /(?:limit\s*:|"limit"\s*:)/,
     requiresConfiguration: true,
+    description: "Checks that built JavaScript stays below configured size budgets.",
+    documentationUrl: "https://github.com/ai/size-limit",
+    nextStep: "Next step: choose a build artifact and set an explicit size budget.",
+    recommendOrder: 60,
+    recommend: recommendSizeLimit,
   },
   {
     id: "syncpack",
@@ -219,6 +332,16 @@ export const PROVIDERS: ProviderDescriptor[] = [
     capabilities: { workspaceConsistency: true },
     command: { binary: "syncpack", args: ["list-mismatches"] },
     zeroConfig: true,
+    description: "Checks dependency versions and package metadata across workspaces.",
+    documentationUrl: "https://jamiemason.github.io/syncpack/",
+    recommendOrder: 100,
+    recommend: recommendSyncpack,
+    setup: {
+      packageName: "syncpack",
+      scriptName: "health:monorepo",
+      scriptCommand: () => "syncpack list-mismatches",
+      checks: ["Dependency version and package metadata consistency across workspaces."],
+    },
   },
   {
     id: "gitleaks",
@@ -232,6 +355,11 @@ export const PROVIDERS: ProviderDescriptor[] = [
     searchPath: true,
     command: { binary: "gitleaks", args: ["detect", "--source", ".", "--no-banner", "--redact", "--exit-code", "1"], searchPath: true },
     zeroConfig: true,
+    description: "Scans repository history and files for leaked secrets.",
+    documentationUrl: "https://github.com/gitleaks/gitleaks",
+    nextStep: "Next step: install the Gitleaks binary or make it available in CI.",
+    recommendOrder: 130,
+    recommend: recommendGitleaks,
   },
   {
     id: "license-checker",
@@ -244,6 +372,16 @@ export const PROVIDERS: ProviderDescriptor[] = [
     capabilities: { licenses: true },
     command: { binary: "license-checker", args: ["--json"] },
     zeroConfig: true,
+    description: "Reports dependency licenses for comparison with project policy.",
+    documentationUrl: "https://github.com/davglass/license-checker",
+    recommendOrder: 140,
+    recommend: recommendLicenseChecker,
+    setup: {
+      packageName: "license-checker",
+      scriptName: "health:licenses",
+      scriptCommand: () => "license-checker --json",
+      checks: ["Declared dependency licenses against repository policy."],
+    },
   },
   {
     id: "markdownlint",
@@ -257,6 +395,16 @@ export const PROVIDERS: ProviderDescriptor[] = [
     command: { binary: "markdownlint-cli2", args: [...MARKDOWNLINT_CLI_ARGS] },
     normalize: normalizeMarkdownlintResult,
     zeroConfig: true,
+    description: "Checks Markdown structure and style.",
+    documentationUrl: "https://github.com/DavidAnson/markdownlint",
+    recommendOrder: 150,
+    recommend: recommendMarkdownlint,
+    setup: {
+      packageName: "markdownlint-cli2",
+      scriptName: "health:documentation",
+      scriptCommand: () => markdownlintScriptCommand(),
+      checks: ["Markdown structure and style consistency."],
+    },
   },
   {
     id: "lhci",
@@ -268,6 +416,10 @@ export const PROVIDERS: ProviderDescriptor[] = [
     scriptNames: ["health:performance", "performance", "lhci"],
     capabilities: { performance: true },
     requiresConfiguration: true,
+    description: "Checks configured web performance budgets.",
+    documentationUrl: "https://github.com/GoogleChrome/lighthouse-ci",
+    recommendOrder: 160,
+    recommend: recommendLhci,
   },
   {
     id: "changesets",
@@ -279,6 +431,17 @@ export const PROVIDERS: ProviderDescriptor[] = [
     scriptNames: ["health:release", "release", "changeset:status"],
     capabilities: { release: true },
     requiresConfiguration: true,
+    description: "Checks release metadata and pending package changes.",
+    documentationUrl: "https://github.com/changesets/changesets",
+    recommendOrder: 170,
+    recommend: recommendChangesets,
+    planInstall: planChangesetsInstall,
+    setup: {
+      packageName: "@changesets/cli",
+      scriptName: "health:release",
+      scriptCommand: () => "changeset status",
+      checks: ["Pending release metadata and package versioning intent."],
+    },
   },
   {
     id: "actionlint",
@@ -292,6 +455,11 @@ export const PROVIDERS: ProviderDescriptor[] = [
     searchPath: true,
     command: { binary: "actionlint", args: [".github/workflows"], searchPath: true },
     zeroConfig: true,
+    description: "Checks GitHub Actions workflow syntax and common mistakes.",
+    documentationUrl: "https://github.com/rhysd/actionlint",
+    nextStep: "Next step: install actionlint or add it to the CI image.",
+    recommendOrder: 180,
+    recommend: recommendActionlint,
   },
   {
     id: "publint",
@@ -303,6 +471,16 @@ export const PROVIDERS: ProviderDescriptor[] = [
     scriptPattern: /(^|\s|&&|\|)publint(?:\s|$)/,
     capabilities: { packagePublishing: true },
     zeroConfig: true,
+    description: "Checks package exports, entry points, metadata, and published files.",
+    documentationUrl: "https://publint.dev/",
+    recommendOrder: 70,
+    recommend: recommendPublint,
+    setup: {
+      packageName: "publint",
+      scriptName: "health:package:publint",
+      scriptCommand: () => "publint",
+      checks: ["Published package exports, entry points, metadata, and files."],
+    },
   },
   {
     id: "attw",
@@ -314,6 +492,16 @@ export const PROVIDERS: ProviderDescriptor[] = [
     scriptPattern: /(^|\s|&&|\|)attw(?:\s|$)/,
     capabilities: { typesCompatibility: true },
     zeroConfig: true,
+    description: "Checks whether published TypeScript types work for consumers.",
+    documentationUrl: "https://github.com/arethetypeswrong/arethetypeswrong.github.io",
+    recommendOrder: 80,
+    recommend: recommendAttw,
+    setup: {
+      packageName: "@arethetypeswrong/cli",
+      scriptName: "health:package:types",
+      scriptCommand: () => "attw --pack .",
+      checks: ["TypeScript consumer resolution across Node and bundler modes."],
+    },
   },
 ];
 

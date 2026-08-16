@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.14
+
+### Patch Changes
+
+- 9110e5b: Keep built-in provider detection, recommendations, setup, and documentation on the provider module, and schedule health checks from that registry instead of hardcoded provider IDs.
+- Allow already-versioned branches to pass release health without a pending Changeset, and share JSON edit helpers so duplication checks stay clean.
+
 ## 0.3.13
 
 ### Patch Changes
