@@ -1,19 +1,11 @@
 import path from "node:path";
-import { applyEdits, modify, parse, type ParseError } from "jsonc-parser";
+import { parse, type ParseError } from "jsonc-parser";
 import type { InstallPlan, RepositoryContext } from "../core/types.js";
 import { fileChange, readOptional } from "../setup/file-plan.js";
+import { setJsonValue } from "../setup/json-edit.js";
 
 function emptyPlan(): InstallPlan {
   return { schemaVersion: 1, packages: [], files: [], commands: [], warnings: [], conflicts: [] };
-}
-
-function formattingOptions(raw: string) {
-  const indent = raw.match(/\n([\t ]+)\S/)?.[1] ?? "  ";
-  return { insertSpaces: !indent.includes("\t"), tabSize: indent.includes("\t") ? 1 : indent.length, eol: raw.includes("\r\n") ? "\r\n" : "\n" };
-}
-
-function setJsonValue(raw: string, jsonPath: (string | number)[], value: unknown): string {
-  return applyEdits(raw, modify(raw, jsonPath, value, { formattingOptions: formattingOptions(raw) }));
 }
 
 function stringList(value: unknown): string[] | null {

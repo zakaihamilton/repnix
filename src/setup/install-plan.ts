@@ -1,12 +1,12 @@
 import path from "node:path";
 import { access } from "node:fs/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { applyEdits, modify } from "jsonc-parser";
 import type { InstallPlan, RepositoryContext } from "../core/types.js";
 import { VERSION } from "../core/version.js";
 import { installDevCommand } from "../package-manager/package-manager.js";
 import { planCiChange } from "./ci-plan.js";
 import { fileChange, readOptional } from "./file-plan.js";
+import { setJsonValue } from "./json-edit.js";
 import { markdownlintScriptCommand } from "../providers/markdownlint/command.js";
 import { createProviderRegistry, type ProviderRegistry } from "../providers/registry.js";
 
@@ -40,15 +40,6 @@ async function localRepnixPackageSpec(): Promise<string | undefined> {
   } catch {
     return undefined;
   }
-}
-
-function formattingOptions(raw: string) {
-  const indent = raw.match(/\n([\t ]+)\S/)?.[1] ?? "  ";
-  return { insertSpaces: !indent.includes("\t"), tabSize: indent.includes("\t") ? 1 : indent.length, eol: raw.includes("\r\n") ? "\r\n" : "\n" };
-}
-
-function setJsonValue(raw: string, jsonPath: (string | number)[], value: unknown): string {
-  return applyEdits(raw, modify(raw, jsonPath, value, { formattingOptions: formattingOptions(raw) }));
 }
 
 function addRepnixIgnore(before: string | null): string | null {
