@@ -5,6 +5,7 @@ describe("quality script detection", () => {
   it("accepts common check commands", () => {
     expect(isNonMutatingQualityCommand("eslint .")).toBe(true);
     expect(isNonMutatingQualityCommand("npm run lint && tsc --noEmit")).toBe(true);
+    expect(isNonMutatingQualityCommand("node scripts/release-check.mjs")).toBe(true);
   });
 
   it("rejects commands that can mutate or publish a repository", () => {
