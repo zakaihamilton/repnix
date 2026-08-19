@@ -19,21 +19,25 @@ export function progressMessage(progress: InstallProgress): string {
 }
 
 export function Panel({ title, children, theme, flexGrow = 1, flexShrink, width, borderColor, fill = true }: { title: string; children: React.ReactNode; theme: SetupTuiTheme; flexGrow?: number; flexShrink?: number; width?: string | number; borderColor?: string; fill?: boolean }): React.ReactElement {
-  return <Box borderStyle="round" borderColor={borderColor ?? theme.border} flexDirection="column" paddingX={1} flexGrow={flexGrow} flexShrink={flexShrink} width={width} {...(fill ? { height: "100%" } : {})} overflow="hidden">
-    <Text bold color={theme.primary}>{` ${title} `}</Text>
-    <Box flexDirection="column" flexGrow={1} flexShrink={1} overflow="hidden">{children}</Box>
+  return <Box borderStyle="round" borderColor={borderColor ?? theme.border} flexDirection="column" paddingX={1} flexGrow={flexGrow} flexShrink={flexShrink} width={width ?? "100%"} {...(fill ? { height: "100%" } : {})} overflow="hidden">
+    <Box flexShrink={0} width="100%" overflow="hidden"><Text bold color={theme.primary} wrap="truncate-end">{` ${title} `}</Text></Box>
+    <Box flexDirection="column" flexGrow={1} flexShrink={1} width="100%" minHeight={0} overflow="hidden">{children}</Box>
   </Box>;
+}
+
+export function ScrollHint({ hasMore, theme }: { hasMore: boolean; theme: SetupTuiTheme }): React.ReactElement {
+  return <Box height={1} flexShrink={0}><Text color={theme.muted}>{hasMore ? "↓ more · use ↑↓ to scroll" : " "}</Text></Box>;
 }
 
 export function Header({ model, repositoryName, packageManager, compact, theme }: { model: SetupTuiModel; repositoryName: string; packageManager: string | null; compact: boolean; theme: SetupTuiTheme }): React.ReactElement {
   const steps = ["Audit", "Manual guidance", "Select checks", "Review changes", "Apply safely"];
   const active = setupStepIndex(model.screen);
-  return <Box flexDirection="column" marginBottom={1} flexShrink={0}>
-    <Box flexDirection={compact ? "column" : "row"} justifyContent="space-between">
-      <Text bold color={theme.primary}>◆ REP<Text color={theme.secondary}>NIX</Text> <Text color={theme.muted}>/ SETUP</Text></Text>
-      <Text color={theme.muted} wrap="truncate-end"><Text {...textColor(theme)}>{repositoryName}</Text>  ·  {packageManager ?? "package manager unresolved"}</Text>
+  return <Box flexDirection="column" marginBottom={1} flexShrink={0} width="100%" overflow="hidden">
+    <Box flexDirection={compact ? "column" : "row"} justifyContent="space-between" width="100%" overflow="hidden">
+      <Box flexShrink={0}><Text bold color={theme.primary}>◆ REP<Text color={theme.secondary}>NIX</Text> <Text color={theme.muted}>/ SETUP</Text></Text></Box>
+      <Box flexShrink={1} minWidth={0} overflow="hidden"><Text color={theme.muted} wrap="truncate-end"><Text {...textColor(theme)}>{repositoryName}</Text>  ·  {packageManager ?? "package manager unresolved"}</Text></Box>
     </Box>
-    <Box marginTop={1}>{steps.map((step, index) => <Box key={step} marginRight={2}><Text color={index < active ? theme.success : index === active ? theme.primary : theme.muted} bold={index === active}>{index < active ? "● " : index === active ? "◆ " : "○ "}{step}</Text></Box>)}</Box>
+    <Box marginTop={1} width="100%" flexWrap="wrap" overflow="hidden">{steps.map((step, index) => <Box key={step} marginRight={2} flexShrink={0}><Text color={index < active ? theme.success : index === active ? theme.primary : theme.muted} bold={index === active} wrap="truncate">{index < active ? "● " : index === active ? "◆ " : "○ "}{step}</Text></Box>)}</Box>
   </Box>;
 }
 

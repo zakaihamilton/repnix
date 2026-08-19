@@ -7,7 +7,7 @@ import { renderFileDiff } from "../setup/file-plan.js";
 import { selectionItems, type SetupSelectionItem, type SetupTuiModel } from "./setup-state.js";
 import { auditPageSummary, auditRecommendationSummary, auditSetupOptions, manualRecommendationLines, manualRecommendationViewport, selectedSetupOptions } from "./setup-helpers.js";
 import { clampTuiScroll, diffLineColor, foregroundColor, normalizeTuiDiffLine, selectionRowPresentation, SIDEBAR_CONTENT_WIDTH, SIDEBAR_WIDTH, textColor, type SetupPaneLayout, type SetupTuiTheme, type TuiLayoutMetrics } from "./setup-theme.js";
-import { CheckDetailView, CiDetailView, ConfirmButton, Panel, planStats, ReviewNotes } from "./setup-components.js";
+import { CheckDetailView, CiDetailView, ConfirmButton, Panel, planStats, ReviewNotes, ScrollHint } from "./setup-components.js";
 import { wrapTerminalText } from "../reporting/console-reporter.js";
 
 export const AUDIT_LABEL_COLUMN_WIDTH = 25;
@@ -55,7 +55,7 @@ export function ManualRecommendationsView({ audit, scroll, viewport, width, them
         ? <Newline key={`${start + index}-blank`} />
         : <Text key={`${start + index}-${line}`} {...(line.includes("HOW TO DO IT") ? { color: theme.secondary, bold: true } : line.match(/ · (baseline|optional|advanced)$/) ? { color: theme.warning, bold: true } : textColor(theme))}>{line}</Text>)}
     </Box>
-    <Box height={1} flexShrink={0}><Text color={theme.muted}>{hasMore ? "↓ more · use ↑↓ to scroll" : " "}</Text></Box>
+    <ScrollHint hasMore={hasMore} theme={theme} />
   </Panel>;
 }
 
@@ -214,38 +214,130 @@ function conciseCheckError(result: HealthResult): string {
   return `${result.name} needs attention. Run repnix check ${result.category} --details for the cause.`;
 }
 
+export function tuiPanelContentWidth(width: number): number {
+  return Math.max(width - 6, 20);
+}
+
+export function clipTuiLine(text: string, width: number): string {
+  const limit = Math.max(width, 0);
+  if (text.length === limit) return text;
+  if (text.length < limit) return `${text}${" ".repeat(limit - text.length)}`;
+  return text.slice(0, limit);
+}
+
+export function checkDetailViewport(viewport: number): number {
+  return Math.max(viewport - 1, 1);
+}
+
+export function checkTableColumns(contentWidth: number): { status: number; check: number; result: number; provider: number } {
+  const width = Math.max(contentWidth, 1);
+  const status = Math.min(9, width);
+  if (width >= 61) return { status: 9, check: 27, result: 17, provider: width - 53 };
+  const rest = Math.max(width - status, 0);
+  const check = Math.min(27, Math.floor(rest * 0.45));
+  const afterCheck = Math.max(rest - check, 0);
+  const result = Math.min(17, Math.floor(afterCheck * 0.55));
+  return { status, check, result, provider: Math.max(afterCheck - result, 0) };
+}
+
+export type SetupCheckDetailStyle = "success" | "warning" | "danger" | "info" | "heading" | "muted" | "primary" | "body";
+
+export type SetupCheckDetailItem =
+  | { kind: "text"; text: string; style: SetupCheckDetailStyle; bold?: boolean }
+  | { kind: "blank" }
+  | { kind: "table-header" }
+  | { kind: "table-row"; row: SetupCheckRow };
+
+export function setupCheckDetailItems(output: string, width: number, extras: { reportPath?: string; summaryPath?: string; exitCode?: number | null } = {}): SetupCheckDetailItem[] {
+  const rows = setupCheckRows(output);
+  const contentWidth = tuiPanelContentWidth(width);
+  if (!rows.length) {
+    const passed = extras.exitCode === 0;
+    const exitLabel = extras.exitCode === null ? "could not start" : `finished with exit code ${extras.exitCode ?? "unknown"}`;
+    return [
+      { kind: "text", text: passed ? "● Check completed successfully." : `◆ Check ${exitLabel}.`, style: passed ? "success" : "warning" },
+      ...setupCheckOutputLines(output, width).map((line) => line ? { kind: "text" as const, text: line, style: "body" as const } : { kind: "blank" as const }),
+    ];
+  }
+  const run = parseHealthRun(output);
+  const actions = setupCheckActions(output);
+  const errors = run?.results.filter((result) => result.status === "error") ?? [];
+  const findings = run?.results.reduce((total, result) => total + result.findings.length, 0) ?? 0;
+  const summary = errors.length
+    ? `${errors.length} setup issue${errors.length === 1 ? "" : "s"}${findings ? ` · ${findings} finding${findings === 1 ? "" : "s"} to review` : ""}`
+    : findings ? `${findings} finding${findings === 1 ? "" : "s"} to review` : "All checks completed";
+  const items: SetupCheckDetailItem[] = [
+    { kind: "text", text: summary, style: errors.length || findings ? "warning" : "success", bold: true },
+    { kind: "blank" },
+    { kind: "table-header" },
+    ...rows.map((row) => ({ kind: "table-row" as const, row })),
+  ];
+  if (actions.length) {
+    items.push({ kind: "blank" }, { kind: "text", text: "NEXT STEPS · DO THESE IN ORDER", style: "heading", bold: true });
+    actions.slice(0, 4).forEach((action, index) => {
+      items.push({ kind: "text", text: `${index + 1}. ${action.title}`, style: action.kind === "setup" ? "danger" : action.kind === "fix" ? "warning" : "info", bold: true });
+      if (action.detail) items.push({ kind: "text", text: `   ${action.detail}`, style: "muted" });
+      items.push({ kind: "text", text: `   $ ${action.command}`, style: "primary" });
+    });
+    items.push({ kind: "blank" }, { kind: "text", text: "Verify: $ repnix check", style: "muted" });
+  }
+  if (extras.summaryPath) items.push({ kind: "text", text: `Runbook saved: ${extras.summaryPath}`, style: "muted" });
+  if (extras.reportPath) {
+    wrapTerminalText(`AI-ready report saved: ${extras.reportPath}`, contentWidth).forEach((line) => items.push({ kind: "text", text: line, style: "muted" }));
+    wrapTerminalText("Next: attach or drop this file into your AI coding assistant, then run `repnix check` after reviewing its changes.", contentWidth).forEach((line) => items.push({ kind: "text", text: line, style: "primary" }));
+  }
+  return items;
+}
+
+function FrozenLine({ children }: { children: React.ReactNode }): React.ReactElement {
+  return <Box flexDirection="column" height={1} flexShrink={0} width="100%" overflow="hidden">{children}</Box>;
+}
+
+function CheckTableRow({ columns, status, check, result, providers, theme, header = false, statusColor }: { columns: ReturnType<typeof checkTableColumns>; status: string; check: string; result: string; providers: string; theme: SetupTuiTheme; header?: boolean; statusColor?: string }): React.ReactElement {
+  const statusTone = header ? theme.muted : statusColor;
+  return <Box flexDirection="row" height={1} flexShrink={0} width="100%" overflow="hidden">
+    <Box width={columns.status} height={1} flexShrink={0} overflow="hidden"><Text {...foregroundColor(statusTone)} bold wrap="truncate">{clipTuiLine(status, columns.status)}</Text></Box>
+    <Box width={columns.check} height={1} flexShrink={0} overflow="hidden"><Text {...(header ? { color: theme.muted, bold: true } : textColor(theme))} wrap="truncate">{clipTuiLine(check, columns.check)}</Text></Box>
+    <Box width={columns.result} height={1} flexShrink={0} overflow="hidden"><Text {...foregroundColor(statusTone)} {...(header ? { bold: true } : {})} wrap="truncate">{clipTuiLine(result, columns.result)}</Text></Box>
+    <Box width={columns.provider} height={1} flexShrink={0} overflow="hidden"><Text {...(header ? { color: theme.muted, bold: true } : textColor(theme))} wrap="truncate">{clipTuiLine(providers, columns.provider)}</Text></Box>
+  </Box>;
+}
+
+function detailItemColor(style: SetupCheckDetailStyle, theme: SetupTuiTheme): string | undefined {
+  if (style === "success") return theme.success;
+  if (style === "warning") return theme.warning;
+  if (style === "danger") return theme.danger;
+  if (style === "info") return theme.info;
+  if (style === "heading") return theme.secondary;
+  if (style === "muted") return theme.muted;
+  if (style === "primary") return theme.primary;
+  return theme.text;
+}
+
 export function CheckDetailsView({ model, width, layout, theme }: { model: SetupTuiModel; width: number; layout: TuiLayoutMetrics; theme: SetupTuiTheme }): React.ReactElement {
+  const extras = { ...(model.checkReportPath ? { reportPath: model.checkReportPath } : {}), ...(model.checkSummaryPath ? { summaryPath: model.checkSummaryPath } : {}), ...(model.checkExitCode !== undefined ? { exitCode: model.checkExitCode } : {}) };
+  const items = setupCheckDetailItems(model.checkOutput ?? "", width, extras);
+  const viewport = checkDetailViewport(layout.detailViewport);
+  const scroll = clampTuiScroll(model.checkScroll ?? 0, items.length, viewport);
+  const visible = items.slice(scroll, scroll + viewport);
+  const hasMore = scroll + visible.length < items.length;
+  const columns = checkTableColumns(tuiPanelContentWidth(width));
   const rows = setupCheckRows(model.checkOutput ?? "");
   const run = parseHealthRun(model.checkOutput ?? "");
-  if (rows.length) {
-    const actions = setupCheckActions(model.checkOutput ?? "");
-    const tableViewport = Math.max(layout.detailViewport - Math.min(actions.length, 4) * 3 - 5, 4);
-    const scroll = clampTuiScroll(model.checkScroll ?? 0, rows.length, tableViewport);
-    const visible = rows.slice(scroll, scroll + tableViewport);
-    const errors = run?.results.filter((result) => result.status === "error") ?? [];
-    const findings = run?.results.reduce((total, result) => total + result.findings.length, 0) ?? 0;
-    const summary = errors.length
-      ? `${errors.length} setup issue${errors.length === 1 ? "" : "s"}${findings ? ` · ${findings} finding${findings === 1 ? "" : "s"} to review` : ""}`
-      : findings ? `${findings} finding${findings === 1 ? "" : "s"} to review` : "All checks completed";
-    return <Panel title="Check results" theme={theme} borderColor={errors.length ? theme.warning : theme.success}>
-      <Text color={errors.length ? theme.warning : findings ? theme.warning : theme.success} bold>{summary}</Text>
-      <Box flexDirection="row" marginTop={1}><Box width={9} flexShrink={0}><Text color={theme.muted} bold>STATUS</Text></Box><Box width={27} flexShrink={0}><Text color={theme.muted} bold>CHECK</Text></Box><Box width={17} flexShrink={0}><Text color={theme.muted} bold>RESULT</Text></Box><Box flexGrow={1} overflow="hidden"><Text color={theme.muted} bold>PROVIDER</Text></Box></Box>
-      {visible.map((row) => <Box key={row.category} flexDirection="row"><Box width={9} flexShrink={0}><Text color={checkStatusColor(row.status, theme)} bold>{checkStatusLabel(row.status)}</Text></Box><Box width={27} flexShrink={0}><Text {...textColor(theme)} wrap="truncate-end">{row.category}</Text></Box><Box width={17} flexShrink={0}><Text color={checkStatusColor(row.status, theme)} wrap="truncate-end">{row.result}</Text></Box><Box flexGrow={1} overflow="hidden"><Text {...textColor(theme)} wrap="truncate-end">{row.providers}</Text></Box></Box>)}
-      {actions.length && scroll === 0 ? <><Newline /><Text color={theme.secondary} bold>NEXT STEPS · DO THESE IN ORDER</Text>{actions.slice(0, 4).map((action, index) => <Box key={`${action.kind}-${action.title}`} flexDirection="column"><Text color={action.kind === "setup" ? theme.danger : action.kind === "fix" ? theme.warning : theme.info} bold>{`${index + 1}. ${action.title}`}</Text>{action.detail ? <Text color={theme.muted} wrap="truncate-end">   {action.detail}</Text> : null}<Text color={theme.primary}>   $ {action.command}</Text></Box>)}<Newline /><Text color={theme.muted}>Verify: $ repnix check</Text></> : null}
-      {model.checkSummaryPath ? <Text color={theme.muted}>Runbook saved: {model.checkSummaryPath}</Text> : null}
-      {model.checkReportPath ? <><Text color={theme.muted}>AI-ready report saved: {model.checkReportPath}</Text><Text color={theme.primary}>Next: attach or drop this file into your AI coding assistant, then run `repnix check` after reviewing its changes.</Text></> : null}
-      {scroll + visible.length < rows.length ? <Text color={theme.muted}>↓ more · use ↑↓ to scroll</Text> : null}
-    </Panel>;
-  }
-  const lines = setupCheckOutputLines(model.checkOutput ?? "", width);
-  const scroll = clampTuiScroll(model.checkScroll ?? 0, lines.length, layout.detailViewport);
-  const visible = lines.slice(scroll, scroll + layout.detailViewport);
+  const errors = run?.results.filter((result) => result.status === "error") ?? [];
   const passed = model.checkExitCode === 0;
-  const exitLabel = model.checkExitCode === null ? "could not start" : `finished with exit code ${model.checkExitCode ?? "unknown"}`;
-  return <Panel title="Check results · repnix check" theme={theme} borderColor={passed ? theme.success : theme.warning}>
-    <Text color={passed ? theme.success : theme.warning}>{passed ? "● Check completed successfully." : `◆ Check ${exitLabel}.`}</Text>
-    {visible.map((line, index) => line ? <Text key={`${scroll + index}-${line}`} {...textColor(theme)}>{line}</Text> : <Newline key={`${scroll + index}-blank`} />)}
-    {scroll + visible.length < lines.length ? <Text color={theme.muted}>↓ more · use ↑↓ to scroll</Text> : null}
+  const borderColor = rows.length ? (errors.length ? theme.warning : theme.success) : passed ? theme.success : theme.warning;
+  return <Panel title={rows.length ? "Check results" : "Check results · repnix check"} theme={theme} borderColor={borderColor}>
+    <Box flexDirection="column" flexGrow={1} flexShrink={1} minHeight={0} overflow="hidden">
+      {visible.map((item, index) => {
+        const key = `${scroll + index}`;
+        if (item.kind === "blank") return <Box key={key} height={1} flexShrink={0} />;
+        if (item.kind === "table-header") return <CheckTableRow key={key} columns={columns} header status="STATUS" check="CHECK" result="RESULT" providers="PROVIDER" theme={theme} />;
+        if (item.kind === "table-row") return <CheckTableRow key={key} columns={columns} status={checkStatusLabel(item.row.status)} check={item.row.category} result={item.row.result} providers={item.row.providers} statusColor={checkStatusColor(item.row.status, theme)} theme={theme} />;
+        return <FrozenLine key={key}><Text {...foregroundColor(detailItemColor(item.style, theme))} {...(item.bold ? { bold: true } : {})} wrap="truncate">{clipTuiLine(item.text, tuiPanelContentWidth(width))}</Text></FrozenLine>;
+      })}
+    </Box>
+    <ScrollHint hasMore={hasMore} theme={theme} />
   </Panel>;
 }
 
