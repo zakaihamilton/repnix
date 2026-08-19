@@ -15,7 +15,7 @@ import { createSetupTuiModel, selectionItems, setupTuiReducer, type SetupTuiMode
 import { auditContentLineCount, auditPageSummary, auditRecommendationSummary, auditSetupOptions, auditStatusPresentation, manualContentLineCount, manualRecommendationLines, manualRecommendationSteps, manualRecommendationViewport, selectedSetupOptions, setupCheckDetails } from "./setup-helpers.js";
 import { createSetupTuiTheme, diffLineColor, normalizeTuiDiffLine, selectionIndicator, selectionRowPresentation, setupPaneLayout, setupStepIndex, tuiLayoutMetrics, clampTuiScroll } from "./setup-theme.js";
 import { Footer, Header, Panel, progressMessage } from "./setup-components.js";
-import { ApplyView, AuditView, CheckDetailsView, ConfirmView, DetailsView, ManualRecommendationsView, ReviewView, SelectView, auditUsesSingleColumn, AUDIT_LABEL_COLUMN_WIDTH, AUDIT_TWO_COLUMN_MIN_WIDTH, setupCheckActions, setupCheckCommand, setupCheckOutputLines, setupCheckRows } from "./setup-views.js";
+import { ApplyView, AuditView, CheckDetailsView, ConfirmView, DetailsView, ManualRecommendationsView, ReviewView, SelectView, auditUsesSingleColumn, AUDIT_LABEL_COLUMN_WIDTH, AUDIT_TWO_COLUMN_MIN_WIDTH, checkDetailViewport, setupCheckActions, setupCheckCommand, setupCheckDetailItems, setupCheckRows } from "./setup-views.js";
 
 export interface SetupTuiDependencies {
   audit: typeof auditRepository;
@@ -327,7 +327,8 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
   const manualLineCount = audit ? manualContentLineCount(audit, width) : 0;
   const detailFile = plan?.files[model.reviewCursor];
   const detailLineCount = detailFile ? renderFileDiff(detailFile, Math.max(width - 8, 32)).split("\n").length : 0;
-  const checkLineCount = setupCheckOutputLines(model.checkOutput ?? "", width).length;
+  const checkLineCount = setupCheckDetailItems(model.checkOutput ?? "", width, { ...(model.checkReportPath ? { reportPath: model.checkReportPath } : {}), ...(model.checkSummaryPath ? { summaryPath: model.checkSummaryPath } : {}), ...(model.checkExitCode !== undefined ? { exitCode: model.checkExitCode } : {}) }).length;
+  const checkViewport = checkDetailViewport(layout.detailViewport);
   const busy = model.screen === "loading" || model.screen === "planning" || model.screen === "applying" || model.screen === "checking";
   const leave = () => { result.code = model.screen === "error" ? 2 : 0; exit(); };
 
@@ -388,14 +389,14 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
       else if (key.downArrow || input === "j") dispatch({ type: "move-detail", direction: "down", lineCount: detailLineCount, viewport: layout.detailViewport });
     }
     if (model.screen === "check-details") {
-      if (key.upArrow || input === "k") dispatch({ type: "move-check", direction: "up", lineCount: checkLineCount, viewport: layout.detailViewport });
-      else if (key.downArrow || input === "j") dispatch({ type: "move-check", direction: "down", lineCount: checkLineCount, viewport: layout.detailViewport });
+      if (key.upArrow || input === "k") dispatch({ type: "move-check", direction: "up", lineCount: checkLineCount, viewport: checkViewport });
+      else if (key.downArrow || input === "j") dispatch({ type: "move-check", direction: "down", lineCount: checkLineCount, viewport: checkViewport });
     }
   });
 
   return <Box flexDirection="column" width="100%" height={height} paddingX={1} overflow="hidden">
     <Header model={model} repositoryName={audit?.context.packageJson.name ?? "repository"} packageManager={audit?.context.packageManager ?? null} compact={compact} theme={theme} />
-    <Box flexDirection="column" flexGrow={1} flexShrink={1} minHeight={1} overflow="hidden">
+    <Box flexDirection="column" flexGrow={1} flexShrink={1} minHeight={0} overflow="hidden">
       {model.screen === "loading" ? <Panel title="Scanning repository" theme={theme} borderColor={theme.info}><Text color={theme.info}>◌ Detecting checks, project structure, and recommendations…</Text></Panel> : null}
       {model.screen === "audit" && audit ? <AuditView audit={audit} singleColumn={auditSingleColumn} scroll={model.auditScroll} viewport={layout.detailViewport} theme={theme} /> : null}
       {model.screen === "manual" && audit ? <ManualRecommendationsView audit={audit} scroll={model.manualScroll} viewport={layout.detailViewport} width={width} theme={theme} /> : null}
@@ -428,5 +429,5 @@ export async function runSetupTui(options: DiagnosticOptions = {}): Promise<numb
 
 export { supportsTui, createSetupTuiTheme, diffLineColor, normalizeTuiDiffLine, selectionIndicator, selectionRowPresentation, setupPaneLayout, setupStepIndex, tuiLayoutMetrics, clampTuiScroll, auditContentLineCount, auditPageSummary, auditRecommendationSummary, auditSetupOptions, auditStatusPresentation, manualContentLineCount, manualRecommendationLines, manualRecommendationSteps, manualRecommendationViewport, selectedSetupOptions, setupCheckDetails };
 export { AUDIT_LABEL_COLUMN_WIDTH, AUDIT_TWO_COLUMN_MIN_WIDTH, auditUsesSingleColumn };
-export { setupCheckActions, setupCheckOutputLines, setupCheckRows } from "./setup-views.js";
+export { checkDetailViewport, checkTableColumns, clipTuiLine, setupCheckActions, setupCheckDetailItems, setupCheckOutputLines, setupCheckRows, tuiPanelContentWidth } from "./setup-views.js";
 export { COMPACT_LAYOUT_HEIGHT, COMPACT_LAYOUT_WIDTH, HORIZONTAL_PANE_MIN_WIDTH } from "./setup-theme.js";

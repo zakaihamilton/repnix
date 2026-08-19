@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { AUDIT_LABEL_COLUMN_WIDTH, AUDIT_TWO_COLUMN_MIN_WIDTH, COMPACT_LAYOUT_HEIGHT, COMPACT_LAYOUT_WIDTH, HORIZONTAL_PANE_MIN_WIDTH, auditContentLineCount, auditPageSummary, auditRecommendationSummary, auditSetupOptions, auditStatusPresentation, auditUsesSingleColumn, clampTuiScroll, createSetupTuiTheme, diffLineColor, manualContentLineCount, manualRecommendationLines, manualRecommendationSteps, manualRecommendationViewport, normalizeTuiDiffLine, renderSetupCheckSummary, renderSetupHealthReport, saveSetupCheckReports, selectedSetupOptions, selectionIndicator, selectionRowPresentation, setupCheckActions, setupCheckDetails, setupCheckOutputLines, setupCheckResultOutput, setupCheckRows, setupDetectionErrorMessage, setupPaneLayout, setupStepIndex, tuiLayoutMetrics } from "../src/tui/setup-app.js";
+import { AUDIT_LABEL_COLUMN_WIDTH, AUDIT_TWO_COLUMN_MIN_WIDTH, COMPACT_LAYOUT_HEIGHT, COMPACT_LAYOUT_WIDTH, HORIZONTAL_PANE_MIN_WIDTH, auditContentLineCount, auditPageSummary, auditRecommendationSummary, auditSetupOptions, auditStatusPresentation, auditUsesSingleColumn, checkDetailViewport, checkTableColumns, clipTuiLine, clampTuiScroll, createSetupTuiTheme, diffLineColor, manualContentLineCount, manualRecommendationLines, manualRecommendationSteps, manualRecommendationViewport, normalizeTuiDiffLine, renderSetupCheckSummary, renderSetupHealthReport, saveSetupCheckReports, selectedSetupOptions, selectionIndicator, selectionRowPresentation, setupCheckActions, setupCheckDetailItems, setupCheckDetails, setupCheckOutputLines, setupCheckResultOutput, setupCheckRows, setupDetectionErrorMessage, setupPaneLayout, setupStepIndex, tuiLayoutMetrics, tuiPanelContentWidth } from "../src/tui/setup-app.js";
 import { createSetupTuiModel, selectionItems, setupTuiReducer } from "../src/tui/setup-state.js";
 import type { AuditModel, Recommendation } from "../src/recommendations/recommendation-engine.js";
 import type { RepositoryContext } from "../src/core/types.js";
@@ -196,6 +196,34 @@ describe("setup TUI presentation", () => {
   it("uses one audit coverage column when the terminal is not wide enough", () => {
     expect(auditUsesSingleColumn(AUDIT_TWO_COLUMN_MIN_WIDTH - 1)).toBe(true);
     expect(auditUsesSingleColumn(AUDIT_TWO_COLUMN_MIN_WIDTH)).toBe(false);
+  });
+
+  it("keeps check-result columns within the panel content width", () => {
+    expect(tuiPanelContentWidth(80)).toBe(74);
+    expect(checkDetailViewport(10)).toBe(9);
+    expect(checkTableColumns(74)).toEqual({ status: 9, check: 27, result: 17, provider: 21 });
+    const narrow = checkTableColumns(40);
+    expect(narrow.status + narrow.check + narrow.result + narrow.provider).toBe(40);
+    expect(narrow.check).toBeGreaterThan(0);
+    expect(clipTuiLine("26 findings", 17)).toBe("26 findings      ");
+    expect(clipTuiLine("1. Review Linting (26 findings)", 20)).toBe("1. Review Linting (2");
+  });
+
+  it("turns structured check output into a scrollable detail list", () => {
+    const output = JSON.stringify({
+      repository: { packageManager: "yarn", categories: [] },
+      results: [
+        { provider: "typescript", name: "TypeScript", category: "types", status: "pass", findings: [] },
+        { provider: "script:lint", name: "Lint", category: "lint", status: "fail", findings: [{}, {}] },
+      ],
+    });
+    const items = setupCheckDetailItems(output, 80, { reportPath: ".repnix/health-report.md" });
+    expect(items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: "text", text: "2 findings to review" }),
+      expect.objectContaining({ kind: "table-row", row: expect.objectContaining({ category: "Type safety", result: "Passed" }) }),
+      expect.objectContaining({ kind: "text", text: "   $ yarn run lint" }),
+    ]));
+    expect(items.some((item) => item.kind === "text" && item.text.includes("AI-ready report saved"))).toBe(true);
   });
 
   it("builds provider-specific setup details for the selection pane", () => {
