@@ -7,7 +7,7 @@ import { renderFileDiff } from "../setup/file-plan.js";
 import { selectionItems, type SetupSelectionItem, type SetupTuiModel } from "./setup-state.js";
 import { auditPageSummary, auditRecommendationSummary, auditSetupOptions, manualRecommendationLines, manualRecommendationViewport, selectedSetupOptions } from "./setup-helpers.js";
 import { clampTuiScroll, diffLineColor, foregroundColor, normalizeTuiDiffLine, selectionRowPresentation, SIDEBAR_CONTENT_WIDTH, SIDEBAR_WIDTH, textColor, type SetupPaneLayout, type SetupTuiTheme, type TuiLayoutMetrics } from "./setup-theme.js";
-import { CheckDetailView, CiDetailView, ConfirmButton, Panel, planStats, ReviewNotes } from "./setup-components.js";
+import { CheckDetailView, CiDetailView, ConfirmButton, Panel, planStats, ReviewNotes, ScrollHint } from "./setup-components.js";
 import { wrapTerminalText } from "../reporting/console-reporter.js";
 
 export const AUDIT_LABEL_COLUMN_WIDTH = 25;
@@ -55,7 +55,7 @@ export function ManualRecommendationsView({ audit, scroll, viewport, width, them
         ? <Newline key={`${start + index}-blank`} />
         : <Text key={`${start + index}-${line}`} {...(line.includes("HOW TO DO IT") ? { color: theme.secondary, bold: true } : line.match(/ · (baseline|optional|advanced)$/) ? { color: theme.warning, bold: true } : textColor(theme))}>{line}</Text>)}
     </Box>
-    <Box height={1} flexShrink={0}><Text color={theme.muted}>{hasMore ? "↓ more · use ↑↓ to scroll" : " "}</Text></Box>
+    <ScrollHint hasMore={hasMore} theme={theme} />
   </Panel>;
 }
 
@@ -337,7 +337,7 @@ export function CheckDetailsView({ model, width, layout, theme }: { model: Setup
         return <FrozenLine key={key}><Text {...foregroundColor(detailItemColor(item.style, theme))} {...(item.bold ? { bold: true } : {})} wrap="truncate">{clipTuiLine(item.text, tuiPanelContentWidth(width))}</Text></FrozenLine>;
       })}
     </Box>
-    <Box height={1} flexShrink={0}><Text color={theme.muted}>{hasMore ? "↓ more · use ↑↓ to scroll" : " "}</Text></Box>
+    <ScrollHint hasMore={hasMore} theme={theme} />
   </Panel>;
 }
 

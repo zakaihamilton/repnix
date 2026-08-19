@@ -25,6 +25,10 @@ export function Panel({ title, children, theme, flexGrow = 1, flexShrink, width,
   </Box>;
 }
 
+export function ScrollHint({ hasMore, theme }: { hasMore: boolean; theme: SetupTuiTheme }): React.ReactElement {
+  return <Box height={1} flexShrink={0}><Text color={theme.muted}>{hasMore ? "↓ more · use ↑↓ to scroll" : " "}</Text></Box>;
+}
+
 export function Header({ model, repositoryName, packageManager, compact, theme }: { model: SetupTuiModel; repositoryName: string; packageManager: string | null; compact: boolean; theme: SetupTuiTheme }): React.ReactElement {
   const steps = ["Audit", "Manual guidance", "Select checks", "Review changes", "Apply safely"];
   const active = setupStepIndex(model.screen);
