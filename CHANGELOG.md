@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.15
+
+### Patch Changes
+
+- 2b79d59: Stop the setup TUI check-results screen from overlaying wrapped text in narrow terminals.
+
 ## 0.3.14
 
 ### Patch Changes
