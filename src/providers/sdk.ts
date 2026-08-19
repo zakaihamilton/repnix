@@ -75,6 +75,10 @@ export interface ProviderModule {
   documentationUrl?: string;
   nextStep?: string;
   setup?: ProviderSetup;
+  /** Schedule after the root task in this category, when one exists. */
+  dependsOnCategory?: HealthCategory;
+  /** Reuse an already-scheduled task in this category instead of running a second command. */
+  deriveFromCategory?: HealthCategory;
   detect?: (context: RepositoryContext) => Promise<ProviderDetection>;
   /** Lower values appear first in audit output. Plugins without an order follow built-ins. */
   recommendOrder?: number;

@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { createProviderRegistry, createBuiltinRegistry, ProviderRegistry } from "../src/providers/registry.js";
+import { createProviderRegistry, createBuiltinRegistry, ProviderRegistry, builtinProvider } from "../src/providers/registry.js";
 import { defineProvider } from "../src/providers/sdk.js";
 import { detectRepository } from "../src/repository/detect-repository.js";
 import { readConfig } from "../src/config/repo-health-config.js";
@@ -12,6 +12,13 @@ import { runHealth } from "../src/runners/health-runner.js";
 import { resolveDiagnosticLogger } from "../src/cli/options.js";
 
 describe("provider registry contract", () => {
+  it("derives installability from setup metadata and keeps recommend on the module", () => {
+    expect(builtinProvider("knip")?.support).toEqual(["detectable", "runnable", "installable"]);
+    expect(builtinProvider("eslint")?.support).toEqual(["detectable"]);
+    expect(builtinProvider("knip")?.recommend).toEqual(expect.any(Function));
+    expect(builtinProvider("knip")?.documentationUrl).toBe("https://knip.dev/");
+  });
+
   it("accepts a self-contained provider module and rejects duplicate IDs", () => {
     const provider = defineProvider({
       id: "synthetic-tool",

@@ -1,6 +1,6 @@
 import type { ProviderRecommendation, RepositoryContext } from "../core/types.js";
 import { safeTestScript } from "../repository/script-detection.js";
-import type { ProviderModule, RecommendHelpers } from "./sdk.js";
+import type { RecommendHelpers } from "./sdk.js";
 
 const LOCKFILES = ["package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock", "bun.lockb"];
 
@@ -17,7 +17,7 @@ function coveredOrOff(helpers?: RecommendHelpers): boolean {
   return helpers?.coverageStatus === "covered" || helpers?.coverageStatus === "off";
 }
 
-function recommendKnip(context: RepositoryContext, helpers?: RecommendHelpers): ProviderRecommendation | null {
+export function recommendKnip(context: RepositoryContext, helpers?: RecommendHelpers): ProviderRecommendation | null {
   if (coveredOrOff(helpers) || context.sourceFiles.length === 0 || helpers?.detections.get("knip")?.installed) return null;
   return {
     recommended: true,
@@ -27,7 +27,7 @@ function recommendKnip(context: RepositoryContext, helpers?: RecommendHelpers): 
   };
 }
 
-function recommendJscpd(context: RepositoryContext, helpers?: RecommendHelpers): ProviderRecommendation | null {
+export function recommendJscpd(context: RepositoryContext, helpers?: RecommendHelpers): ProviderRecommendation | null {
   if (coveredOrOff(helpers) || context.sourceFiles.length < 2 || helpers?.detections.get("jscpd")?.installed) return null;
   return {
     recommended: true,
@@ -37,7 +37,7 @@ function recommendJscpd(context: RepositoryContext, helpers?: RecommendHelpers):
   };
 }
 
-function recommendOsv(context: RepositoryContext, helpers?: RecommendHelpers): ProviderRecommendation | null {
+export function recommendOsv(context: RepositoryContext, helpers?: RecommendHelpers): ProviderRecommendation | null {
   const lockfiles = LOCKFILES.filter((file) => context.files.has(file));
   if (coveredOrOff(helpers) || lockfiles.length === 0 || helpers?.detections.get("osv-scanner")?.activeCapabilities.vulnerabilities) return null;
   return {
@@ -48,7 +48,7 @@ function recommendOsv(context: RepositoryContext, helpers?: RecommendHelpers): P
   };
 }
 
-function recommendEslintBoundaries(context: RepositoryContext, helpers?: RecommendHelpers): ProviderRecommendation | null {
+export function recommendEslintBoundaries(context: RepositoryContext, helpers?: RecommendHelpers): ProviderRecommendation | null {
   if (coveredOrOff(helpers) || context.sourceFiles.length < 2) return null;
   if (helpers?.detections.get("eslint")?.activeCapabilities.linting !== true) return null;
   if (helpers?.detections.get("eslint-boundaries")?.activeCapabilities.architectureRules) return null;
@@ -60,7 +60,7 @@ function recommendEslintBoundaries(context: RepositoryContext, helpers?: Recomme
   };
 }
 
-function recommendDependencyCruiser(context: RepositoryContext, helpers?: RecommendHelpers): ProviderRecommendation | null {
+export function recommendDependencyCruiser(context: RepositoryContext, helpers?: RecommendHelpers): ProviderRecommendation | null {
   if (coveredOrOff(helpers) || context.sourceFiles.length < 2) return null;
   if (helpers?.detections.get("eslint")?.activeCapabilities.linting === true) return null;
   if (helpers?.detections.get("dependency-cruiser")?.activeCapabilities.architectureRules) return null;
@@ -72,7 +72,7 @@ function recommendDependencyCruiser(context: RepositoryContext, helpers?: Recomm
   };
 }
 
-function recommendSizeLimit(_context: RepositoryContext, helpers?: RecommendHelpers): ProviderRecommendation | null {
+export function recommendSizeLimit(_context: RepositoryContext, helpers?: RecommendHelpers): ProviderRecommendation | null {
   if (coveredOrOff(helpers) || helpers?.coverageStatus === "not-applicable") return null;
   if (helpers?.detections.get("size-limit")?.activeCapabilities.bundleBudget) return null;
   return {
@@ -83,7 +83,7 @@ function recommendSizeLimit(_context: RepositoryContext, helpers?: RecommendHelp
   };
 }
 
-function recommendPublint(_context: RepositoryContext, helpers?: RecommendHelpers): ProviderRecommendation | null {
+export function recommendPublint(_context: RepositoryContext, helpers?: RecommendHelpers): ProviderRecommendation | null {
   if (helpers?.coverageStatus === "off" || helpers?.coverageStatus === "not-applicable") return null;
   if (helpers?.detections.get("publint")?.activeCapabilities.packagePublishing) return null;
   return {
@@ -94,7 +94,7 @@ function recommendPublint(_context: RepositoryContext, helpers?: RecommendHelper
   };
 }
 
-function recommendAttw(context: RepositoryContext, helpers?: RecommendHelpers): ProviderRecommendation | null {
+export function recommendAttw(context: RepositoryContext, helpers?: RecommendHelpers): ProviderRecommendation | null {
   if (helpers?.coverageStatus === "off" || helpers?.coverageStatus === "not-applicable") return null;
   if (!hasPublishedTypes(context) || helpers?.detections.get("attw")?.activeCapabilities.typesCompatibility) return null;
   const evidence = typeof context.packageJson.types === "string"
@@ -110,7 +110,7 @@ function recommendAttw(context: RepositoryContext, helpers?: RecommendHelpers): 
   };
 }
 
-function recommendJsxA11y(context: RepositoryContext): ProviderRecommendation {
+export function recommendJsxA11y(context: RepositoryContext): ProviderRecommendation {
   const legacyJsonConfig = context.editableLegacyEslintConfig === true;
   return {
     recommended: true,
@@ -122,7 +122,7 @@ function recommendJsxA11y(context: RepositoryContext): ProviderRecommendation {
   };
 }
 
-function recommendSyncpack(): ProviderRecommendation {
+export function recommendSyncpack(): ProviderRecommendation {
   return {
     recommended: true,
     priority: "baseline",
@@ -131,7 +131,7 @@ function recommendSyncpack(): ProviderRecommendation {
   };
 }
 
-function recommendC8(context: RepositoryContext): ProviderRecommendation {
+export function recommendC8(context: RepositoryContext): ProviderRecommendation {
   const testScript = safeTestScript(context.scripts);
   return {
     recommended: true,
@@ -143,7 +143,7 @@ function recommendC8(context: RepositoryContext): ProviderRecommendation {
   };
 }
 
-function recommendStryker(): ProviderRecommendation {
+export function recommendStryker(): ProviderRecommendation {
   return {
     recommended: true,
     priority: "advanced",
@@ -152,7 +152,7 @@ function recommendStryker(): ProviderRecommendation {
   };
 }
 
-function recommendGitleaks(): ProviderRecommendation {
+export function recommendGitleaks(): ProviderRecommendation {
   return {
     recommended: true,
     priority: "baseline",
@@ -161,7 +161,7 @@ function recommendGitleaks(): ProviderRecommendation {
   };
 }
 
-function recommendLicenseChecker(): ProviderRecommendation {
+export function recommendLicenseChecker(): ProviderRecommendation {
   return {
     recommended: true,
     priority: "optional",
@@ -170,7 +170,7 @@ function recommendLicenseChecker(): ProviderRecommendation {
   };
 }
 
-function recommendMarkdownlint(): ProviderRecommendation {
+export function recommendMarkdownlint(): ProviderRecommendation {
   return {
     recommended: true,
     priority: "optional",
@@ -179,7 +179,7 @@ function recommendMarkdownlint(): ProviderRecommendation {
   };
 }
 
-function recommendLhci(): ProviderRecommendation {
+export function recommendLhci(): ProviderRecommendation {
   return {
     recommended: true,
     priority: "optional",
@@ -188,7 +188,7 @@ function recommendLhci(): ProviderRecommendation {
   };
 }
 
-function recommendChangesets(context: RepositoryContext): ProviderRecommendation {
+export function recommendChangesets(context: RepositoryContext): ProviderRecommendation {
   const hasDefaultBranch = Boolean(context.gitDefaultBranch);
   return {
     recommended: true,
@@ -200,7 +200,7 @@ function recommendChangesets(context: RepositoryContext): ProviderRecommendation
   };
 }
 
-function recommendActionlint(): ProviderRecommendation {
+export function recommendActionlint(): ProviderRecommendation {
   return {
     recommended: true,
     priority: "optional",
@@ -208,24 +208,3 @@ function recommendActionlint(): ProviderRecommendation {
     reason: "GitHub Actions workflows are present, but their syntax and common automation mistakes are not being checked.",
   };
 }
-
-export const PROVIDER_RECOMMENDATIONS: Record<string, { order: number; recommend: NonNullable<ProviderModule["recommend"]> }> = {
-  knip: { order: 10, recommend: recommendKnip },
-  jscpd: { order: 20, recommend: recommendJscpd },
-  "osv-scanner": { order: 30, recommend: recommendOsv },
-  "eslint-boundaries": { order: 40, recommend: recommendEslintBoundaries },
-  "dependency-cruiser": { order: 50, recommend: recommendDependencyCruiser },
-  "size-limit": { order: 60, recommend: recommendSizeLimit },
-  publint: { order: 70, recommend: recommendPublint },
-  attw: { order: 80, recommend: recommendAttw },
-  "jsx-a11y": { order: 90, recommend: recommendJsxA11y },
-  syncpack: { order: 100, recommend: recommendSyncpack },
-  c8: { order: 110, recommend: recommendC8 },
-  stryker: { order: 120, recommend: recommendStryker },
-  gitleaks: { order: 130, recommend: recommendGitleaks },
-  "license-checker": { order: 140, recommend: recommendLicenseChecker },
-  markdownlint: { order: 150, recommend: recommendMarkdownlint },
-  lhci: { order: 160, recommend: recommendLhci },
-  changesets: { order: 170, recommend: recommendChangesets },
-  actionlint: { order: 180, recommend: recommendActionlint },
-};
