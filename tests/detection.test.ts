@@ -1,6 +1,8 @@
-import { readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { readConfig } from "../src/config/repo-health-config.js";
+import { buildAuditModel } from "../src/recommendations/recommendation-engine.js";
 import { detectAllProviders } from "../src/providers/catalog.js";
 import { detectRepository } from "../src/repository/detect-repository.js";
 import { copyFixture, fixturePath } from "./helpers.js";
@@ -101,6 +103,26 @@ describe("repository detection", () => {
     await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
     const providers = await detectAllProviders(await detectRepository(root));
     expect(providers.get("prettier")?.activeCapabilities.formatting).toBe(true);
+  });
+
+  it("keeps architecture coverage applicable for production-to-test dependency graphs", async () => {
+    const root = await copyFixture("minimal-js");
+    temporary.push(root);
+    const manifestPath = path.join(root, "package.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as { devDependencies?: Record<string, string>; scripts?: Record<string, string> };
+    manifest.devDependencies ??= {};
+    manifest.devDependencies["dependency-cruiser"] = "^17.0.0";
+    manifest.scripts ??= {};
+    manifest.scripts["health:architecture"] = "depcruise --config .dependency-cruiser.cjs src";
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    await writeFile(path.join(root, ".dependency-cruiser.cjs"), "module.exports = { forbidden: [] };\n");
+    await mkdir(path.join(root, "test"), { recursive: true });
+    await writeFile(path.join(root, "test", "helper.ts"), "export const helper = 1;\n");
+    const context = await detectRepository(root);
+    const config = (await readConfig(root)).config;
+    const audit = buildAuditModel(context, await detectAllProviders(context), config);
+
+    expect(audit.coverage.find((entry) => entry.category === "architecture")).toMatchObject({ status: "covered" });
   });
 
   it("does not offer legacy ESLint automation when a flat config is present", async () => {
