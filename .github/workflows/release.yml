@@ -30,6 +30,15 @@ jobs:
       - run: npm install --global npm@latest
       - run: pnpm install --frozen-lockfile
       - run: pnpm verify
+      - name: Install standalone health tools
+        run: |
+          go install github.com/google/osv-scanner/v2/cmd/osv-scanner@v2.0.2
+          go install github.com/zricethezav/gitleaks/v8@v8.24.2
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Prepare OSV-Scanner database
+        continue-on-error: true
+        run: osv-scanner scan source --offline-vulnerabilities --download-offline-databases --format=json --recursive .
       - run: pnpm health
       - name: Validate release metadata
         run: pnpm health:release
