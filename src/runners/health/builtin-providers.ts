@@ -90,7 +90,7 @@ export async function runOsvScanner(context: RepositoryContext, diagnostics: Dia
   const logger = resolveLogger(diagnostics);
   const binary = await executableBinary(context.root, "osv-scanner", true);
   if (!binary) return { provider: "osv-scanner", name: "OSV-Scanner", category: "security", status: "error", findings: [], durationMs: 0, message: "OSV-Scanner is configured but its executable is unavailable." };
-  const result = await runCommand(binary, ["--offline-vulnerabilities", "scan", "source", "--format=json", "--recursive", "."], { cwd: context.root, logger, env: HEALTH_OFFLINE_ENV, ...(timeoutMs === undefined ? {} : { timeoutMs }) });
+  const result = await runCommand(binary, ["scan", "source", "--offline-vulnerabilities", "--format=json", "--recursive", "."], { cwd: context.root, logger, env: HEALTH_OFFLINE_ENV, ...(timeoutMs === undefined ? {} : { timeoutMs }) });
   if (result.spawnError) return { provider: "osv-scanner", name: "OSV-Scanner", category: "security", status: "error", findings: [], durationMs: result.durationMs, message: result.spawnError };
   try {
     const findings = normalizeOsv(parseJsonOutput(result.stdout));

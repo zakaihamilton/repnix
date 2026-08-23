@@ -36,5 +36,9 @@ jobs:
           go install github.com/zricethezav/gitleaks/v8@v8.24.2
           go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Prepare OSV-Scanner database
+        if: matrix.node == 22 && !startsWith(github.head_ref || github.ref_name, 'changeset-release/')
+        continue-on-error: true
+        run: osv-scanner scan source --offline-vulnerabilities --download-offline-databases --format=json --recursive .
       - run: pnpm health
         if: matrix.node == 22 && !startsWith(github.head_ref || github.ref_name, 'changeset-release/')
