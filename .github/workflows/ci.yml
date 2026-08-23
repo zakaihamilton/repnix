@@ -33,7 +33,7 @@ jobs:
         if: matrix.node == 22 && !startsWith(github.head_ref || github.ref_name, 'changeset-release/')
         run: |
           go install github.com/google/osv-scanner/v2/cmd/osv-scanner@v2.0.2
-          go install github.com/gitleaks/gitleaks/v8@v8.24.2
+          go install github.com/zricethezav/gitleaks/v8@v8.24.2
           go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - run: pnpm health
