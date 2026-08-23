@@ -545,10 +545,11 @@ export async function detectProvider(
     ? context.installedPackageOrigins.get(packageName)?.includes("package.json") === true
     : false;
   const configured = configFiles.length > 0 || scriptEntries.length > 0 || packageJsonConfigActive;
+  const pathBinaryConfigured = Boolean(pathBinary) && configured;
   const active = descriptor.requiresConfiguration
     ? installed && (configFiles.length > 0 || packageJsonConfigActive)
     : scriptEntries.length > 0 ||
-      ((installedAtRoot || Boolean(pathBinary)) && (configFiles.length > 0 || packageJsonConfigActive || descriptor.zeroConfig === true));
+      ((installedAtRoot || pathBinaryConfigured) && (configFiles.length > 0 || packageJsonConfigActive || descriptor.zeroConfig === true));
   const evidence: string[] = [];
   if (packageName) evidence.push(`${packageName} ${context.installedPackages.get(packageName)}`);
   if (pathBinary) evidence.push(pathBinary);

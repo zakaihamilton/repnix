@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { readConfig } from "../src/config/repo-health-config.js";
@@ -67,6 +67,25 @@ describe("repository detection", () => {
     providers = await detectAllProviders(await detectRepository(root));
     expect(providers.get("eslint-boundaries")?.activeCapabilities.architectureRules).toBe(true);
     expect(providers.get("size-limit")?.activeCapabilities.bundleBudget).toBe(true);
+  });
+
+  it("does not activate standalone tools from PATH without repository configuration", async () => {
+    const root = await copyFixture("minimal-js");
+    const binDirectory = path.join(root, "external-bin");
+    temporary.push(root);
+    await mkdir(binDirectory, { recursive: true });
+    await writeFile(path.join(binDirectory, "osv-scanner"), "#!/bin/sh\n");
+    await chmod(path.join(binDirectory, "osv-scanner"), 0o755);
+    const previousPath = process.env.PATH;
+    process.env.PATH = `${binDirectory}${path.delimiter}${previousPath ?? ""}`;
+    try {
+      const providers = await detectAllProviders(await detectRepository(root));
+      expect(providers.get("osv-scanner")).toMatchObject({ installed: true, configured: false });
+      expect(providers.get("osv-scanner")?.activeCapabilities.vulnerabilities).toBeUndefined();
+    } finally {
+      if (previousPath === undefined) delete process.env.PATH;
+      else process.env.PATH = previousPath;
+    }
   });
 
   it("accepts UTF-8 BOM manifests and credits real test scripts conservatively", async () => {
