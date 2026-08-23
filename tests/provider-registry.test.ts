@@ -1,8 +1,6 @@
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { createProviderRegistry, createBuiltinRegistry, ProviderRegistry, builtinProvider } from "../src/providers/registry.js";
+import { createBuiltinRegistry, createProviderRegistry, ProviderRegistry, builtinProvider } from "../src/providers/registry.js";
 import { defineProvider } from "../src/providers/sdk.js";
 import { detectRepository } from "../src/repository/detect-repository.js";
 import { readConfig } from "../src/config/repo-health-config.js";
@@ -17,6 +15,13 @@ describe("provider registry contract", () => {
     expect(builtinProvider("eslint")?.support).toEqual(["detectable"]);
     expect(builtinProvider("knip")?.recommend).toEqual(expect.any(Function));
     expect(builtinProvider("knip")?.documentationUrl).toBe("https://knip.dev/");
+  });
+
+  it("uses only built-in providers", () => {
+    const registry = createProviderRegistry();
+
+    expect(registry.get("repnix-provider-example")).toBeUndefined();
+    expect(registry.list()).toEqual(expect.arrayContaining([expect.objectContaining({ id: "knip" })]));
   });
 
   it("accepts a self-contained provider module and rejects duplicate IDs", () => {
@@ -57,32 +62,4 @@ describe("provider registry contract", () => {
     expect(result.results).toContainEqual(expect.objectContaining({ provider: "synthetic-runner", category: "synthetic-health", status: "pass" }));
   });
 
-  it("discovers direct repnix-provider dependencies and custom categories", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "repnix-provider-plugin-"));
-    try {
-      await mkdir(path.join(root, "node_modules", "repnix-provider-demo"), { recursive: true });
-      await writeFile(path.join(root, "package.json"), JSON.stringify({ name: "plugin-host", devDependencies: { "repnix-provider-demo": "1.0.0" } }));
-      await writeFile(path.join(root, "node_modules", "repnix-provider-demo", "package.json"), JSON.stringify({ name: "repnix-provider-demo", type: "module", exports: { "./repnix-provider": "./repnix-provider.js" } }));
-      await writeFile(path.join(root, "node_modules", "repnix-provider-demo", "repnix-provider.js"), `export default { apiVersion: 1, providers: [{ id: "demo-tool", name: "Demo Tool", category: "demo-health", packages: [], configPatterns: [], scriptPattern: /demo-tool/, capabilities: { documentation: true } }], categories: [{ id: "demo-health", label: "Demo health", description: "A plugin category", requiredCapabilities: ["documentation"], applicable: () => ({ applicable: true, scopes: ["."], evidence: ["plugin test"] }) }] }`);
-      const context = await detectRepository(root);
-      const registry = await createProviderRegistry(context);
-      expect(registry.get("demo-tool")?.category).toBe("demo-health");
-      expect(registry.categoryRegistry.get("demo-health")?.label).toBe("Demo health");
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  });
-
-  it("rejects an unsupported plugin API version", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "repnix-provider-invalid-"));
-    try {
-      await mkdir(path.join(root, "node_modules", "repnix-provider-invalid"), { recursive: true });
-      await writeFile(path.join(root, "package.json"), JSON.stringify({ name: "plugin-host", dependencies: { "repnix-provider-invalid": "1.0.0" } }));
-      await writeFile(path.join(root, "node_modules", "repnix-provider-invalid", "package.json"), JSON.stringify({ name: "repnix-provider-invalid", type: "module", exports: { "./repnix-provider": "./repnix-provider.js" } }));
-      await writeFile(path.join(root, "node_modules", "repnix-provider-invalid", "repnix-provider.js"), "export default { apiVersion: 99, providers: [] };");
-      await expect(createProviderRegistry(await detectRepository(root))).rejects.toThrow("supported version is 1");
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  });
 });

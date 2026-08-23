@@ -88,7 +88,7 @@ RepNix gives you a clear inventory and a deliberate next step:
 - **Adds only useful gaps.** Recommendations are based on the repository’s shape and existing tools, with baseline, optional, and advanced priorities.
 - **Preserves your choices.** Setup keeps existing scripts and configuration, creates only the files it needs, and shows conflicts instead of overwriting them blindly.
 - **Understands repository roles.** CLI, library, web application, Node application, and tooling scopes receive different recommendations; a React dependency alone does not make a CLI a web app.
-- **Stays local-first.** RepNix itself does not install packages or access a package registry during `audit` or `check`. Active repository scripts and provider plugins are still executable project code.
+- **Stays local-first.** RepNix itself does not install packages or access a package registry during `audit` or `check`. Active repository scripts and built-in providers are still executable project code.
 - **Produces one report.** Human-readable output groups findings by category and provider; JSON and SARIF formats support automation and code scanning.
 - **Supports gradual adoption.** A reviewed baseline can record current debt so CI fails only on new findings.
 - **Scales across workspaces.** Root and workspace quality scripts can run as separate, attributed results instead of hiding failures behind one aggregate command.
@@ -140,7 +140,7 @@ npx repnix check --write-baseline
 - [Configuration and automation](docs/configuration.md)
 - [Setup and workflow](docs/setup.md)
 - [Security and trust](docs/security.md)
-- [Provider plugins](docs/provider-plugins.md)
+- Built-in providers are defined in [`src/providers/catalog.ts`](https://github.com/zakaihamilton/repnix/blob/main/src/providers/catalog.ts).
 - [Compatibility pilots](docs/compatibility.md)
 - [Launch demo notes](docs/launch-demo.md)
 

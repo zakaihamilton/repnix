@@ -1,4 +1,5 @@
 import type { Command } from "commander";
+import { redactDiagnosticValue, redactSensitiveText } from "../core/redaction.js";
 
 export const LOG_LEVELS = ["silent", "error", "warn", "info", "debug"] as const;
 export type LogLevel = (typeof LOG_LEVELS)[number];
@@ -77,11 +78,13 @@ export function createDiagnosticLogger(options: DiagnosticOptions = {}): Diagnos
     },
     log(candidate, event, message, context = {}) {
       if (!logger.isEnabled(candidate)) return;
+      const safeMessage = redactSensitiveText(message);
+      const safeContext = redactDiagnosticValue(context) as Record<string, unknown>;
       if (format === "json") {
-        process.stderr.write(`${JSON.stringify({ timestamp: new Date().toISOString(), level: candidate, event, message, ...context })}\n`);
+        process.stderr.write(`${JSON.stringify({ timestamp: new Date().toISOString(), level: candidate, event, message: safeMessage, ...safeContext })}\n`);
         return;
       }
-      process.stderr.write(renderText(candidate, event, message, context));
+      process.stderr.write(renderText(candidate, event, safeMessage, safeContext));
     },
     debug(event, message, context) {
       logger.log("debug", event, message, context);
@@ -97,7 +100,7 @@ export function createDiagnosticLogger(options: DiagnosticOptions = {}): Diagnos
     },
     output(stream, output, context = {}) {
       if (!logger.isEnabled("debug")) return;
-      const value = output.toString();
+      const value = redactSensitiveText(output.toString());
       if (format === "json") {
         logger.log("debug", "provider.output", value, { stream, ...context });
         return;

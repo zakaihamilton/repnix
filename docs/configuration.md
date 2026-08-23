@@ -60,7 +60,7 @@ Severity thresholds are `info`, `warning`, and `error`. A finding at or above th
 
 Policies are optional and provider-aware. License `allow` and `deny` lists are enforced by license-checker; coverage thresholds are used when RepNix runs c8 around the configured test command. Performance values document the budgets expected by a configured Lighthouse CI provider; RepNix does not invent a URL or build command.
 
-Use `required` for coverage that must exist and `off` for categories that do not apply to your repository. Providers are discovered from the built-in registry and from direct `repnix-provider-*` dependencies.
+Use `required` for coverage that must exist and `off` for categories that do not apply to your repository. Providers are selected exclusively from Repnix's built-in registry.
 
 Scope roles normally come from repository evidence such as `package.json#bin`, publishable exports, framework configuration, source layout, and scripts. Add a scope override only when the repository intentionally differs from those signals.
 

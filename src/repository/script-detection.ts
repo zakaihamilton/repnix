@@ -5,6 +5,26 @@ const NON_TEST_QUALITY_SIGNAL = /(?:^|[\s;&|])(?:prettier|eslint|oxlint|biome|ts
 const MUTATING_SCRIPT_SIGNAL = /(?:^|[;&|]|\s)(?:rm|mv|cp|mkdir|touch|chmod|chown|git|curl|wget)(?:\s|$)|(?:npm|pnpm|yarn|bun)\s+(?:install|ci|add|remove|uninstall|update|publish|exec\s+--\s+(?:npm|pnpm|yarn|bun))(?:\s|$)|\b(?:prepack|prepare|postinstall|deploy)\b/i;
 const QUALITY_SCRIPT_SIGNAL = /(?:^|[\s;&|])(?:tsc|eslint|oxlint|biome|prettier|oxfmt|knip|jscpd|depcruise|dependency-cruiser|publint|attw|size-limit|syncpack|markdownlint(?:-cli2)?|license-checker|actionlint|lhci|changeset|stryker|gitleaks|c8)(?:\s|$)|release-check\.mjs|(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?(?:build|check|format|prettier|lint|typecheck|type-check|test|size|bundle|coverage|licenses|docs|documentation|release|performance|health)(?::[\w.-]+)?(?:\s|$)/i;
 
+/** Returns command variants with package-manager wrappers removed. */
+export function scriptCommandVariants(command: string): string[] {
+  const variants = new Set([command]);
+  for (const part of command.split(/&&|\|\||[;|]/)) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+    variants.add(trimmed);
+    variants.add(trimmed.replace(/^(?:corepack\s+)?(?:npm|pnpm|yarn|bun)\s+(?:run|exec|x)(?:\s+--)?\s+/, ""));
+    variants.add(trimmed.replace(/^(?:corepack\s+)?(?:npm|pnpm|yarn|bun)\s+/, ""));
+  }
+  return [...variants];
+}
+
+export function matchesScriptPattern(command: string, pattern: RegExp): boolean {
+  return scriptCommandVariants(command).some((variant) => {
+    pattern.lastIndex = 0;
+    return pattern.test(variant);
+  });
+}
+
 export function isNonMutatingTestCommand(command: string): boolean {
   if (UNSAFE_CHECK_COMMAND.test(command) || TEST_PLACEHOLDER.test(command) || MUTATING_SCRIPT_SIGNAL.test(command)) return false;
   if (TEST_SIGNAL.test(command)) return true;

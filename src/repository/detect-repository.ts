@@ -170,6 +170,29 @@ function scopeFiles(files: string[], scope: string): string[] {
   return scope === "." ? files : files.filter((file) => file.startsWith(`${scope}/`));
 }
 
+const TEST_FILE_PATTERN = /(^|\/)(?:test|tests|__tests__)(\/|$)|\.(?:spec|test)\.[cm]?[jt]sx?$/i;
+const FIXTURE_FILE_PATTERN = /(^|\/)(?:fixture|fixtures|example|examples)(\/|$)/i;
+const GENERATED_FILE_PATTERN = /(^|\/)(?:generated|gen|coverage|storybook-static)(\/|$)|\.generated\.[cm]?[jt]sx?$/i;
+
+function classifySourceFiles(sourceFiles: string[]): {
+  production: string[];
+  tests: string[];
+  fixtures: string[];
+  generated: string[];
+} {
+  const production: string[] = [];
+  const tests: string[] = [];
+  const fixtures: string[] = [];
+  const generated: string[] = [];
+  for (const file of sourceFiles) {
+    if (GENERATED_FILE_PATTERN.test(file)) generated.push(file);
+    else if (FIXTURE_FILE_PATTERN.test(file)) fixtures.push(file);
+    else if (TEST_FILE_PATTERN.test(file)) tests.push(file);
+    else production.push(file);
+  }
+  return { production, tests, fixtures, generated };
+}
+
 function inferScope(
   manifest: WorkspaceManifest,
   allFiles: string[],
@@ -180,6 +203,7 @@ function inferScope(
   const scopePath = scope === "." ? "." : scope;
   const files = scopeFiles(allFiles, scopePath);
   const sourceFiles = scopeFiles(allSourceFiles, scopePath);
+  const classified = classifySourceFiles(sourceFiles);
   const dependencies = allDependencies(manifest.packageJson);
   const scripts = manifest.packageJson.scripts ?? {};
   const scriptText = Object.values(scripts).join(" ");
@@ -206,7 +230,7 @@ function inferScope(
   const next = dependencies.next !== undefined;
   const browserBuild = /(?:^|\s|&&|\|)(?:next|vite|react-scripts|astro|remix)(?:\s|$)/.test(scriptText);
   const browserEntry = files.some((file) => /(^|\/)(?:index\.html|pages\/|app\/).+/.test(file));
-  const jsx = sourceFiles.some((file) => /\.[jt]sx$/.test(file));
+  const jsx = classified.production.some((file) => /\.[jt]sx$/.test(file));
   if (next) {
     addRole("web-app", "high", ["Next.js dependency"]);
   } else if (!manifest.packageJson.bin && jsx && (browserBuild || browserEntry)) {
@@ -219,7 +243,7 @@ function inferScope(
   if (serverScript) addRole("node-app", "medium", ["Node server script"]);
 
   if (!evidence.length) {
-    if (isMonorepo && scopePath === "." && sourceFiles.length === 0) addRole("tooling", "high", ["workspace root without application source"]);
+    if (isMonorepo && scopePath === "." && classified.production.length === 0) addRole("tooling", "high", ["workspace root without application source"]);
     else addRole("node-app", "medium", ["JavaScript/TypeScript executable project"]);
   }
 
@@ -227,8 +251,8 @@ function inferScope(
     next ? "Next.js" : null,
     dependencies.react !== undefined ? "React" : null,
   ].filter((item): item is string => Boolean(item));
-  const hasTypeScript = dependencies.typescript !== undefined || sourceFiles.some((file) => /\.[cm]?tsx?$/.test(file));
-  const hasJavaScript = sourceFiles.some((file) => /\.[cm]?jsx?$/.test(file));
+  const hasTypeScript = dependencies.typescript !== undefined || classified.production.some((file) => /\.[cm]?tsx?$/.test(file));
+  const hasJavaScript = classified.production.some((file) => /\.[cm]?jsx?$/.test(file));
   return {
     path: scopePath,
     manifestPath: manifest.path,
@@ -238,7 +262,11 @@ function inferScope(
     frameworks,
     languages: [hasTypeScript ? "TypeScript" : null, hasJavaScript ? "JavaScript" : null].filter((item): item is string => Boolean(item)),
     sourceFiles,
-    sourceRoots: detectSourceRoots(sourceFiles),
+    productionSourceFiles: classified.production,
+    testFiles: classified.tests,
+    fixtureFiles: classified.fixtures,
+    generatedFiles: classified.generated,
+    sourceRoots: detectSourceRoots(classified.production),
   };
 }
 
@@ -298,10 +326,11 @@ export async function detectRepository(start = process.cwd()): Promise<Repositor
     ignore: IGNORES,
     onlyFiles: true,
   })).sort();
+  const classifiedSourceFiles = classifySourceFiles(sourceFiles);
   const hasTsConfig = [...files].some((file) => /(^|\/)tsconfig(?:\.[^/]+)?\.json$/.test(file));
   const hasTypeScript =
-    installedPackages.has("typescript") || hasTsConfig || sourceFiles.some((file) => /\.[cm]?tsx?$/.test(file));
-  const hasJavaScript = sourceFiles.some((file) => /\.[cm]?jsx?$/.test(file));
+    installedPackages.has("typescript") || hasTsConfig || classifiedSourceFiles.production.some((file) => /\.[cm]?tsx?$/.test(file));
+  const hasJavaScript = classifiedSourceFiles.production.some((file) => /\.[cm]?jsx?$/.test(file));
   const frameworks = [
     installedPackages.has("next") ? "Next.js" : null,
     installedPackages.has("react") ? "React" : null,
@@ -349,7 +378,8 @@ export async function detectRepository(start = process.cwd()): Promise<Repositor
     scripts: packageJson.scripts ?? {},
     files,
     sourceFiles,
-    sourceRoots: detectSourceRoots(sourceFiles),
+    productionSourceFiles: classifiedSourceFiles.production,
+    sourceRoots: detectSourceRoots(sourceFiles.filter((file) => !TEST_FILE_PATTERN.test(file) && !FIXTURE_FILE_PATTERN.test(file) && !GENERATED_FILE_PATTERN.test(file))),
     workspaceRoots: detectedWorkspaceRoots,
     workspaceSourceFiles: sourceFilesByWorkspace(sourceFiles, detectedWorkspaceRoots),
     scopes,

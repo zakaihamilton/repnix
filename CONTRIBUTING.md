@@ -34,7 +34,7 @@ When correcting a compatibility issue, update the smallest representative pilot 
 
 ## Provider changes
 
-A provider module should keep its detection, support level, setup metadata, execution, normalization, remediation, and documentation together under the provider extension contract. See [docs/provider-plugins.md](docs/provider-plugins.md) for the complete template. It should:
+A provider module should keep its detection, support level, setup metadata, execution, normalization, remediation, and documentation together in the built-in provider catalog. It should:
 
 1. Declare its category and available capabilities.
 2. Credit only capabilities that are actively configured.
@@ -45,7 +45,7 @@ A provider module should keep its detection, support level, setup metadata, exec
 7. Treat malformed output or unavailable required coverage as exit code `2`.
 8. Avoid network access during `audit` and `check`.
 
-Add unit tests for detection, recommendations, normalization, and exit behavior. Add a disposable packaged acceptance test when command-line compatibility is important. Provider enablement belongs in category policy; do not add new `providers.<id>.enabled` configuration.
+Add unit tests for detection, recommendations, normalization, and exit behavior. Add a disposable packaged acceptance test when command-line compatibility is important. Provider enablement belongs in category policy; do not add new `providers.<id>.enabled` configuration. RepNix intentionally has no external provider-plugin API.
 
 ## Pull requests
 

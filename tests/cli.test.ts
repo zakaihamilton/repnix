@@ -151,7 +151,11 @@ describe("CLI", () => {
   it("runs OSV-Scanner offline and accepts nonzero exits with valid findings", async () => {
     const root = await copyFixture("minimal-js");
     temporary.push(root);
-    const binary = await fakeBinary(root, "osv-scanner", `process.stdout.write(JSON.stringify({ results: [{ source: { path: "package-lock.json" }, packages: [{ package: { name: "demo", version: "1.0.0", ecosystem: "npm" }, vulnerabilities: [{ id: "GHSA-demo", database_specific: { severity: "HIGH" } }] }] }] })); process.exitCode = 1;`);
+    const binary = await fakeBinary(root, "osv-scanner", `const args = process.argv.slice(2).join(" "); if (args !== "scan source --offline-vulnerabilities --format=json --recursive .") { process.stderr.write(args); process.exitCode = 2; } else { process.stdout.write(JSON.stringify({ results: [{ source: { path: "package-lock.json" }, packages: [{ package: { name: "demo", version: "1.0.0", ecosystem: "npm" }, vulnerabilities: [{ id: "GHSA-demo", database_specific: { severity: "HIGH" } }] }] }] })); process.exitCode = 1; }`);
+    const manifestPath = path.join(root, "package.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as { scripts: Record<string, string> };
+    manifest.scripts["health:security"] = "osv-scanner scan source --offline-vulnerabilities --format=json --recursive .";
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
     await writeFile(path.join(root, "package-lock.json"), "{}\n");
     const result = await runCli(root, ["check", "security", "--format", "json"], { PATH: `${path.dirname(binary)}${path.delimiter}${process.env.PATH ?? ""}` });
     const report = JSON.parse(result.stdout) as { summary: { exitCode: number; errors: number }; results: Array<{ provider: string; findings: unknown[] }> };

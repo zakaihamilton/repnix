@@ -2,6 +2,7 @@ import { constants } from "node:fs";
 import { access } from "node:fs/promises";
 import path from "node:path";
 import { createFinding } from "../../core/finding.js";
+import { redactSensitiveText } from "../../core/redaction.js";
 import type { HealthCategory } from "../../core/health-category.js";
 import type { HealthFinding, HealthResult, RepositoryContext } from "../../core/types.js";
 import { resolveDiagnosticLogger, type DiagnosticLogger } from "../../cli/options.js";
@@ -64,11 +65,12 @@ export async function executableBinary(root: string, binary: string, searchPath 
 
 export function outputExcerpt(result: CommandResult): string {
   const combined = `${result.stdout}\n${result.stderr}`.trim();
-  return combined.length > 4000 ? combined.slice(-4000) : combined;
+  const excerpt = combined.length > 4000 ? combined.slice(-4000) : combined;
+  return redactSensitiveText(excerpt);
 }
 
 export function commandLine(runnable: RunnableCommand): string {
-  return [runnable.command, ...runnable.args].map((part) => JSON.stringify(part)).join(" ");
+  return redactSensitiveText([runnable.command, ...runnable.args].map((part) => JSON.stringify(part)).join(" "));
 }
 
 export function statusForFindings(findings: HealthFinding[]): "pass" | "warn" | "fail" {

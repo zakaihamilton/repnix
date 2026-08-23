@@ -1,3 +1,4 @@
+/** Internal-only provider descriptor types. This module is not part of the published package API. */
 import type { DiagnosticLogger } from "../cli/options.js";
 import type {
   HealthFinding,
@@ -9,8 +10,6 @@ import type {
   RepositoryContext,
 } from "../core/types.js";
 import type { HealthCategory } from "../core/health-category.js";
-
-export const PROVIDER_API_VERSION = 1 as const;
 
 export interface ProviderCommand {
   binary: string;
@@ -53,7 +52,6 @@ export interface RecommendHelpers {
 }
 
 export interface ProviderModule {
-  apiVersion?: typeof PROVIDER_API_VERSION;
   id: string;
   name: string;
   category: HealthCategory;
@@ -80,7 +78,7 @@ export interface ProviderModule {
   /** Reuse an already-scheduled task in this category instead of running a second command. */
   deriveFromCategory?: HealthCategory;
   detect?: (context: RepositoryContext) => Promise<ProviderDetection>;
-  /** Lower values appear first in audit output. Plugins without an order follow built-ins. */
+  /** Lower values appear first in audit output. Providers without an order follow built-ins. */
   recommendOrder?: number;
   recommend?: (context: RepositoryContext, helpers?: RecommendHelpers) => ProviderRecommendation | null;
   planInstall?: (context: RepositoryContext) => Promise<InstallPlan>;
@@ -97,16 +95,7 @@ export interface CategoryModule {
   applicable(context: RepositoryContext): { applicable: boolean; scopes: string[]; evidence: string[] };
 }
 
-export interface RepnixProviderPlugin {
-  apiVersion: typeof PROVIDER_API_VERSION;
-  providers: ProviderModule[];
-  categories?: CategoryModule[];
-}
-
-export function defineProvider(provider: Omit<ProviderModule, "apiVersion">): ProviderModule {
-  return { apiVersion: PROVIDER_API_VERSION, ...provider };
-}
-
-export function definePlugin(plugin: Omit<RepnixProviderPlugin, "apiVersion">): RepnixProviderPlugin {
-  return { apiVersion: PROVIDER_API_VERSION, ...plugin };
+/** Internal helper used by built-in provider tests and definitions. */
+export function defineProvider(provider: ProviderModule): ProviderModule {
+  return provider;
 }
