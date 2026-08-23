@@ -20,10 +20,6 @@
     ".": {
       "types": "./dist/cli.d.ts",
       "import": "./dist/cli.js"
-    },
-    "./provider-sdk": {
-      "types": "./dist/providers/sdk.d.ts",
-      "import": "./dist/providers/sdk.js"
     }
   },
   "files": [
@@ -50,6 +46,10 @@
     "release:version": "pnpm changeset version && pnpm version:sync && pnpm install --lockfile-only && node scripts/release-check.mjs",
     "version:sync": "node scripts/sync-version.mjs",
     "health": "node dist/cli.js check",
+    "health:architecture": "depcruise --output-type json --config .dependency-cruiser.cjs -- src",
+    "health:security": "osv-scanner --offline-vulnerabilities scan source --format=json --recursive .",
+    "health:secrets": "gitleaks detect --source . --no-banner --redact --exit-code 1",
+    "health:ci": "actionlint",
     "verify": "pnpm lint && pnpm typecheck && pnpm build && pnpm test:run && pnpm test:compatibility",
     "health:dead-code": "knip",
     "health:duplication": "jscpd src",
@@ -98,6 +98,7 @@
     "knip": "^6.32.2",
     "license-checker": "^25.0.1",
     "markdownlint-cli2": "^0.23.2",
+    "dependency-cruiser": "^17.2.0",
     "publint": "^0.3.23",
     "typescript": "^5.9.2",
     "typescript-eslint": "^8.41.0",

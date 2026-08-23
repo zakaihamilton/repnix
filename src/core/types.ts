@@ -53,6 +53,10 @@ export interface RepositoryScope {
   frameworks: string[];
   languages: string[];
   sourceFiles: string[];
+  productionSourceFiles?: string[];
+  testFiles?: string[];
+  fixtureFiles?: string[];
+  generatedFiles?: string[];
   sourceRoots: string[];
 }
 
@@ -84,6 +88,7 @@ export interface RepositoryContext {
   scripts: Record<string, string>;
   files: Set<string>;
   sourceFiles: string[];
+  productionSourceFiles?: string[];
   sourceRoots: string[];
   workspaceRoots?: string[];
   workspaceSourceFiles?: Record<string, string[]>;

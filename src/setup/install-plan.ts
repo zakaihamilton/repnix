@@ -61,7 +61,7 @@ export async function buildInstallPlan(
     plan.conflicts.push("A package manager could not be resolved.");
     return plan;
   }
-  const providerRegistry = registry ?? await createProviderRegistry(context);
+  const providerRegistry = registry ?? createProviderRegistry();
   const skipGenericSetup = new Set<string>();
   const customPackages = new Map<string, InstallPlan["packages"]>();
   for (const providerId of selected) {

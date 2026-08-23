@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { ProviderDetection, RepositoryContext } from "../core/types.js";
-import { isNonMutatingQualityCommand, isNonMutatingTestCommand, safeTestScript } from "../repository/script-detection.js";
+import { isNonMutatingQualityCommand, isNonMutatingTestCommand, matchesScriptPattern, safeTestScript } from "../repository/script-detection.js";
 import { MARKDOWNLINT_CLI_ARGS, markdownlintScriptCommand } from "./markdownlint/command.js";
 import { normalizeMarkdownlintResult } from "./markdownlint/normalizer.js";
 import { planChangesetsInstall, planJsxA11yInstall } from "./plan-install.js";
@@ -527,12 +527,12 @@ export async function detectProvider(
     }
   }
   const scriptEntries = Object.entries(context.scripts).filter(([name, command]) => {
-    if (!descriptor.scriptNames) return descriptor.scriptPattern.test(command);
+    if (!descriptor.scriptNames) return matchesScriptPattern(command, descriptor.scriptPattern);
     const safe = descriptor.scriptKind === "quality" ? isNonMutatingQualityCommand(command) : isNonMutatingTestCommand(command);
     // A conventional script name does not always identify its provider. In
     // particular, Vitest's --coverage mode is not c8, and an unrestricted
     // Markdown glob would lint dependency documentation as well as the app.
-    const invokesNamedProvider = descriptor.id !== "c8" || descriptor.scriptPattern.test(command);
+    const invokesNamedProvider = descriptor.id !== "c8" || matchesScriptPattern(command, descriptor.scriptPattern);
     const excludesDependencyDocs = descriptor.id !== "markdownlint" || /(?:^|\s)["']?#node_modules["']?(?:\s|$)/.test(command);
     return descriptor.scriptNames.includes(name) && safe && invokesNamedProvider && excludesDependencyDocs;
   });

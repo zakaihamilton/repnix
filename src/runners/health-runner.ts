@@ -1,5 +1,6 @@
 import { categoryModeFor, type RepnixConfig } from "../config/repo-health-config.js";
 import { HEALTH_CATEGORIES, type HealthCategory } from "../core/health-category.js";
+import { redactDiagnosticValue, redactSensitiveText } from "../core/redaction.js";
 import type { BaselineFile, FindingSeverity, HealthResult, HealthRun } from "../core/types.js";
 import type { AuditModel } from "../recommendations/recommendation-engine.js";
 import { resolveDiagnosticLogger, type DiagnosticLogger } from "../cli/options.js";
@@ -36,6 +37,7 @@ function categoryOrder(category: HealthCategory, audit: AuditModel): number {
 function finalizeResults(results: HealthResult[], audit: AuditModel, config: RepnixConfig, options: RunHealthOptions, logger: DiagnosticLogger): HealthRun {
   results.sort((a, b) => categoryOrder(a.category, audit) - categoryOrder(b.category, audit) || a.name.localeCompare(b.name));
   for (const result of results) {
+    if (result.message) result.message = redactSensitiveText(result.message);
     if (!result.scope && result.provider.startsWith("workspace:")) result.scope = result.provider.split(":").slice(1, -1).join(":");
     const definition = builtinProvider(result.provider) ?? builtinProviderByName(result.name);
     for (const finding of result.findings) {
@@ -44,6 +46,10 @@ function finalizeResults(results: HealthResult[], audit: AuditModel, config: Rep
       finding.scope ??= result.scope ?? ".";
       finding.remediation ??= definition?.nextStep ?? `Review the ${result.name} output and correct the reported ${finding.type.replaceAll("-", " ")}.`;
       if (definition?.documentationUrl) finding.documentationUrl ??= definition.documentationUrl;
+      finding.message = redactSensitiveText(finding.message);
+      if (finding.title) finding.title = redactSensitiveText(finding.title);
+      if (finding.remediation) finding.remediation = redactSensitiveText(finding.remediation);
+      if (finding.metadata) finding.metadata = redactDiagnosticValue(finding.metadata) as Record<string, unknown>;
     }
   }
   const findings = results.flatMap((result) => result.findings);

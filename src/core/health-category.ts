@@ -20,7 +20,7 @@ export const HEALTH_CATEGORIES: string[] = [
   "package-health",
 ] as const;
 
-/** Built-in categories are listed in HEALTH_CATEGORIES; plugins may add string IDs. */
+/** Built-in categories are listed in HEALTH_CATEGORIES. */
 export type HealthCategory = string;
 
 export const CATEGORY_LABELS: Record<string, string> = {

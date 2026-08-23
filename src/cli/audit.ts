@@ -20,7 +20,7 @@ export async function auditRepository(cwd = process.cwd(), options: DiagnosticOp
     sourceRoots: detectedContext.sourceRoots,
     fileCount: detectedContext.files.size,
   });
-  const registry = await createProviderRegistry(detectedContext);
+  const registry = createProviderRegistry();
   const { config } = await readConfig(detectedContext.root);
   validateConfigCategories(config, registry.categories.map((category) => category.id));
   const context = applyScopeOverrides(detectedContext, config);

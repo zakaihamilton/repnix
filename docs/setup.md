@@ -23,7 +23,7 @@ audit → choose recommendations → setup → check
 
 `repnix audit` inventories the checks already protecting the repository and recommends useful gaps. It does not install packages or edit files.
 
-After the initial installation, `audit` reads only local project files. RepNix does not install packages, edit files, or access a package registry during an audit. If your repository has provider plugins, importing their modules and running their detection hooks is trusted project code that may execute according to its own behavior.
+After the initial installation, `audit` reads only local project files. RepNix does not install packages, edit files, or access a package registry during an audit. Built-in providers inspect repository metadata and configuration; configured repository scripts remain trusted executable code when checks run.
 
 ## Interactive setup
 
@@ -75,4 +75,4 @@ Read .repnix/health-report.md, inspect the referenced files, and fix the reporte
 - Accessibility, workspace consistency, coverage, secret scanning, license policy, documentation, release, performance, and CI workflow providers are available when their provider is installed and configured. Setup can add report-only c8 coverage, compatible legacy JSX accessibility rules, and Changesets configuration when its base branch is known. Other providers intentionally remain manual because they need project-specific URLs, budgets, binaries, or policy rules.
 - Architecture rules and bundle budgets are repository-specific. RepNix does not invent boundary policies or size budgets.
 
-For trust boundaries, plugin execution, package lifecycle behavior, and network expectations, see [Security and trust](security.md).
+For trust boundaries, package lifecycle behavior, and network expectations, see [Security and trust](security.md).

@@ -18,22 +18,24 @@ function coveredOrOff(helpers?: RecommendHelpers): boolean {
 }
 
 export function recommendKnip(context: RepositoryContext, helpers?: RecommendHelpers): ProviderRecommendation | null {
-  if (coveredOrOff(helpers) || context.sourceFiles.length === 0 || helpers?.detections.get("knip")?.installed) return null;
+  const sourceCount = context.productionSourceFiles?.length ?? context.sourceFiles.length;
+  if (coveredOrOff(helpers) || sourceCount === 0 || helpers?.detections.get("knip")?.installed) return null;
   return {
     recommended: true,
     priority: "baseline",
     actionable: true,
-    reason: `${context.sourceFiles.length} JavaScript/TypeScript source file${context.sourceFiles.length === 1 ? "" : "s"} were found, but nothing currently checks for unused files, exports, or dependencies. This helps remove stale code and keeps dependencies intentional.`,
+    reason: `${sourceCount} production JavaScript/TypeScript source file${sourceCount === 1 ? "" : "s"} were found, but nothing currently checks for unused files, exports, or dependencies. This helps remove stale code and keeps dependencies intentional.`,
   };
 }
 
 export function recommendJscpd(context: RepositoryContext, helpers?: RecommendHelpers): ProviderRecommendation | null {
-  if (coveredOrOff(helpers) || context.sourceFiles.length < 2 || helpers?.detections.get("jscpd")?.installed) return null;
+  const sourceCount = context.productionSourceFiles?.length ?? context.sourceFiles.length;
+  if (coveredOrOff(helpers) || sourceCount < 2 || helpers?.detections.get("jscpd")?.installed) return null;
   return {
     recommended: true,
     priority: "baseline",
     actionable: true,
-    reason: `${context.sourceFiles.length} source files can accumulate copy-and-paste drift, and no duplication check is active. This helps you find repeated code before the copies start behaving differently.`,
+    reason: `${sourceCount} production source files can accumulate copy-and-paste drift, and no duplication check is active. This helps you find repeated code before the copies start behaving differently.`,
   };
 }
 
@@ -49,7 +51,8 @@ export function recommendOsv(context: RepositoryContext, helpers?: RecommendHelp
 }
 
 export function recommendEslintBoundaries(context: RepositoryContext, helpers?: RecommendHelpers): ProviderRecommendation | null {
-  if (coveredOrOff(helpers) || context.sourceFiles.length < 2) return null;
+  const sourceCount = context.productionSourceFiles?.length ?? context.sourceFiles.length;
+  if (coveredOrOff(helpers) || sourceCount < 2) return null;
   if (helpers?.detections.get("eslint")?.activeCapabilities.linting !== true) return null;
   if (helpers?.detections.get("eslint-boundaries")?.activeCapabilities.architectureRules) return null;
   return {
@@ -61,7 +64,8 @@ export function recommendEslintBoundaries(context: RepositoryContext, helpers?: 
 }
 
 export function recommendDependencyCruiser(context: RepositoryContext, helpers?: RecommendHelpers): ProviderRecommendation | null {
-  if (coveredOrOff(helpers) || context.sourceFiles.length < 2) return null;
+  const sourceCount = context.productionSourceFiles?.length ?? context.sourceFiles.length;
+  if (coveredOrOff(helpers) || sourceCount < 2) return null;
   if (helpers?.detections.get("eslint")?.activeCapabilities.linting === true) return null;
   if (helpers?.detections.get("dependency-cruiser")?.activeCapabilities.architectureRules) return null;
   return {
