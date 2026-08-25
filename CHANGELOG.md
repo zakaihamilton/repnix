@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.0.0
+
+### Major Changes
+
+- 454079e: Remove the external provider-plugin API. RepNix now loads only built-in providers; consumers importing `repnix/provider-sdk` or publishing `repnix-provider-*` integrations must remove those integrations.
+
+### Minor Changes
+
+- 1215c2e: Add `repnix fix` command for automated remediation and expand test runner detection.
+
+  - **New `repnix fix [category]` command**: Automatically discovers and sequentially executes safe auto-fixable tasks (such as repository `format` scripts, Prettier/Biome formatting, ESLint `--fix`, and markdownlint auto-formatting).
+  - **Test Runner Detection**: Broadened native test runner signals (including `node --test-reporter`).
+  - **Compatibility Pilots**: Validated all compatibility pilot test suites across monorepos and library structures.
+
+### Patch Changes
+
+- 74b0d33: Add Prettier as a format health check, a local installer for standalone scanners, and CI SARIF uploads to GitHub code scanning.
+- 2b79d59: Stop the setup TUI check-results screen from overlaying wrapped text in narrow terminals.
+
 ## 0.3.14
 
 ### Patch Changes

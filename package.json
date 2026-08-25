@@ -1,6 +1,6 @@
 {
   "name": "repnix",
-  "version": "0.3.14",
+  "version": "1.0.0",
   "description": "Local-first repository health orchestration for JavaScript and TypeScript projects",
   "repository": {
     "type": "git",
