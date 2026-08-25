@@ -10,7 +10,13 @@ import { buildAuditModel } from "../src/recommendations/recommendation-engine.js
 import { detectRepository } from "../src/repository/detect-repository.js";
 import { runHealth } from "../src/runners/health-runner.js";
 import { planCiChange } from "../src/setup/ci-plan.js";
-import { fileChange, renderFileDiff, resolveRepositoryPath, validateChanges, writeChanges } from "../src/setup/file-plan.js";
+import {
+  fileChange,
+  renderFileDiff,
+  resolveRepositoryPath,
+  validateChanges,
+  writeChanges,
+} from "../src/setup/file-plan.js";
 import { buildInstallPlan } from "../src/setup/install-plan.js";
 import { applyInstallPlan } from "../src/setup/apply-plan.js";
 import { assertSavedPlanMatches, parseSavedInstallPlan, serializeInstallPlan } from "../src/setup/saved-plan.js";
@@ -23,8 +29,30 @@ afterEach(async () => {
 
 describe("setup planning", () => {
   it("renders a compact, width-bounded diff with nearby context", () => {
-    const before = ["{", '  "scripts": {', '    "test": "vitest run",', '    "old": "remove me",', "  },", '  "name": "demo",', '  "description": "a line far from the change",', '  "keywords": ["demo"],', '  "license": "MIT",', "}"].join("\n");
-    const after = ["{", '  "scripts": {', '    "test": "vitest run",', '    "health": "repnix check",', "  },", '  "name": "demo",', '  "description": "a line far from the change",', '  "keywords": ["demo"],', '  "license": "MIT",', "}"].join("\n");
+    const before = [
+      "{",
+      '  "scripts": {',
+      '    "test": "vitest run",',
+      '    "old": "remove me",',
+      "  },",
+      '  "name": "demo",',
+      '  "description": "a line far from the change",',
+      '  "keywords": ["demo"],',
+      '  "license": "MIT",',
+      "}",
+    ].join("\n");
+    const after = [
+      "{",
+      '  "scripts": {',
+      '    "test": "vitest run",',
+      '    "health": "repnix check",',
+      "  },",
+      '  "name": "demo",',
+      '  "description": "a line far from the change",',
+      '  "keywords": ["demo"],',
+      '  "license": "MIT",',
+      "}",
+    ].join("\n");
 
     const output = renderFileDiff(fileChange("package.json", before, after, "Add health script")!, 40);
 
@@ -37,8 +65,12 @@ describe("setup planning", () => {
 
   it("rejects planned file paths outside the repository", () => {
     expect(() => resolveRepositoryPath("/tmp/repository", "../outside.txt")).toThrow("must stay inside the repository");
-    expect(() => resolveRepositoryPath("/tmp/repository", "/tmp/outside.txt")).toThrow("must stay inside the repository");
-    expect(resolveRepositoryPath("/tmp/repository", "nested/file.txt")).toBe(path.join("/tmp/repository", "nested/file.txt"));
+    expect(() => resolveRepositoryPath("/tmp/repository", "/tmp/outside.txt")).toThrow(
+      "must stay inside the repository",
+    );
+    expect(resolveRepositoryPath("/tmp/repository", "nested/file.txt")).toBe(
+      path.join("/tmp/repository", "nested/file.txt"),
+    );
   });
 
   it("rejects planned writes through a symbolic-link directory", async () => {
@@ -61,7 +93,10 @@ describe("setup planning", () => {
     expect(parseSavedInstallPlan(saved)).toEqual(saved);
     assertSavedPlanMatches(saved, plan);
 
-    const tampered = { ...saved, commands: [{ command: process.execPath, args: ["-e", "process.exit(99)"], reason: "tampered" }] };
+    const tampered = {
+      ...saved,
+      commands: [{ command: process.execPath, args: ["-e", "process.exit(99)"], reason: "tampered" }],
+    };
     expect(() => assertSavedPlanMatches(parseSavedInstallPlan(tampered), plan)).toThrow("no longer matches");
   });
 
@@ -71,12 +106,23 @@ describe("setup planning", () => {
     const context = await detectRepository(root);
     const plan = await buildInstallPlan(context, ["knip", "jscpd"], false);
     expect(plan.packages.map((item) => item.name)).toEqual(["repnix", "knip", "jscpd"]);
-    expect(plan.files.map((item) => item.path)).toEqual(["package.json", ".gitignore", "repnix.config.json", ".jscpd.json"]);
+    expect(plan.files.map((item) => item.path)).toEqual([
+      "package.json",
+      ".gitignore",
+      "repnix.config.json",
+      ".jscpd.json",
+    ]);
     expect(plan.files.find((item) => item.path === ".gitignore")?.after).toBe(".repnix/\n");
     await validateChanges(root, plan.files);
     await writeChanges(root, plan.files);
-    const packageJson = JSON.parse(await readFile(path.join(root, "package.json"), "utf8")) as { scripts: Record<string, string> };
-    expect(packageJson.scripts).toMatchObject({ health: "repnix check", "health:dead-code": "knip", "health:duplication": "jscpd src" });
+    const packageJson = JSON.parse(await readFile(path.join(root, "package.json"), "utf8")) as {
+      scripts: Record<string, string>;
+    };
+    expect(packageJson.scripts).toMatchObject({
+      health: "repnix check",
+      "health:dead-code": "knip",
+      "health:duplication": "jscpd src",
+    });
     const second = await buildInstallPlan(await detectRepository(root), ["knip", "jscpd"], false);
     expect(second.files).toEqual([]);
   });
@@ -115,7 +161,9 @@ describe("setup planning", () => {
     const plan = await buildInstallPlan(await detectRepository(root), ["c8"], false);
 
     expect(plan.packages.map((item) => item.name)).toEqual(["repnix", "c8"]);
-    expect(plan.files.find((item) => item.path === "package.json")?.after).toContain('"health:coverage": "c8 --all --reporter=text npm run test"');
+    expect(plan.files.find((item) => item.path === "package.json")?.after).toContain(
+      '"health:coverage": "c8 --all --reporter=text npm run test"',
+    );
     expect(plan.files.find((item) => item.path === "repnix.config.json")).toBeDefined();
   });
 
@@ -136,15 +184,19 @@ describe("setup planning", () => {
     temporary.push(root);
     const manifestPath = path.join(root, "package.json");
     const expected = markdownlintScriptCommand();
-    for (const previous of ["markdownlint-cli2 \"**/*.md\"", "markdownlint-cli2 \"**/*.md\" \"#node_modules\""]) {
+    for (const previous of ['markdownlint-cli2 "**/*.md"', 'markdownlint-cli2 "**/*.md" "#node_modules"']) {
       const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as { scripts: Record<string, string> };
       manifest.scripts["health:documentation"] = previous;
       await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 
       const plan = await buildInstallPlan(await detectRepository(root), ["markdownlint"], false);
-      const packageJson = JSON.parse(plan.files.find((item) => item.path === "package.json")!.after) as { scripts: Record<string, string> };
+      const packageJson = JSON.parse(plan.files.find((item) => item.path === "package.json")!.after) as {
+        scripts: Record<string, string>;
+      };
       expect(packageJson.scripts["health:documentation"]).toBe(expected);
-      expect(plan.conflicts).not.toContain("package.json script 'health:documentation' already exists and was preserved.");
+      expect(plan.conflicts).not.toContain(
+        "package.json script 'health:documentation' already exists and was preserved.",
+      );
     }
   });
 
@@ -163,7 +215,10 @@ describe("setup planning", () => {
     const context = await detectRepository(root);
     const { config } = await readConfig(root);
     const audit = buildAuditModel(context, await detectAllProviders(context), config);
-    const report = await runHealth(audit, config, { category: "coverage", logger: createDiagnosticLogger({ quiet: true }) });
+    const report = await runHealth(audit, config, {
+      category: "coverage",
+      logger: createDiagnosticLogger({ quiet: true }),
+    });
     expect(report.results).toContainEqual(expect.objectContaining({ provider: "c8", status: "pass" }));
     expect(await readFile(argsPath, "utf8")).toContain("--all --reporter=text npm run test");
 
@@ -178,27 +233,39 @@ describe("setup planning", () => {
     const context = await detectRepository(root);
     const withoutBranch = await buildInstallPlan(context, ["changesets"], false);
     expect(withoutBranch.packages.map((item) => item.name)).toEqual(["repnix"]);
-    expect(withoutBranch.conflicts).toContain("Changesets needs the Git remote default branch, which could not be resolved safely.");
+    expect(withoutBranch.conflicts).toContain(
+      "Changesets needs the Git remote default branch, which could not be resolved safely.",
+    );
 
     context.gitDefaultBranch = "main";
     const withBranch = await buildInstallPlan(context, ["changesets"], false);
     expect(withBranch.packages.map((item) => item.name)).toEqual(["repnix", "@changesets/cli"]);
-    expect(withBranch.files.find((item) => item.path === ".changeset/config.json")?.after).toContain('"baseBranch": "main"');
-    expect(withBranch.files.find((item) => item.path === "package.json")?.after).toContain('"health:release": "changeset status"');
+    expect(withBranch.files.find((item) => item.path === ".changeset/config.json")?.after).toContain(
+      '"baseBranch": "main"',
+    );
+    expect(withBranch.files.find((item) => item.path === "package.json")?.after).toContain(
+      '"health:release": "changeset status"',
+    );
   });
 
   it("adds jsx-a11y to a legacy JSON ESLint configuration without duplicates", async () => {
     const root = await copyFixture("react-eslint");
     temporary.push(root);
     await rm(path.join(root, "eslint.config.js"));
-    await writeFile(path.join(root, ".eslintrc.json"), `{\n  // Existing comments stay intact.\n  "plugins": ["react"],\n  "extends": "eslint:recommended"\n}\n`);
+    await writeFile(
+      path.join(root, ".eslintrc.json"),
+      `{\n  // Existing comments stay intact.\n  "plugins": ["react"],\n  "extends": "eslint:recommended"\n}\n`,
+    );
 
     const context = await detectRepository(root);
     expect(context.editableLegacyEslintConfig).toBe(true);
     const { config } = await readConfig(root);
     context.scopes = context.scopes.map((scope) => ({ ...scope, roles: ["web-app"] }));
     const audit = buildAuditModel(context, await detectAllProviders(context), config);
-    expect(audit.recommendations.find((item) => item.provider === "jsx-a11y")).toMatchObject({ actionable: true, priority: "baseline" });
+    expect(audit.recommendations.find((item) => item.provider === "jsx-a11y")).toMatchObject({
+      actionable: true,
+      priority: "baseline",
+    });
 
     const plan = await buildInstallPlan(context, ["jsx-a11y"], false);
     expect(plan.packages.map((item) => item.name)).toEqual(["repnix", "eslint-plugin-jsx-a11y"]);
@@ -228,7 +295,10 @@ describe("setup planning", () => {
     const root = await copyFixture("minimal-js");
     temporary.push(root);
     await mkdir(path.join(root, ".github", "workflows"), { recursive: true });
-    await writeFile(path.join(root, ".github", "workflows", "ci.yml"), `jobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-node@v4\n      - run: npm ci --ignore-scripts\n      - run: npm test\n`);
+    await writeFile(
+      path.join(root, ".github", "workflows", "ci.yml"),
+      `jobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-node@v4\n      - run: npm ci --ignore-scripts\n      - run: npm test\n`,
+    );
     const context = await detectRepository(root);
     const planned = await planCiChange(context, "npm");
     expect(planned.change?.after).toContain("name: Repository health\n        run: npm run health");
@@ -238,12 +308,17 @@ describe("setup planning", () => {
     const root = await copyFixture("minimal-js");
     temporary.push(root);
     await mkdir(path.join(root, ".github", "workflows"), { recursive: true });
-    await writeFile(path.join(root, ".github", "workflows", "ci.yml"), `jobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-node@v4\n      - run: yarn install --frozen-lockfile\n      - run: yarn test\n  docs:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: npm install\n      - run: npm test\n`);
+    await writeFile(
+      path.join(root, ".github", "workflows", "ci.yml"),
+      `jobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-node@v4\n      - run: yarn install --frozen-lockfile\n      - run: yarn test\n  docs:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: npm install\n      - run: npm test\n`,
+    );
 
     const planned = await planCiChange(await detectRepository(root), "yarn");
 
     expect(planned.warning).toBeUndefined();
-    expect(planned.change?.after).toContain("- run: yarn install --frozen-lockfile\n      - name: Repository health\n        run: yarn run health");
+    expect(planned.change?.after).toContain(
+      "- run: yarn install --frozen-lockfile\n      - name: Repository health\n        run: yarn run health",
+    );
     expect(planned.change?.after).not.toContain("- run: npm install\n      - name: Repository health");
   });
 
@@ -251,7 +326,10 @@ describe("setup planning", () => {
     const root = await copyFixture("minimal-js");
     temporary.push(root);
     await mkdir(path.join(root, ".github", "workflows"), { recursive: true });
-    await writeFile(path.join(root, ".github", "workflows", "ci.yml"), `jobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: pnpm install --frozen-lockfile\n      - run: pnpm test\n`);
+    await writeFile(
+      path.join(root, ".github", "workflows", "ci.yml"),
+      `jobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: pnpm install --frozen-lockfile\n      - run: pnpm test\n`,
+    );
 
     const planned = await planCiChange(await detectRepository(root), "pnpm");
 
@@ -263,12 +341,17 @@ describe("setup planning", () => {
     const root = await copyFixture("minimal-js");
     temporary.push(root);
     await mkdir(path.join(root, ".github", "workflows"), { recursive: true });
-    await writeFile(path.join(root, ".github", "workflows", "ci.yml"), `jobs:\n  lint:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: corepack yarn --immutable\n      - run: yarn lint\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: corepack yarn install\n      - run: corepack yarn test\n`);
+    await writeFile(
+      path.join(root, ".github", "workflows", "ci.yml"),
+      `jobs:\n  lint:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: corepack yarn --immutable\n      - run: yarn lint\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: corepack yarn install\n      - run: corepack yarn test\n`,
+    );
 
     const planned = await planCiChange(await detectRepository(root), "yarn");
 
     expect(planned.warning).toBeUndefined();
-    expect(planned.change?.after).toContain("- run: corepack yarn install\n      - name: Repository health\n        run: yarn run health");
+    expect(planned.change?.after).toContain(
+      "- run: corepack yarn install\n      - name: Repository health\n        run: yarn run health",
+    );
     expect(planned.change?.after).not.toContain("- run: corepack yarn --immutable\n      - name: Repository health");
   });
 
@@ -276,31 +359,44 @@ describe("setup planning", () => {
     const root = await copyFixture("minimal-js");
     temporary.push(root);
     await mkdir(path.join(root, ".github", "workflows"), { recursive: true });
-    await writeFile(path.join(root, ".github", "workflows", "ci.yml"), `jobs:\n  quality:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: npm ci --ignore-scripts\n      - run: npm test\n`);
+    await writeFile(
+      path.join(root, ".github", "workflows", "ci.yml"),
+      `jobs:\n  quality:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: npm ci --ignore-scripts\n      - run: npm test\n`,
+    );
 
     const planned = await planCiChange(await detectRepository(root), "yarn");
 
     expect(planned.warning).toBeUndefined();
-    expect(planned.change?.after).toContain("- run: npm ci --ignore-scripts\n      - name: Repository health\n        run: npm run health");
+    expect(planned.change?.after).toContain(
+      "- run: npm ci --ignore-scripts\n      - name: Repository health\n        run: npm run health",
+    );
   });
 
   it("explains which jobs are ambiguous when their CI purpose ties", async () => {
     const root = await copyFixture("minimal-js");
     temporary.push(root);
     await mkdir(path.join(root, ".github", "workflows"), { recursive: true });
-    await writeFile(path.join(root, ".github", "workflows", "ci.yml"), `jobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: npm install\n      - run: npm test\n  check:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: npm install\n      - run: npm check\n`);
+    await writeFile(
+      path.join(root, ".github", "workflows", "ci.yml"),
+      `jobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: npm install\n      - run: npm test\n  check:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: npm install\n      - run: npm check\n`,
+    );
 
     const planned = await planCiChange(await detectRepository(root), "npm");
 
     expect(planned.change).toBeNull();
-    expect(planned.warning).toContain("Candidates: .github/workflows/ci.yml#test (npm), .github/workflows/ci.yml#check (npm).");
+    expect(planned.warning).toContain(
+      "Candidates: .github/workflows/ci.yml#test (npm), .github/workflows/ci.yml#check (npm).",
+    );
   });
 
   it("does not warn when a health step already exists", async () => {
     const root = await copyFixture("minimal-js");
     temporary.push(root);
     await mkdir(path.join(root, ".github", "workflows"), { recursive: true });
-    await writeFile(path.join(root, ".github", "workflows", "ci.yml"), `jobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: npm install\n      - run: npm run health\n`);
+    await writeFile(
+      path.join(root, ".github", "workflows", "ci.yml"),
+      `jobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: npm install\n      - run: npm run health\n`,
+    );
 
     const planned = await planCiChange(await detectRepository(root), "npm");
 
@@ -313,8 +409,15 @@ describe("setup planning", () => {
     temporary.push(root);
     const plan = await buildInstallPlan(await detectRepository(root), ["dependency-cruiser"], false);
     expect(plan.packages.map((item) => item.name)).toEqual(["repnix", "dependency-cruiser"]);
-    expect(plan.files.map((item) => item.path)).toEqual(["package.json", ".gitignore", "repnix.config.json", ".dependency-cruiser.cjs"]);
-    expect(plan.files.find((item) => item.path === "package.json")?.after).toContain('"health:architecture": "depcruise --output-type json --config -- src"');
+    expect(plan.files.map((item) => item.path)).toEqual([
+      "package.json",
+      ".gitignore",
+      "repnix.config.json",
+      ".dependency-cruiser.cjs",
+    ]);
+    expect(plan.files.find((item) => item.path === "package.json")?.after).toContain(
+      '"health:architecture": "depcruise --output-type json --config -- src"',
+    );
     expect(plan.files.find((item) => item.path === ".dependency-cruiser.cjs")?.after).toContain("no-source-to-test");
   });
 
@@ -325,8 +428,12 @@ describe("setup planning", () => {
     expect(plan.packages.map((item) => item.name)).toEqual(["repnix", "publint", "@arethetypeswrong/cli"]);
     expect(plan.files).toHaveLength(3);
     expect(plan.files.find((item) => item.path === ".gitignore")?.after).toBe(".repnix/\n");
-    expect(plan.files.find((item) => item.path === "package.json")?.after).toContain('"health:package:publint": "publint"');
-    expect(plan.files.find((item) => item.path === "package.json")?.after).toContain('"health:package:types": "attw --pack ."');
+    expect(plan.files.find((item) => item.path === "package.json")?.after).toContain(
+      '"health:package:publint": "publint"',
+    );
+    expect(plan.files.find((item) => item.path === "package.json")?.after).toContain(
+      '"health:package:types": "attw --pack ."',
+    );
     expect(plan.conflicts).toEqual([]);
   });
 
@@ -334,7 +441,9 @@ describe("setup planning", () => {
     const root = await copyFixture("pnpm-monorepo");
     temporary.push(root);
     const childManifestPath = path.join(root, "packages", "a", "package.json");
-    const childManifest = JSON.parse(await readFile(childManifestPath, "utf8")) as { devDependencies: Record<string, string> };
+    const childManifest = JSON.parse(await readFile(childManifestPath, "utf8")) as {
+      devDependencies: Record<string, string>;
+    };
     childManifest.devDependencies.knip = "^5.0.0";
     await writeFile(childManifestPath, `${JSON.stringify(childManifest)}\n`);
 
@@ -356,12 +465,22 @@ describe("setup planning", () => {
       schemaVersion: 1 as const,
       packages: [],
       files: [fileChange("package.json", before, after, "test rollback")!],
-      commands: [{ command: process.execPath, args: ["-e", "require('node:fs').writeFileSync('package-lock.json', 'changed'); process.exit(1)"], reason: "test failure" }],
+      commands: [
+        {
+          command: process.execPath,
+          args: ["-e", "require('node:fs').writeFileSync('package-lock.json', 'changed'); process.exit(1)"],
+          reason: "test failure",
+        },
+      ],
       warnings: [],
       conflicts: [],
     };
 
-    await expect(applyInstallPlan(context, plan, createDiagnosticLogger({ quiet: true }), 1000, (event) => progress.push(event.phase))).rejects.toThrow("rolled back");
+    await expect(
+      applyInstallPlan(context, plan, createDiagnosticLogger({ quiet: true }), 1000, (event) =>
+        progress.push(event.phase),
+      ),
+    ).rejects.toThrow("rolled back");
     expect(progress).toEqual(["validating", "snapshotting", "writing-files", "running-command", "rollback"]);
     expect(await readFile(packagePath, "utf8")).toBe(before);
     expect(await readFile(lockfilePath, "utf8")).toBe(lockfileBefore);
@@ -378,12 +497,36 @@ describe("setup planning", () => {
       schemaVersion: 1 as const,
       packages: [],
       files: [],
-      commands: [{ command: process.execPath, args: ["-e", "require('node:fs').writeFileSync('bun.lockb', 'changed'); process.exit(1)"], reason: "test failure" }],
+      commands: [
+        {
+          command: process.execPath,
+          args: ["-e", "require('node:fs').writeFileSync('bun.lockb', 'changed'); process.exit(1)"],
+          reason: "test failure",
+        },
+      ],
       warnings: [],
       conflicts: [],
     };
 
-    await expect(applyInstallPlan(context, plan, createDiagnosticLogger({ quiet: true }), 1000)).rejects.toThrow("rolled back");
+    await expect(applyInstallPlan(context, plan, createDiagnosticLogger({ quiet: true }), 1000)).rejects.toThrow(
+      "rolled back",
+    );
     expect(await readFile(lockfilePath)).toEqual(before);
+  });
+
+  it("plans Prettier configuration and health script when selected", async () => {
+    const root = await copyFixture("minimal-js");
+    temporary.push(root);
+    const context = await detectRepository(root);
+    const plan = await buildInstallPlan(context, ["prettier"], false);
+
+    expect(plan.packages).toEqual(
+      expect.arrayContaining([{ name: "prettier", dev: true, reason: "Add prettier repository health coverage" }]),
+    );
+    expect(plan.files.map((file) => file.path)).toEqual(expect.arrayContaining(["package.json", ".prettierrc.json"]));
+    const packageJsonChange = plan.files.find((file) => file.path === "package.json");
+    expect(packageJsonChange?.after).toContain('"health:format": "prettier --check ."');
+    const prettierrcChange = plan.files.find((file) => file.path === ".prettierrc.json");
+    expect(prettierrcChange?.after).toContain('"semi": true');
   });
 });

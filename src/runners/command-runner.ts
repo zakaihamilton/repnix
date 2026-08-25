@@ -29,16 +29,14 @@ function formatCommand(command: string, args: string[]): string {
   return [command, ...args].map((part) => JSON.stringify(part)).join(" ");
 }
 
-export async function runCommand(
-  command: string,
-  args: string[],
-  options: RunCommandOptions,
-): Promise<CommandResult> {
+export async function runCommand(command: string, args: string[], options: RunCommandOptions): Promise<CommandResult> {
   const started = performance.now();
   const maxOutput = options.maxOutputBytes ?? 10 * 1024 * 1024;
   const timeoutMs = options.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS;
   const displayCommand = formatCommand(command, args);
-  const logger = resolveDiagnosticLogger(options.logger ?? (options.verbose === undefined ? {} : { verbose: options.verbose }));
+  const logger = resolveDiagnosticLogger(
+    options.logger ?? (options.verbose === undefined ? {} : { verbose: options.verbose }),
+  );
   logger.debug("command.start", `Running ${displayCommand}`, { command: displayCommand, cwd: options.cwd });
   return await new Promise((resolve) => {
     let stdout = "";
@@ -91,7 +89,10 @@ export async function runCommand(
       clearTimers();
       // The health reporter turns this into a concise, actionable check error. Keep
       // the command line in debug logs so normal output does not repeat it twice.
-      logger.debug("command.spawn-error", `Could not start ${displayCommand}: ${error.message}`, { command: displayCommand, cwd: options.cwd });
+      logger.debug("command.spawn-error", `Could not start ${displayCommand}: ${error.message}`, {
+        command: displayCommand,
+        cwd: options.cwd,
+      });
       resolve({
         command,
         args,

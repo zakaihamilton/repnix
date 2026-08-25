@@ -2,10 +2,8 @@
   "config": {
     "MD013": false,
     "MD024": {
-      "siblings_only": true
-    }
+      "siblings_only": true,
+    },
   },
-  "ignores": [
-    ".changeset/**"
-  ]
+  "ignores": [".changeset/**"],
 }

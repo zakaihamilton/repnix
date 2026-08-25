@@ -89,7 +89,11 @@ export async function validateChanges(root: string, changes: FileChange[]): Prom
   }
 }
 
-export async function writeChanges(root: string, changes: FileChange[], onWrite?: (change: FileChange, current: number, total: number) => void): Promise<void> {
+export async function writeChanges(
+  root: string,
+  changes: FileChange[],
+  onWrite?: (change: FileChange, current: number, total: number) => void,
+): Promise<void> {
   const written: FileChange[] = [];
   try {
     for (const [index, change] of changes.entries()) {
@@ -105,7 +109,10 @@ export async function writeChanges(root: string, changes: FileChange[], onWrite?
     try {
       await restoreChanges(root, written);
     } catch (rollbackError) {
-      throw new Error(`Could not apply setup changes and rollback also failed: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`, { cause: error });
+      throw new Error(
+        `Could not apply setup changes and rollback also failed: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`,
+        { cause: error },
+      );
     }
     throw error;
   }
@@ -185,9 +192,10 @@ function lineDiff(before: string[], after: string[]): DiffLine[] {
   const table = Array.from({ length: before.length + 1 }, () => new Uint32Array(after.length + 1));
   for (let beforeIndex = before.length - 1; beforeIndex >= 0; beforeIndex -= 1) {
     for (let afterIndex = after.length - 1; afterIndex >= 0; afterIndex -= 1) {
-      table[beforeIndex]![afterIndex] = before[beforeIndex] === after[afterIndex]
-        ? table[beforeIndex + 1]![afterIndex + 1]! + 1
-        : Math.max(table[beforeIndex + 1]![afterIndex]!, table[beforeIndex]![afterIndex + 1]!);
+      table[beforeIndex]![afterIndex] =
+        before[beforeIndex] === after[afterIndex]
+          ? table[beforeIndex + 1]![afterIndex + 1]! + 1
+          : Math.max(table[beforeIndex + 1]![afterIndex]!, table[beforeIndex]![afterIndex + 1]!);
     }
   }
 
@@ -226,7 +234,9 @@ function wrapDiffLine(line: DiffLine, width: number | undefined): string[] {
   for (let offset = available; offset < line.text.length; offset += continuationAvailable) {
     chunks.push(line.text.slice(offset, offset + continuationAvailable));
   }
-  return chunks.map((chunk, index) => index === 0 ? color(`${firstPrefix}${chunk}`) : pc.dim(`${continuationPrefix}${chunk}`));
+  return chunks.map((chunk, index) =>
+    index === 0 ? color(`${firstPrefix}${chunk}`) : pc.dim(`${continuationPrefix}${chunk}`),
+  );
 }
 
 function omittedLines(count: number): string {
@@ -238,7 +248,7 @@ export function renderFileDiff(change: FileChange, width?: number): string {
   const before = contentLines(change.before);
   const after = contentLines(change.after);
   const diff = lineDiff(before, after);
-  const changed = diff.flatMap((line, index) => line.kind === "context" ? [] : [index]);
+  const changed = diff.flatMap((line, index) => (line.kind === "context" ? [] : [index]));
   const additions = diff.filter((line) => line.kind === "add").length;
   const removals = diff.filter((line) => line.kind === "remove").length;
   const kind = change.kind === "create" ? "A" : "M";

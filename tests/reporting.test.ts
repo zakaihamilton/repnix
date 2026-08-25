@@ -6,7 +6,11 @@ import type { HealthResult, HealthRun } from "../src/core/types.js";
 
 describe("console reporting", () => {
   it("wraps text at the terminal width with readable continuation indentation", () => {
-    const wrapped = wrapTerminalText("A long recommendation explanation stays readable in a narrow terminal.", 24, "  ");
+    const wrapped = wrapTerminalText(
+      "A long recommendation explanation stays readable in a narrow terminal.",
+      24,
+      "  ",
+    );
 
     expect(wrapped).toEqual([
       "  A long recommendation",
@@ -34,14 +38,16 @@ describe("console reporting", () => {
           diagnostics: [],
           scopes: [{ path: ".", roles: ["node-app"], roleEvidence: [] }],
         },
-        coverage: [{
-          category: "security",
-          status: "missing",
-          providers: [],
-          capabilities: [],
-          missingCapabilities: [],
-          reason: "A long coverage explanation remains readable instead of being split by the terminal.",
-        }],
+        coverage: [
+          {
+            category: "security",
+            status: "missing",
+            providers: [],
+            capabilities: [],
+            missingCapabilities: [],
+            reason: "A long coverage explanation remains readable instead of being split by the terminal.",
+          },
+        ],
         recommendations: [],
       } as unknown as AuditModel;
 
@@ -69,22 +75,26 @@ describe("console reporting", () => {
         diagnostics: [],
         scopes: [{ path: ".", roles: ["node-app"], roleEvidence: [] }],
       },
-      coverage: [{
-        category: "dead-code",
-        status: "missing",
-        providers: [],
-        capabilities: [],
-        missingCapabilities: [],
-      }],
-      recommendations: [{
-        provider: "knip",
-        name: "Knip",
-        category: "dead-code",
-        recommended: true,
-        priority: "baseline",
-        actionable: true,
-        reason: "Nothing currently checks for unused files, exports, or dependencies.",
-      }],
+      coverage: [
+        {
+          category: "dead-code",
+          status: "missing",
+          providers: [],
+          capabilities: [],
+          missingCapabilities: [],
+        },
+      ],
+      recommendations: [
+        {
+          provider: "knip",
+          name: "Knip",
+          category: "dead-code",
+          recommended: true,
+          priority: "baseline",
+          actionable: true,
+          reason: "Nothing currently checks for unused files, exports, or dependencies.",
+        },
+      ],
     } as unknown as AuditModel;
 
     const output = renderAudit(model);
@@ -107,8 +117,23 @@ describe("console reporting", () => {
     const base: HealthRun = {
       schemaVersion: 1 as const,
       generatedAt: "2026-08-11T00:00:00.000Z",
-      repository: { root: "/tmp/project", packageManager: "npm" as const, kinds: ["node-application" as const], frameworks: [], languages: [], scopes: [{ path: ".", roles: ["node-app"] }] },
-      summary: { status: "healthy" as const, findings: 0, newFindings: 0, existingFindings: 0, resolvedFindings: 0, errors: 0, exitCode: 0 as const },
+      repository: {
+        root: "/tmp/project",
+        packageManager: "npm" as const,
+        kinds: ["node-application" as const],
+        frameworks: [],
+        languages: [],
+        scopes: [{ path: ".", roles: ["node-app"] }],
+      },
+      summary: {
+        status: "healthy" as const,
+        findings: 0,
+        newFindings: 0,
+        existingFindings: 0,
+        resolvedFindings: 0,
+        errors: 0,
+        exitCode: 0 as const,
+      },
       results: [baseResult],
     };
     expect(renderHealth(base)).toContain("All configured checks passed");
@@ -117,15 +142,63 @@ describe("console reporting", () => {
 
     const findingRun = {
       ...base,
-      summary: { status: "findings" as const, findings: 1, newFindings: 1, existingFindings: 0, resolvedFindings: 0, errors: 0, exitCode: 1 as const },
-      results: [{ ...baseResult, status: "fail" as const, findings: [{ id: "test-failure", fingerprint: "test-failure", type: "command", provider: "Test script", category: "tests" as const, severity: "error" as const, message: "A test failed." }] }],
+      summary: {
+        status: "findings" as const,
+        findings: 1,
+        newFindings: 1,
+        existingFindings: 0,
+        resolvedFindings: 0,
+        errors: 0,
+        exitCode: 1 as const,
+      },
+      results: [
+        {
+          ...baseResult,
+          status: "fail" as const,
+          findings: [
+            {
+              id: "test-failure",
+              fingerprint: "test-failure",
+              type: "command",
+              provider: "Test script",
+              category: "tests" as const,
+              severity: "error" as const,
+              message: "A test failed.",
+            },
+          ],
+        },
+      ],
     };
     expect(renderHealth(findingRun)).toContain("what each finding means");
 
     const belowThresholdRun = {
       ...base,
-      summary: { status: "healthy" as const, findings: 1, newFindings: 1, existingFindings: 0, resolvedFindings: 0, errors: 0, exitCode: 0 as const },
-      results: [{ ...baseResult, status: "fail" as const, findings: [{ id: "test-info", fingerprint: "test-info", type: "command", provider: "Test script", category: "tests" as const, severity: "info" as const, message: "A test reported an informational note." }] }],
+      summary: {
+        status: "healthy" as const,
+        findings: 1,
+        newFindings: 1,
+        existingFindings: 0,
+        resolvedFindings: 0,
+        errors: 0,
+        exitCode: 0 as const,
+      },
+      results: [
+        {
+          ...baseResult,
+          status: "fail" as const,
+          findings: [
+            {
+              id: "test-info",
+              fingerprint: "test-info",
+              type: "command",
+              provider: "Test script",
+              category: "tests" as const,
+              severity: "info" as const,
+              message: "A test reported an informational note.",
+            },
+          ],
+        },
+      ],
     };
     expect(renderHealth(belowThresholdRun)).toContain("none meet the configured severity threshold");
 
@@ -134,7 +207,15 @@ describe("console reporting", () => {
 
     const errorRun = {
       ...base,
-      summary: { status: "error" as const, findings: 0, newFindings: 0, existingFindings: 0, resolvedFindings: 0, errors: 1, exitCode: 2 as const },
+      summary: {
+        status: "error" as const,
+        findings: 0,
+        newFindings: 0,
+        existingFindings: 0,
+        resolvedFindings: 0,
+        errors: 1,
+        exitCode: 2 as const,
+      },
       results: [{ ...baseResult, status: "error" as const, message: "The test command was not found." }],
     };
     expect(renderHealth(errorRun)).toContain("not necessarily a problem in your code");
@@ -144,16 +225,35 @@ describe("console reporting", () => {
     const run = {
       schemaVersion: 1,
       generatedAt: "2026-08-11T00:00:00.000Z",
-      repository: { root: "/tmp/project", packageManager: "npm", kinds: ["node-application"], frameworks: [], languages: [] },
+      repository: {
+        root: "/tmp/project",
+        packageManager: "npm",
+        kinds: ["node-application"],
+        frameworks: [],
+        languages: [],
+      },
       summary: { status: "findings", findings: 1, errors: 0, exitCode: 1 },
-      results: [{
-        provider: "knip",
-        name: "Knip",
-        category: "dead-code",
-        status: "fail",
-        durationMs: 10,
-        findings: [{ id: "unused-file", type: "unused-file", provider: "Knip", category: "dead-code", severity: "warning", message: "Unused file: src/old.ts", file: "src/old.ts", line: 1 }],
-      }],
+      results: [
+        {
+          provider: "knip",
+          name: "Knip",
+          category: "dead-code",
+          status: "fail",
+          durationMs: 10,
+          findings: [
+            {
+              id: "unused-file",
+              type: "unused-file",
+              provider: "Knip",
+              category: "dead-code",
+              severity: "warning",
+              message: "Unused file: src/old.ts",
+              file: "src/old.ts",
+              line: 1,
+            },
+          ],
+        },
+      ],
     } as unknown as HealthRun;
 
     const output = renderExplain(run);
@@ -191,9 +291,17 @@ describe("console reporting", () => {
     const run = {
       schemaVersion: 1,
       generatedAt: "2026-08-11T00:00:00.000Z",
-      repository: { root: "/tmp/project", packageManager: "npm", kinds: ["node-application"], frameworks: [], languages: [] },
+      repository: {
+        root: "/tmp/project",
+        packageManager: "npm",
+        kinds: ["node-application"],
+        frameworks: [],
+        languages: [],
+      },
       summary: { status: "findings", findings: 7, errors: 0, exitCode: 1 },
-      results: [{ provider: "jscpd", name: "jscpd", category: "duplication", status: "warn", durationMs: 10, findings }],
+      results: [
+        { provider: "jscpd", name: "jscpd", category: "duplication", status: "warn", durationMs: 10, findings },
+      ],
     } as unknown as HealthRun;
 
     const output = renderExplain(run);

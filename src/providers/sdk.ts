@@ -24,13 +24,21 @@ export interface ProviderSetup {
   checks: string[];
   scope?: (context: RepositoryContext) => string;
   caveat?: (context: RepositoryContext) => string | undefined;
-  details?: { checks?: string[]; scope?: (context: RepositoryContext) => string; caveat?: (context: RepositoryContext) => string | undefined };
+  details?: {
+    checks?: string[];
+    scope?: (context: RepositoryContext) => string;
+    caveat?: (context: RepositoryContext) => string | undefined;
+  };
 }
 
 export interface ProviderRuntime {
   logger: DiagnosticLogger;
   timeoutMs?: number;
-  runCommand(command: string, args: string[], options?: { cwd?: string; env?: NodeJS.ProcessEnv; maxOutputBytes?: number }): Promise<{
+  runCommand(
+    command: string,
+    args: string[],
+    options?: { cwd?: string; env?: NodeJS.ProcessEnv; maxOutputBytes?: number },
+  ): Promise<{
     stdout: string;
     stderr: string;
     exitCode: number | null;
@@ -83,7 +91,11 @@ export interface ProviderModule {
   recommend?: (context: RepositoryContext, helpers?: RecommendHelpers) => ProviderRecommendation | null;
   planInstall?: (context: RepositoryContext) => Promise<InstallPlan>;
   run?: (input: ProviderHookContext) => Promise<HealthResult>;
-  normalize?: (input: { output: string; result: { exitCode: number | null; stderr: string; stdout: string }; context: RepositoryContext }) => HealthFinding[];
+  normalize?: (input: {
+    output: string;
+    result: { exitCode: number | null; stderr: string; stdout: string };
+    context: RepositoryContext;
+  }) => HealthFinding[];
 }
 
 export interface CategoryModule {

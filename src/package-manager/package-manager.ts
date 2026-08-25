@@ -1,9 +1,6 @@
 import type { PackageManagerId, PlannedCommand } from "../core/types.js";
 
-export function installDevCommand(
-  manager: PackageManagerId,
-  packages: string[],
-): PlannedCommand {
+export function installDevCommand(manager: PackageManagerId, packages: string[]): PlannedCommand {
   const argsByManager: Record<PackageManagerId, string[]> = {
     npm: ["install", "--save-dev", ...packages],
     pnpm: ["add", "-D", ...packages],
@@ -27,9 +24,6 @@ export function execCommand(
   return { command: manager, args: [...prefixes[manager], ...args] };
 }
 
-export function runScriptCommand(
-  manager: PackageManagerId,
-  script: string,
-): { command: string; args: string[] } {
+export function runScriptCommand(manager: PackageManagerId, script: string): { command: string; args: string[] } {
   return { command: manager, args: ["run", script] };
 }

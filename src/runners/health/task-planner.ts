@@ -35,10 +35,22 @@ function selected(category: HealthCategory, options: TaskPlannerOptions): boolea
 }
 
 function commandTask(command: RunnableCommand, audit: AuditModel, options: TaskPlannerOptions): HealthTask {
-  return { id: command.provider, provider: command.provider, name: command.name, category: command.category, ...(command.scope ? { scope: command.scope } : {}), run: () => runRunnableCommand(command, audit.context, options.logger) };
+  return {
+    id: command.provider,
+    provider: command.provider,
+    name: command.name,
+    category: command.category,
+    ...(command.scope ? { scope: command.scope } : {}),
+    run: () => runRunnableCommand(command, audit.context, options.logger),
+  };
 }
 
-function derivedLintTask(provider: string, name: string, category: HealthCategory, lintTask: HealthTask | undefined): HealthTask {
+function derivedLintTask(
+  provider: string,
+  name: string,
+  category: HealthCategory,
+  lintTask: HealthTask | undefined,
+): HealthTask {
   return {
     id: provider,
     provider,
@@ -47,7 +59,29 @@ function derivedLintTask(provider: string, name: string, category: HealthCategor
     ...(lintTask ? { dependsOn: lintTask.id } : {}),
     async run(completed) {
       const lint = lintTask ? completed.get(lintTask.id) : undefined;
-      return { provider, name, category, status: lint?.status === "pass" ? "pass" : lint?.status === "error" ? "error" : lint?.status === "fail" ? "fail" : "skipped", findings: [], durationMs: 0, ...(lint && lint.status !== "pass" ? { message: category === "architecture" ? "Architecture rules ran through the existing lint command; see the lint result." : "Accessibility rules ran through the existing lint command; see the lint result." } : {}) };
+      return {
+        provider,
+        name,
+        category,
+        status:
+          lint?.status === "pass"
+            ? "pass"
+            : lint?.status === "error"
+              ? "error"
+              : lint?.status === "fail"
+                ? "fail"
+                : "skipped",
+        findings: [],
+        durationMs: 0,
+        ...(lint && lint.status !== "pass"
+          ? {
+              message:
+                category === "architecture"
+                  ? "Architecture rules ran through the existing lint command; see the lint result."
+                  : "Accessibility rules ran through the existing lint command; see the lint result.",
+            }
+          : {}),
+      };
     },
   };
 }
@@ -64,7 +98,12 @@ function scheduleProvider(
   tasks: HealthTask[],
   add: (task: HealthTask) => void,
 ): void {
-  if (!selected(descriptor.category, options) || !enabledCategory(audit, config, descriptor.category) || !hasActiveCapabilities(audit, descriptor.id)) return;
+  if (
+    !selected(descriptor.category, options) ||
+    !enabledCategory(audit, config, descriptor.category) ||
+    !hasActiveCapabilities(audit, descriptor.id)
+  )
+    return;
   const derivedCategory = descriptor.deriveFromCategory;
   const parent = derivedCategory ? tasks.find((task) => task.category === derivedCategory) : undefined;
   if (derivedCategory && parent) {
@@ -76,21 +115,46 @@ function scheduleProvider(
     ? tasks.find((task) => task.category === descriptor.dependsOnCategory && task.scope === undefined)?.id
     : undefined;
   if (descriptor.run) {
-    add({ id: descriptor.id, provider: descriptor.id, name: descriptor.name, category: descriptor.category, ...(dependsOn ? { dependsOn } : {}), run: () => runProviderModule(audit.context, descriptor, options.logger, options.timeoutMs) });
+    add({
+      id: descriptor.id,
+      provider: descriptor.id,
+      name: descriptor.name,
+      category: descriptor.category,
+      ...(dependsOn ? { dependsOn } : {}),
+      run: () => runProviderModule(audit.context, descriptor, options.logger, options.timeoutMs),
+    });
     return;
   }
   if (runner) {
-    add({ id: descriptor.id, provider: descriptor.id, name: descriptor.name, category: descriptor.category, ...(dependsOn ? { dependsOn } : {}), run: () => runner(audit.context, config, options.logger, options.timeoutMs) });
+    add({
+      id: descriptor.id,
+      provider: descriptor.id,
+      name: descriptor.name,
+      category: descriptor.category,
+      ...(dependsOn ? { dependsOn } : {}),
+      run: () => runner(audit.context, config, options.logger, options.timeoutMs),
+    });
     return;
   }
   if (descriptor.command) {
-    add({ id: descriptor.id, provider: descriptor.id, name: descriptor.name, category: descriptor.category, ...(dependsOn ? { dependsOn } : {}), run: () => runGenericProvider(audit.context, descriptor, options.logger, options.timeoutMs) });
+    add({
+      id: descriptor.id,
+      provider: descriptor.id,
+      name: descriptor.name,
+      category: descriptor.category,
+      ...(dependsOn ? { dependsOn } : {}),
+      run: () => runGenericProvider(audit.context, descriptor, options.logger, options.timeoutMs),
+    });
     return;
   }
   if (derivedCategory) add(derivedLintTask(descriptor.id, descriptor.name, descriptor.category, parent));
 }
 
-export async function planHealthTasks(audit: AuditModel, config: RepnixConfig, options: TaskPlannerOptions): Promise<HealthTask[]> {
+export async function planHealthTasks(
+  audit: AuditModel,
+  config: RepnixConfig,
+  options: TaskPlannerOptions,
+): Promise<HealthTask[]> {
   const { context, detections } = audit;
   const tasks: HealthTask[] = [];
   const scheduled = new Set<string>();
@@ -100,7 +164,8 @@ export async function planHealthTasks(audit: AuditModel, config: RepnixConfig, o
     tasks.push(task);
   };
   for (const command of await basicCommands(context, detections, options.timeoutMs)) {
-    if (selected(command.category, options) && enabledCategory(audit, config, command.category, command.scope ?? ".")) add(commandTask(command, audit, options));
+    if (selected(command.category, options) && enabledCategory(audit, config, command.category, command.scope ?? "."))
+      add(commandTask(command, audit, options));
   }
   for (const descriptor of audit.registry?.providers ?? PROVIDERS) {
     scheduleProvider(descriptor, audit, config, options, tasks, add);

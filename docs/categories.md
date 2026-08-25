@@ -2,27 +2,27 @@
 
 RepNix separates repository health into categories so each capability has a clear home. The category name is also the value you can pass to `repnix check <category>`.
 
-| Category | What it protects | Typical tools |
-| --- | --- | --- |
-| `types` — Type safety | Catches mismatched values before runtime. | TypeScript |
-| `lint` — Linting | Finds suspicious or inconsistent code patterns. | ESLint, Oxlint, Biome |
-| `format` — Formatting | Keeps code style consistent. | Prettier, Oxfmt, Biome |
-| `tests` — Tests | Protects existing behavior from regressions. | Jest, Vitest, safe test scripts |
-| `coverage` — Test coverage | Measures test reach and optional coverage thresholds. | c8, Stryker |
-| `dead-code` — Dead code | Finds unused files, exports, and dependencies. | Knip |
-| `duplication` — Duplication | Finds repeated code that can drift apart. | jscpd |
-| `security` — Dependency security | Finds known vulnerabilities in dependencies. | OSV-Scanner |
-| `architecture` — Architecture boundaries | Protects allowed relationships between modules. | dependency-cruiser, `eslint-plugin-boundaries` |
-| `bundle` — Bundle regression | Protects shipped JavaScript size. | Size Limit |
-| `accessibility` — Accessibility | Checks whether user interfaces can be used by people with different abilities. | eslint-plugin-jsx-a11y |
-| `monorepo` — Monorepo consistency | Checks whether packages in a monorepo follow shared rules. | syncpack, workspace scripts |
-| `secrets` — Secret scanning | Finds credentials and sensitive values committed to the repository. | Gitleaks |
-| `licenses` — License policy | Checks dependency licenses against an allow/deny policy. | license-checker |
-| `documentation` — Documentation | Checks Markdown structure and style. | markdownlint |
-| `performance` — Performance budgets | Protects configured web or build performance budgets. | Lighthouse CI, Size Limit |
-| `release` — Release readiness | Checks release metadata and package change intent. | Changesets |
-| `ci` — CI workflow health | Checks GitHub Actions workflow syntax and common mistakes. | actionlint |
-| `package-health` — Package publishing | Checks what npm consumers receive. | Publint, Are The Types Wrong? |
+| Category                                 | What it protects                                                               | Typical tools                                  |
+| ---------------------------------------- | ------------------------------------------------------------------------------ | ---------------------------------------------- |
+| `types` — Type safety                    | Catches mismatched values before runtime.                                      | TypeScript                                     |
+| `lint` — Linting                         | Finds suspicious or inconsistent code patterns.                                | ESLint, Oxlint, Biome                          |
+| `format` — Formatting                    | Keeps code style consistent.                                                   | Prettier, Oxfmt, Biome                         |
+| `tests` — Tests                          | Protects existing behavior from regressions.                                   | Jest, Vitest, safe test scripts                |
+| `coverage` — Test coverage               | Measures test reach and optional coverage thresholds.                          | c8, Stryker                                    |
+| `dead-code` — Dead code                  | Finds unused files, exports, and dependencies.                                 | Knip                                           |
+| `duplication` — Duplication              | Finds repeated code that can drift apart.                                      | jscpd                                          |
+| `security` — Dependency security         | Finds known vulnerabilities in dependencies.                                   | OSV-Scanner                                    |
+| `architecture` — Architecture boundaries | Protects allowed relationships between modules.                                | dependency-cruiser, `eslint-plugin-boundaries` |
+| `bundle` — Bundle regression             | Protects shipped JavaScript size.                                              | Size Limit                                     |
+| `accessibility` — Accessibility          | Checks whether user interfaces can be used by people with different abilities. | eslint-plugin-jsx-a11y                         |
+| `monorepo` — Monorepo consistency        | Checks whether packages in a monorepo follow shared rules.                     | syncpack, workspace scripts                    |
+| `secrets` — Secret scanning              | Finds credentials and sensitive values committed to the repository.            | Gitleaks                                       |
+| `licenses` — License policy              | Checks dependency licenses against an allow/deny policy.                       | license-checker                                |
+| `documentation` — Documentation          | Checks Markdown structure and style.                                           | markdownlint                                   |
+| `performance` — Performance budgets      | Protects configured web or build performance budgets.                          | Lighthouse CI, Size Limit                      |
+| `release` — Release readiness            | Checks release metadata and package change intent.                             | Changesets                                     |
+| `ci` — CI workflow health                | Checks GitHub Actions workflow syntax and common mistakes.                     | actionlint                                     |
+| `package-health` — Package publishing    | Checks what npm consumers receive.                                             | Publint, Are The Types Wrong?                  |
 
 ## Existing project checks
 

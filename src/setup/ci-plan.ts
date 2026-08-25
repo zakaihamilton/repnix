@@ -65,24 +65,40 @@ function isInstallCommand(command: string | undefined, manager: PackageManagerId
   const normalized = command.replace(/^corepack\s+/, "");
   if (manager === "npm") return /^(?:npm\s+(?:ci|install|i))(?:\s|$)/.test(normalized);
   if (manager === "pnpm") return /^pnpm\s+(?:install|i)(?:\s|$)/.test(normalized);
-  if (manager === "yarn") return /^(?:yarn|yarnpkg)(?:\s+install|\s+--(?:frozen-lockfile|immutable(?:-[\w-]+)?))(?:\s|$)/.test(normalized) || normalized === "yarn" || normalized === "yarnpkg";
+  if (manager === "yarn")
+    return (
+      /^(?:yarn|yarnpkg)(?:\s+install|\s+--(?:frozen-lockfile|immutable(?:-[\w-]+)?))(?:\s|$)/.test(normalized) ||
+      normalized === "yarn" ||
+      normalized === "yarnpkg"
+    );
   return /^bun\s+install(?:\s|$)/.test(normalized);
 }
 
 function jobScore(jobId: string, job: YamlMapNode, manager: PackageManagerId): number {
   const normalizedId = jobId.toLowerCase();
   const steps = asYamlSeq(job.get("steps", true));
-  const commands = steps?.items.map(asYamlMap).filter((step): step is YamlMapNode => step !== null)
-    .map((step) => commandValue(step.get("run", true)) ?? "") ?? [];
+  const commands =
+    steps?.items
+      .map(asYamlMap)
+      .filter((step): step is YamlMapNode => step !== null)
+      .map((step) => commandValue(step.get("run", true)) ?? "") ?? [];
   let score = 0;
   if (/^(?:test|tests|ci|check|checks|quality|verify)$/.test(normalizedId)) score += 20;
   else if (/(?:test|ci|check|quality|verify)/.test(normalizedId)) score += 10;
-  if (commands.some((command) => new RegExp(`^(?:${manager}|corepack\\s+${manager})\\s+(?:run\\s+)?(?:test|check|health)\\b`).test(command))) score += 5;
+  if (
+    commands.some((command) =>
+      new RegExp(`^(?:${manager}|corepack\\s+${manager})\\s+(?:run\\s+)?(?:test|check|health)\\b`).test(command),
+    )
+  )
+    score += 5;
   if (commands.some((command) => /\b(?:test|check|health)\b/.test(command))) score += 2;
   return score;
 }
 
-function jobInstallCandidate(job: YamlMapNode, preferredManager: PackageManagerId): { step: YamlMapNode; manager: PackageManagerId } | null {
+function jobInstallCandidate(
+  job: YamlMapNode,
+  preferredManager: PackageManagerId,
+): { step: YamlMapNode; manager: PackageManagerId } | null {
   const steps = asYamlSeq(job.get("steps", true));
   if (!steps) return null;
   const stepMaps = steps.items.map(asYamlMap).filter((step): step is YamlMapNode => step !== null);

@@ -15,7 +15,11 @@ describe("health task planner", () => {
     const context = await detectRepository(fixturePath("minimal-js"));
     const { config } = await readConfig(context.root);
     const audit = buildAuditModel(context, await detectAllProviders(context), config);
-    const tasks = await planHealthTasks(audit, config, { category: "tests", timeoutMs: 1_000, logger: createDiagnosticLogger({ quiet: true }) });
+    const tasks = await planHealthTasks(audit, config, {
+      category: "tests",
+      timeoutMs: 1_000,
+      logger: createDiagnosticLogger({ quiet: true }),
+    });
 
     expect(tasks).toHaveLength(1);
     expect(tasks[0]).toMatchObject({ provider: "script:test", category: "tests" });
@@ -25,14 +29,20 @@ describe("health task planner", () => {
   it("serializes root coverage after the test command it wraps", async () => {
     const root = await copyFixture("minimal-js");
     const manifestPath = `${root}/package.json`;
-    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as { devDependencies?: Record<string, string>; scripts: Record<string, string> };
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
+      devDependencies?: Record<string, string>;
+      scripts: Record<string, string>;
+    };
     manifest.devDependencies = { ...manifest.devDependencies, c8: "1.0.0" };
     manifest.scripts["health:coverage"] = "c8 --all npm run test";
     await writeFile(manifestPath, `${JSON.stringify(manifest)}\n`);
     const context = await detectRepository(root);
     const { config } = await readConfig(context.root);
     const audit = buildAuditModel(context, await detectAllProviders(context), config);
-    const tasks = await planHealthTasks(audit, config, { timeoutMs: 1_000, logger: createDiagnosticLogger({ quiet: true }) });
+    const tasks = await planHealthTasks(audit, config, {
+      timeoutMs: 1_000,
+      logger: createDiagnosticLogger({ quiet: true }),
+    });
 
     expect(tasks.find((task) => task.provider === "c8")?.dependsOn).toBe("script:test");
   });
@@ -61,7 +71,10 @@ describe("health task planner", () => {
     });
     const registry = new ProviderRegistry([...builtin.providers, provider], builtin.categories);
     const audit = buildAuditModel(context, await detectAllProviders(context, registry.providers), config, registry);
-    const tasks = await planHealthTasks(audit, config, { timeoutMs: 1_000, logger: createDiagnosticLogger({ quiet: true }) });
+    const tasks = await planHealthTasks(audit, config, {
+      timeoutMs: 1_000,
+      logger: createDiagnosticLogger({ quiet: true }),
+    });
     expect(tasks.map((task) => task.provider)).toContain("synthetic-command");
   });
 });

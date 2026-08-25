@@ -14,6 +14,19 @@ pnpm install
 pnpm verify
 ```
 
+To format code and check format guardrails:
+
+```bash
+pnpm format         # Auto-format codebase with Prettier
+pnpm health:format  # Verify formatting consistency
+```
+
+To install local standalone health tools (`osv-scanner`, `gitleaks`, `actionlint`):
+
+```bash
+pnpm health:tools:install
+```
+
 Run packaged acceptance tests before submitting changes that affect setup, execution, or publishing:
 
 ```bash

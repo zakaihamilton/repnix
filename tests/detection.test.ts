@@ -30,13 +30,18 @@ describe("repository detection", () => {
     const library = await detectRepository(fixturePath("npm-library"));
     const monorepo = await detectRepository(fixturePath("pnpm-monorepo"));
     expect(next.kinds).toEqual(expect.arrayContaining(["nextjs", "react"]));
-    expect((await detectAllProviders(next)).get("biome")?.activeCapabilities).toMatchObject({ linting: true, formatting: true });
+    expect((await detectAllProviders(next)).get("biome")?.activeCapabilities).toMatchObject({
+      linting: true,
+      formatting: true,
+    });
     expect(library.kinds).toContain("npm-library");
     expect(monorepo).toMatchObject({ packageManager: "pnpm", isMonorepo: true, packageCount: 3 });
     expect(monorepo.installedPackageOrigins.get("typescript")).toContain("packages/a/package.json");
     expect(monorepo.workspaceRoots).toEqual([".", "packages/a", "packages/b"]);
     expect(monorepo.workspaceSourceFiles?.["packages/a"]).toContain("packages/a/src/index.ts");
-    expect((await detectAllProviders(monorepo)).get("syncpack")?.activeCapabilities.workspaceConsistency).toBeUndefined();
+    expect(
+      (await detectAllProviders(monorepo)).get("syncpack")?.activeCapabilities.workspaceConsistency,
+    ).toBeUndefined();
   });
 
   it("reports conflicting lockfiles instead of guessing", async () => {
@@ -45,14 +50,19 @@ describe("repository detection", () => {
     await writeFile(path.join(root, "yarn.lock"), "# stale\n");
     const context = await detectRepository(root);
     expect(context.packageManager).toBeNull();
-    expect(context.diagnostics).toContainEqual(expect.objectContaining({ code: "ambiguous-package-manager", severity: "error" }));
+    expect(context.diagnostics).toContainEqual(
+      expect.objectContaining({ code: "ambiguous-package-manager", severity: "error" }),
+    );
   });
 
   it("does not credit installed architecture or bundle tools until rules and budgets are active", async () => {
     const root = await copyFixture("react-eslint");
     temporary.push(root);
     const manifestPath = path.join(root, "package.json");
-    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as { devDependencies: Record<string, string>; [key: string]: unknown };
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
+      devDependencies: Record<string, string>;
+      [key: string]: unknown;
+    };
     manifest.devDependencies["eslint-plugin-boundaries"] = "^6.0.0";
     manifest.devDependencies["size-limit"] = "^12.0.0";
     await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
@@ -61,7 +71,10 @@ describe("repository detection", () => {
     expect(providers.get("eslint-boundaries")?.activeCapabilities.architectureRules).toBeUndefined();
     expect(providers.get("size-limit")?.activeCapabilities.bundleBudget).toBeUndefined();
 
-    await writeFile(path.join(root, "eslint.config.js"), `export default [{ rules: { "boundaries/dependencies": "error" } }];\n`);
+    await writeFile(
+      path.join(root, "eslint.config.js"),
+      `export default [{ rules: { "boundaries/dependencies": "error" } }];\n`,
+    );
     manifest["size-limit"] = [{ path: "dist/app.js", limit: "10 kB" }];
     await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
     providers = await detectAllProviders(await detectRepository(root));
@@ -115,7 +128,10 @@ describe("repository detection", () => {
     const root = await copyFixture("minimal-js");
     temporary.push(root);
     const manifestPath = path.join(root, "package.json");
-    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as { scripts: Record<string, string>; devDependencies?: Record<string, string> };
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
+      scripts: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    };
     manifest.devDependencies ??= {};
     manifest.devDependencies.prettier = "^3.0.0";
     manifest.scripts.format = "corepack pnpm exec prettier --check .";
@@ -128,7 +144,10 @@ describe("repository detection", () => {
     const root = await copyFixture("minimal-js");
     temporary.push(root);
     const manifestPath = path.join(root, "package.json");
-    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as { devDependencies?: Record<string, string>; scripts?: Record<string, string> };
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
+      devDependencies?: Record<string, string>;
+      scripts?: Record<string, string>;
+    };
     manifest.devDependencies ??= {};
     manifest.devDependencies["dependency-cruiser"] = "^17.0.0";
     manifest.scripts ??= {};
@@ -175,7 +194,10 @@ describe("repository detection", () => {
     const root = await copyFixture("minimal-js");
     temporary.push(root);
     const manifestPath = path.join(root, "package.json");
-    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as { scripts: Record<string, string>; devDependencies?: Record<string, string> };
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
+      scripts: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    };
     manifest.devDependencies ??= {};
     manifest.devDependencies.vitest = "^3.0.0";
     manifest.scripts["test:coverage"] = "vitest run --coverage";
@@ -189,25 +211,33 @@ describe("repository detection", () => {
     const root = await copyFixture("minimal-js");
     temporary.push(root);
     const manifestPath = path.join(root, "package.json");
-    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as { scripts: Record<string, string>; devDependencies?: Record<string, string> };
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
+      scripts: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    };
     manifest.devDependencies ??= {};
     manifest.devDependencies["markdownlint-cli2"] = "^0.23.0";
-    manifest.scripts["health:documentation"] = "markdownlint-cli2 \"**/*.md\"";
+    manifest.scripts["health:documentation"] = 'markdownlint-cli2 "**/*.md"';
     await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
     const providers = await detectAllProviders(await detectRepository(root));
     expect(providers.get("markdownlint")?.activeCapabilities.documentation).toBe(true);
 
-    expect(manifest.scripts["health:documentation"]).toBe("markdownlint-cli2 \"**/*.md\"");
+    expect(manifest.scripts["health:documentation"]).toBe('markdownlint-cli2 "**/*.md"');
   });
 
   it("credits configured accessibility rules and workspace consistency", async () => {
     const reactRoot = await copyFixture("react-eslint");
     temporary.push(reactRoot);
     const reactManifestPath = path.join(reactRoot, "package.json");
-    const reactManifest = JSON.parse(await readFile(reactManifestPath, "utf8")) as { devDependencies: Record<string, string> };
+    const reactManifest = JSON.parse(await readFile(reactManifestPath, "utf8")) as {
+      devDependencies: Record<string, string>;
+    };
     reactManifest.devDependencies["eslint-plugin-jsx-a11y"] = "^6.10.2";
     await writeFile(reactManifestPath, `${JSON.stringify(reactManifest, null, 2)}\n`);
-    await writeFile(path.join(reactRoot, "eslint.config.js"), `export default [{ plugins: { "jsx-a11y": {} }, rules: { "jsx-a11y/alt-text": "error" } }];\n`);
+    await writeFile(
+      path.join(reactRoot, "eslint.config.js"),
+      `export default [{ plugins: { "jsx-a11y": {} }, rules: { "jsx-a11y/alt-text": "error" } }];\n`,
+    );
     const reactProviders = await detectAllProviders(await detectRepository(reactRoot));
     expect(reactProviders.get("jsx-a11y")?.activeCapabilities.accessibilityRules).toBe(true);
 

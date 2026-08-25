@@ -12,14 +12,17 @@ const changelogHeading = new RegExp(`^## ${manifest.version.replaceAll(".", "\\.
 
 const errors = [];
 if (sourceVersion !== manifest.version) {
-  errors.push(`package.json version ${manifest.version} does not match src/core/version.ts ${sourceVersion ?? "(missing)"}.`);
+  errors.push(
+    `package.json version ${manifest.version} does not match src/core/version.ts ${sourceVersion ?? "(missing)"}.`,
+  );
 }
 if (!changelogHeading.test(changelog)) {
   errors.push(`CHANGELOG.md does not contain a release heading for ${manifest.version}.`);
 }
 
 function pendingChangesetFiles() {
-  return fs.readdirSync(path.join(root, ".changeset"))
+  return fs
+    .readdirSync(path.join(root, ".changeset"))
     .filter((name) => name.endsWith(".md") && name.toLowerCase() !== "readme.md");
 }
 
@@ -62,7 +65,9 @@ if (errors.length) {
   const pending = pendingChangesetFiles();
   const baseVersion = baseManifestVersion();
   if (pending.length === 0 && baseVersion && baseVersion !== manifest.version) {
-    process.stdout.write(`Release ${manifest.version} is already prepared against ${baseVersion}; pending changeset status is not required.\n`);
+    process.stdout.write(
+      `Release ${manifest.version} is already prepared against ${baseVersion}; pending changeset status is not required.\n`,
+    );
   } else {
     runChangesetStatus();
   }

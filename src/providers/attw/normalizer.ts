@@ -50,51 +50,60 @@ export function normalizeAttw(report: unknown, options: AttwNormalizationOptions
   }
   const analysisRecord = analysis as Record<string, unknown>;
   if (!analysisRecord.types) {
-    return [createFinding({
-      provider: "Are The Types Wrong?",
-      category: "package-health",
-      type: "attw-untyped-package",
-      severity: "error",
-      message: "The packed package does not contain TypeScript declarations.",
-      file: "package.json",
-      metadata: {
-        packageName: analysisRecord.packageName,
-        packageVersion: analysisRecord.packageVersion,
-      },
-    })];
+    return [
+      createFinding({
+        provider: "Are The Types Wrong?",
+        category: "package-health",
+        type: "attw-untyped-package",
+        severity: "error",
+        message: "The packed package does not contain TypeScript declarations.",
+        file: "package.json",
+        metadata: {
+          packageName: analysisRecord.packageName,
+          packageVersion: analysisRecord.packageVersion,
+        },
+      }),
+    ];
   }
   if (!Array.isArray(analysisRecord.problems)) {
     throw new Error("Are The Types Wrong? JSON report has an unsupported shape.");
   }
-  const ignoredResolutions = options.profile === "esm-only"
-    ? new Set(["node10", "node16-cjs"])
-    : options.profile === "node16"
-      ? new Set(["node10"])
-      : new Set<string>();
+  const ignoredResolutions =
+    options.profile === "esm-only"
+      ? new Set(["node10", "node16-cjs"])
+      : options.profile === "node16"
+        ? new Set(["node10"])
+        : new Set<string>();
   const ignoredRules = new Set(options.ignoreRules ?? []);
-  return analysisRecord.problems.filter((problem) => {
-    if (!problem || typeof problem !== "object") return true;
-    const item = problem as Record<string, unknown>;
-    return !(typeof item.kind === "string" && ignoredRules.has(FLAGS[item.kind] ?? "")) &&
-      !(typeof item.resolutionKind === "string" && ignoredResolutions.has(item.resolutionKind));
-  }).map((problem) => {
-    if (!problem || typeof problem !== "object" || typeof (problem as Record<string, unknown>).kind !== "string") {
-      throw new Error("Are The Types Wrong? JSON report contains a malformed problem.");
-    }
-    const item = problem as Record<string, unknown>;
-    const kind = item.kind as string;
-    const qualifiers = [
-      typeof item.entrypoint === "string" ? `entry point ${item.entrypoint}` : null,
-      typeof item.resolutionKind === "string" ? item.resolutionKind : null,
-    ].filter(Boolean).join(", ");
-    return createFinding({
-      provider: "Are The Types Wrong?",
-      category: "package-health",
-      type: `attw-${kind.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase()}`,
-      severity: "error",
-      message: `${label(kind)}${qualifiers ? ` (${qualifiers})` : ""}.`,
-      file: "package.json",
-      metadata: { ...item },
+  return analysisRecord.problems
+    .filter((problem) => {
+      if (!problem || typeof problem !== "object") return true;
+      const item = problem as Record<string, unknown>;
+      return (
+        !(typeof item.kind === "string" && ignoredRules.has(FLAGS[item.kind] ?? "")) &&
+        !(typeof item.resolutionKind === "string" && ignoredResolutions.has(item.resolutionKind))
+      );
+    })
+    .map((problem) => {
+      if (!problem || typeof problem !== "object" || typeof (problem as Record<string, unknown>).kind !== "string") {
+        throw new Error("Are The Types Wrong? JSON report contains a malformed problem.");
+      }
+      const item = problem as Record<string, unknown>;
+      const kind = item.kind as string;
+      const qualifiers = [
+        typeof item.entrypoint === "string" ? `entry point ${item.entrypoint}` : null,
+        typeof item.resolutionKind === "string" ? item.resolutionKind : null,
+      ]
+        .filter(Boolean)
+        .join(", ");
+      return createFinding({
+        provider: "Are The Types Wrong?",
+        category: "package-health",
+        type: `attw-${kind.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase()}`,
+        severity: "error",
+        message: `${label(kind)}${qualifiers ? ` (${qualifiers})` : ""}.`,
+        file: "package.json",
+        metadata: { ...item },
+      });
     });
-  });
 }

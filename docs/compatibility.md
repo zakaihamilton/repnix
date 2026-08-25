@@ -2,14 +2,14 @@
 
 RepNix's supported JavaScript and TypeScript repository shapes are protected by two read-only pilot corpora. A checked-in corpus runs on every verification, while an external OSS corpus checks selected public repositories at pinned commits each week and on demand. Neither installs provider packages or modifies a pilot repository.
 
-| Pilot | Represents | Package manager | Expected role |
-| --- | --- | --- | --- |
-| `minimal-js` | Small JavaScript command-line or Node application | npm | Node application |
-| `node-typescript` | TypeScript Node application | Yarn | Node application |
-| `npm-library` | Publishable typed package | npm | Library |
-| `react-eslint` | React application with existing linting | npm | Node application + React |
-| `next-biome` | Next.js web application with Biome | pnpm | Web application + Next.js + React |
-| `pnpm-monorepo` | Multi-package workspace | pnpm | Three Node application scopes |
+| Pilot             | Represents                                        | Package manager | Expected role                     |
+| ----------------- | ------------------------------------------------- | --------------- | --------------------------------- |
+| `minimal-js`      | Small JavaScript command-line or Node application | npm             | Node application                  |
+| `node-typescript` | TypeScript Node application                       | Yarn            | Node application                  |
+| `npm-library`     | Publishable typed package                         | npm             | Library                           |
+| `react-eslint`    | React application with existing linting           | npm             | Node application + React          |
+| `next-biome`      | Next.js web application with Biome                | pnpm            | Web application + Next.js + React |
+| `pnpm-monorepo`   | Multi-package workspace                           | pnpm            | Three Node application scopes     |
 
 For every checked-in pilot, the suite asserts the detected package manager and roles, the complete recommendation list, and the packages and files in `repnix setup --plan --format json`. It snapshots every file before and after both commands, including an unexpected `node_modules` directory, so an audit or plan that mutates a repository fails the test.
 

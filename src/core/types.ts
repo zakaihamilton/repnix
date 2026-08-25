@@ -1,13 +1,7 @@
 import type { HealthCategory } from "./health-category.js";
 
 export type PackageManagerId = "npm" | "pnpm" | "yarn" | "bun";
-export type RepositoryKind =
-  | "typescript"
-  | "react"
-  | "nextjs"
-  | "node-application"
-  | "npm-library"
-  | "monorepo";
+export type RepositoryKind = "typescript" | "react" | "nextjs" | "node-application" | "npm-library" | "monorepo";
 
 export type RepositoryRole = "cli" | "library" | "web-app" | "node-app" | "tooling";
 

@@ -22,7 +22,10 @@ export async function auditRepository(cwd = process.cwd(), options: DiagnosticOp
   });
   const registry = createProviderRegistry();
   const { config } = await readConfig(detectedContext.root);
-  validateConfigCategories(config, registry.categories.map((category) => category.id));
+  validateConfigCategories(
+    config,
+    registry.categories.map((category) => category.id),
+  );
   const context = applyScopeOverrides(detectedContext, config);
   const detections = await detectAllProviders(context, registry.providers);
   const activeProviders = [...detections.entries()]
@@ -38,7 +41,14 @@ function serializeAudit(model: AuditModel): object {
     repository: {
       root: model.context.root,
       packageManager: model.context.packageManager,
-      scopes: model.context.scopes.map((scope) => ({ path: scope.path, roles: scope.roles, roleEvidence: scope.roleEvidence, frameworks: scope.frameworks, languages: scope.languages, sourceFiles: scope.sourceFiles.length })),
+      scopes: model.context.scopes.map((scope) => ({
+        path: scope.path,
+        roles: scope.roles,
+        roleEvidence: scope.roleEvidence,
+        frameworks: scope.frameworks,
+        languages: scope.languages,
+        sourceFiles: scope.sourceFiles.length,
+      })),
       diagnostics: model.context.diagnostics,
     },
     coverage: model.coverage,
@@ -47,8 +57,13 @@ function serializeAudit(model: AuditModel): object {
 }
 
 export async function auditCommand(options: AuditOptions = {}): Promise<number> {
-  if (options.format && !["text", "json"].includes(options.format)) throw new Error(`Unknown audit format '${options.format}'. Use text or json.`);
+  if (options.format && !["text", "json"].includes(options.format))
+    throw new Error(`Unknown audit format '${options.format}'. Use text or json.`);
   const model = await auditRepository(process.cwd(), options);
-  process.stdout.write(options.format === "json" ? `${JSON.stringify(serializeAudit(model), null, 2)}\n` : `${renderAudit(model, options.details === undefined ? {} : { details: options.details })}\n`);
+  process.stdout.write(
+    options.format === "json"
+      ? `${JSON.stringify(serializeAudit(model), null, 2)}\n`
+      : `${renderAudit(model, options.details === undefined ? {} : { details: options.details })}\n`,
+  );
   return model.context.diagnostics.some((diagnostic) => diagnostic.severity === "error") ? 2 : 0;
 }

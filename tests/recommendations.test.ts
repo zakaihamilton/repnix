@@ -12,12 +12,33 @@ describe("recommendation engine", () => {
     const context = await detectRepository(fixturePath("react-eslint"));
     const { config } = await readConfig(context.root);
     const model = buildAuditModel(context, await detectAllProviders(context), config);
-    expect(model.coverage.find((entry) => entry.category === "lint")).toMatchObject({ status: "covered", providers: ["ESLint"] });
-    expect(model.recommendations.filter((item) => item.actionable && item.priority === "baseline").map((item) => item.provider)).toEqual(["knip", "jscpd", "c8"]);
-    expect(model.recommendations.map((item) => item.provider)).toEqual(["knip", "jscpd", "osv-scanner", "eslint-boundaries", "c8", "stryker", "gitleaks", "license-checker"]);
+    expect(model.coverage.find((entry) => entry.category === "lint")).toMatchObject({
+      status: "covered",
+      providers: ["ESLint"],
+    });
+    expect(
+      model.recommendations
+        .filter((item) => item.actionable && item.priority === "baseline")
+        .map((item) => item.provider),
+    ).toEqual(["knip", "jscpd", "c8"]);
+    expect(model.recommendations.map((item) => item.provider)).toEqual([
+      "knip",
+      "jscpd",
+      "osv-scanner",
+      "eslint-boundaries",
+      "c8",
+      "stryker",
+      "gitleaks",
+      "license-checker",
+    ]);
     expect(context.scopes[0]?.roles).toEqual(["node-app"]);
-    expect(model.recommendations.some((item) => ["size-limit", "jsx-a11y", "lhci"].includes(item.provider))).toBe(false);
-    expect(model.recommendations.find((item) => item.provider === "eslint-boundaries")).toMatchObject({ priority: "optional", actionable: false });
+    expect(model.recommendations.some((item) => ["size-limit", "jsx-a11y", "lhci"].includes(item.provider))).toBe(
+      false,
+    );
+    expect(model.recommendations.find((item) => item.provider === "eslint-boundaries")).toMatchObject({
+      priority: "optional",
+      actionable: false,
+    });
     expect(model.recommendations.every((item) => item.reason.length > 40)).toBe(true);
   });
 
@@ -25,7 +46,10 @@ describe("recommendation engine", () => {
     const context = await detectRepository(fixturePath("minimal-js"));
     const { config } = await readConfig(context.root);
     const model = buildAuditModel(context, await detectAllProviders(context), config);
-    expect(model.recommendations.find((item) => item.provider === "dependency-cruiser")).toMatchObject({ priority: "optional", actionable: true });
+    expect(model.recommendations.find((item) => item.provider === "dependency-cruiser")).toMatchObject({
+      priority: "optional",
+      actionable: true,
+    });
     expect(model.recommendations.some((item) => item.provider === "eslint-boundaries")).toBe(false);
   });
 
@@ -45,7 +69,9 @@ describe("recommendation engine", () => {
       status: "missing",
       missingCapabilities: ["packagePublishing", "typesCompatibility"],
     });
-    expect(model.recommendations.filter((item) => item.category === "package-health").map((item) => item.provider)).toEqual(["publint", "attw"]);
+    expect(
+      model.recommendations.filter((item) => item.category === "package-health").map((item) => item.provider),
+    ).toEqual(["publint", "attw"]);
     expect(model.recommendations.find((item) => item.provider === "attw")?.reason).toContain("package.json#types");
   });
 
@@ -60,7 +86,9 @@ describe("recommendation engine", () => {
       providers: ["Publint"],
       missingCapabilities: ["typesCompatibility"],
     });
-    expect(model.recommendations.filter((item) => item.category === "package-health").map((item) => item.provider)).toEqual(["attw"]);
+    expect(
+      model.recommendations.filter((item) => item.category === "package-health").map((item) => item.provider),
+    ).toEqual(["attw"]);
   });
 
   it("only automates Changesets when the Git remote default branch is known", async () => {
@@ -71,7 +99,10 @@ describe("recommendation engine", () => {
 
     context.gitDefaultBranch = "main";
     model = buildAuditModel(context, await detectAllProviders(context), config);
-    expect(model.recommendations.find((item) => item.provider === "changesets")).toMatchObject({ actionable: true, priority: "optional" });
+    expect(model.recommendations.find((item) => item.provider === "changesets")).toMatchObject({
+      actionable: true,
+      priority: "optional",
+    });
   });
 
   it("uses provider.recommend from the registry", async () => {
@@ -96,10 +127,25 @@ describe("recommendation engine", () => {
     });
     const registry = new ProviderRegistry(
       [...builtin.providers, provider],
-      [...builtin.categories, { id: "synthetic-health", label: "Synthetic health", description: "Test-only category", requiredCapabilities: ["syntheticCheck"], applicable: () => ({ applicable: true, scopes: ["."], evidence: ["test"] }) }],
+      [
+        ...builtin.categories,
+        {
+          id: "synthetic-health",
+          label: "Synthetic health",
+          description: "Test-only category",
+          requiredCapabilities: ["syntheticCheck"],
+          applicable: () => ({ applicable: true, scopes: ["."], evidence: ["test"] }),
+        },
+      ],
     );
     const model = buildAuditModel(context, await detectAllProviders(context, registry.providers), config, registry);
-    expect(model.recommendations[0]).toMatchObject({ provider: "synthetic-recommend", name: "Synthetic Recommend", category: "synthetic-health", priority: "baseline", actionable: true });
+    expect(model.recommendations[0]).toMatchObject({
+      provider: "synthetic-recommend",
+      name: "Synthetic Recommend",
+      category: "synthetic-health",
+      priority: "baseline",
+      actionable: true,
+    });
     expect(model.recommendations.map((item) => item.provider)).toContain("knip");
   });
 });
