@@ -96,17 +96,18 @@ RepNix gives you a clear inventory and a deliberate next step:
 
 ## Commands
 
-| Command                             | Purpose                                                                       |     Changes files?      |
-| ----------------------------------- | ----------------------------------------------------------------------------- | :---------------------: |
-| `repnix audit`                      | See what your repository already checks, what is missing, and why it matters. |           No            |
-| `repnix setup`                      | Review and apply recommended checks through an interactive preview.           | Yes, after confirmation |
-| `repnix setup --plan --format json` | Emit a serializable setup plan without applying it.                           |           No            |
-| `repnix setup --apply-plan <file>`  | Revalidate, review, and apply a saved plan.                                   | Yes, after confirmation |
-| `repnix check`                      | Run all active health checks and get a short result.                          |           No            |
-| `repnix check <category>`           | Run one category, such as `dead-code` or `security`.                          |           No            |
-| `repnix check --details`            | Show findings, locations, remediation, and baseline state.                    |           No            |
-| `repnix check --format json\|sarif` | Emit machine-readable output to stdout.                                       |           No            |
-| `repnix check --write-baseline`     | Record reviewed current findings for gradual CI adoption.                     |           Yes           |
+| Command                             | Purpose                                                                        |     Changes files?      |
+| ----------------------------------- | ------------------------------------------------------------------------------ | :---------------------: |
+| `repnix audit`                      | See what your repository already checks, what is missing, and why it matters.  |           No            |
+| `repnix setup`                      | Review and apply recommended checks through an interactive preview.            | Yes, after confirmation |
+| `repnix setup --plan --format json` | Emit a serializable setup plan without applying it.                            |           No            |
+| `repnix setup --apply-plan <file>`  | Revalidate, review, and apply a saved plan.                                    | Yes, after confirmation |
+| `repnix check`                      | Run all active health checks and get a short result.                           |           No            |
+| `repnix check <category>`           | Run one category, such as `dead-code` or `security`.                           |           No            |
+| `repnix check --details`            | Show findings, locations, remediation, and baseline state.                     |           No            |
+| `repnix check --format json\|sarif` | Emit machine-readable output to stdout.                                        |           No            |
+| `repnix check --write-baseline`     | Record reviewed current findings for gradual CI adoption.                      |           Yes           |
+| `repnix fix [category]`             | Automatically apply available fixes for active providers (format, lint, docs). |           Yes           |
 
 Examples:
 

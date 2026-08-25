@@ -4,7 +4,7 @@ import { CATEGORY_LABELS, HEALTH_CATEGORIES, type HealthCategory } from "../core
 import { renderHealth, renderHealthDetails, renderSarif } from "../reporting/console-reporter.js";
 import { runHealth } from "../runners/health-runner.js";
 import { auditRepository } from "./audit.js";
-import { resolveDiagnosticLogger, type DiagnosticOptions } from "./options.js";
+import { assertValidCategory, resolveDiagnosticLogger, type DiagnosticOptions } from "./options.js";
 
 export interface CheckOptions extends DiagnosticOptions {
   format?: "summary" | "details" | "json" | "sarif";
@@ -18,12 +18,7 @@ export async function checkCommand(category: string | undefined, options: CheckO
   const logger = resolveDiagnosticLogger(options);
   const audit = await auditRepository(process.cwd(), { ...options, logger });
   const availableCategories = audit.registry?.categories.map((entry) => entry.id) ?? HEALTH_CATEGORIES;
-  if (category && !availableCategories.includes(category)) {
-    const choices = availableCategories.map((name) => `${name} (${CATEGORY_LABELS[name] ?? name})`).join(", ");
-    throw new Error(
-      `Unknown health category '${category}'. Use a category name such as 'dead-code' or 'security'. Available categories: ${choices}`,
-    );
-  }
+  assertValidCategory(category, availableCategories, CATEGORY_LABELS);
   const { config } = await readConfig(audit.context.root);
   const baseline =
     config.baseline && !options.writeBaseline

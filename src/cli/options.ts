@@ -134,3 +134,16 @@ export function addDiagnosticOptions(command: Command): Command {
     .option("--log-format <format>", `set diagnostic format (${LOG_FORMATS.join(" | ")})`, parseLogFormat)
     .option("--timeout <seconds>", "set the maximum runtime for each repository command", parseTimeout);
 }
+
+export function assertValidCategory(
+  category: string | undefined,
+  availableCategories: string[],
+  categoryLabels: Record<string, string>,
+): void {
+  if (category && !availableCategories.includes(category)) {
+    const choices = availableCategories.map((name) => `${name} (${categoryLabels[name] ?? name})`).join(", ");
+    throw new Error(
+      `Unknown health category '${category}'. Use a category name such as 'dead-code' or 'security'. Available categories: ${choices}`,
+    );
+  }
+}

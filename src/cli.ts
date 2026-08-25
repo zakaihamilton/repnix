@@ -2,6 +2,7 @@
 import { Command } from "commander";
 import { auditCommand } from "./cli/audit.js";
 import { checkCommand } from "./cli/check.js";
+import { fixCommand } from "./cli/fix.js";
 import { setupCommand } from "./cli/setup.js";
 import { addDiagnosticOptions, type DiagnosticOptions } from "./cli/options.js";
 import { VERSION } from "./core/version.js";
@@ -14,7 +15,7 @@ const program = new Command()
   .showHelpAfterError()
   .addHelpText(
     "after",
-    `\nStart here:\n  repnix audit   See what your repository already checks and what is missing.\n  repnix setup   Add recommended checks after reviewing a preview.\n  repnix check   Run active checks; add --details for remediation.\n\nAI-assisted fixes:\n  The full-screen setup check saves .repnix/health-report.md. Attach or drop that\n  file into an AI coding assistant, ask it to fix the reported issues, review its\n  changes, then run repnix check to verify them.\n\nHealth categories:\n${HEALTH_CATEGORIES.map((category) => `  ${category.padEnd(16)} ${CATEGORY_LABELS[category]} — ${CATEGORY_DESCRIPTIONS[category]}`).join("\n")}\n`,
+    `\nStart here:\n  repnix audit   See what your repository already checks and what is missing.\n  repnix setup   Add recommended checks after reviewing a preview.\n  repnix check   Run active checks; add --details for remediation.\n  repnix fix     Automatically apply available fixes for active providers.\n\nAI-assisted fixes:\n  The full-screen setup check saves .repnix/health-report.md. Attach or drop that\n  file into an AI coding assistant, ask it to fix the reported issues, review its\n  changes, then run repnix check to verify them.\n\nHealth categories:\n${HEALTH_CATEGORIES.map((category) => `  ${category.padEnd(16)} ${CATEGORY_LABELS[category]} — ${CATEGORY_DESCRIPTIONS[category]}`).join("\n")}\n`,
   );
 
 addDiagnosticOptions(
@@ -65,6 +66,15 @@ const check = program
     },
   );
 addDiagnosticOptions(check);
+
+const fix = program
+  .command("fix")
+  .description("Automatically apply available fixes for active providers (e.g. format, lint:fix, docs:fix)")
+  .argument("[category]", "optional category name, for example format, lint, or documentation")
+  .action(async (category: string | undefined, options: DiagnosticOptions) => {
+    process.exitCode = await fixCommand(category, options);
+  });
+addDiagnosticOptions(fix);
 
 try {
   await program.parseAsync(process.argv);
