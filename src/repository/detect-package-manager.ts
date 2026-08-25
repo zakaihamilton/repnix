@@ -15,10 +15,7 @@ export interface PackageManagerDetection {
   diagnostics: RepositoryDiagnostic[];
 }
 
-export function detectPackageManager(
-  packageJson: PackageJson,
-  files: Set<string>,
-): PackageManagerDetection {
+export function detectPackageManager(packageJson: PackageJson, files: Set<string>): PackageManagerDetection {
   const diagnostics: RepositoryDiagnostic[] = [];
   const declared = packageJson.packageManager?.split("@")[0];
   if (declared) {

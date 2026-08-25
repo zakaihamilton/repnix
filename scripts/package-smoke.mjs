@@ -9,18 +9,27 @@ const consumer = path.join(temporary, "consumer");
 try {
   const projectManifest = JSON.parse(await readFile(path.join(projectRoot, "package.json"), "utf8"));
   await mkdir(path.join(consumer, "src"), { recursive: true });
-  await writeFile(path.join(consumer, "package.json"), `${JSON.stringify({
-    name: "repnix-package-smoke",
-    version: "1.0.0",
-    private: true,
-  }, null, 2)}\n`);
+  await writeFile(
+    path.join(consumer, "package.json"),
+    `${JSON.stringify(
+      {
+        name: "repnix-package-smoke",
+        version: "1.0.0",
+        private: true,
+      },
+      null,
+      2,
+    )}\n`,
+  );
   await writeFile(path.join(consumer, "src", "index.js"), "export const answer = 42;\n");
 
   const tarball = await packProject(temporary);
   for (const staleArtifact of ["dist/cli/explain.js", "dist/cli/explain.d.ts", "dist/cli/explain.js.map"]) {
     try {
       await access(path.join(projectRoot, staleArtifact));
-      throw new Error(`Stale removed build artifact is present: ${staleArtifact}. Run the clean build before packaging.`);
+      throw new Error(
+        `Stale removed build artifact is present: ${staleArtifact}. Run the clean build before packaging.`,
+      );
     } catch (error) {
       if (error?.code !== "ENOENT") throw error;
     }

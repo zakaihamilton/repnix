@@ -1,7 +1,12 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { ProviderDetection, RepositoryContext } from "../core/types.js";
-import { isNonMutatingQualityCommand, isNonMutatingTestCommand, matchesScriptPattern, safeTestScript } from "../repository/script-detection.js";
+import {
+  isNonMutatingQualityCommand,
+  isNonMutatingTestCommand,
+  matchesScriptPattern,
+  safeTestScript,
+} from "../repository/script-detection.js";
 import { MARKDOWNLINT_CLI_ARGS, markdownlintScriptCommand } from "./markdownlint/command.js";
 import { normalizeMarkdownlintResult } from "./markdownlint/normalizer.js";
 import { planChangesetsInstall, planJsxA11yInstall } from "./plan-install.js";
@@ -30,11 +35,13 @@ import { executableOnPath } from "../runners/health/task-executor.js";
 
 export type ProviderDescriptor = ProviderModule;
 
-const quoteScriptArg = (value: string) => /\s/.test(value) ? `"${value.replaceAll('"', '\\"')}"` : value;
+const quoteScriptArg = (value: string) => (/\s/.test(value) ? `"${value.replaceAll('"', '\\"')}"` : value);
 
 function packageManagerRun(context: RepositoryContext, script: string): string {
   if (!context.packageManager) return `run ${script}`;
-  return context.packageManager === "yarn" ? `${context.packageManager} ${script}` : `${context.packageManager} run ${script}`;
+  return context.packageManager === "yarn"
+    ? `${context.packageManager} ${script}`
+    : `${context.packageManager} run ${script}`;
 }
 
 export const PROVIDERS: ProviderDescriptor[] = [
@@ -90,9 +97,17 @@ export const PROVIDERS: ProviderDescriptor[] = [
     packages: ["prettier"],
     configPatterns: [/(^|\/)\.prettierrc(?:\.[^/]+)?$/, /(^|\/)prettier\.config\.[cm]?[jt]s$/],
     scriptPattern: /(^|\s|&&|\|)prettier(?:\s|$)/,
+    scriptNames: ["health:format", "format", "format:check", "check:format", "format-check"],
     capabilities: { formatting: true },
+    zeroConfig: true,
     description: "Checks that files follow one consistent formatting style.",
     documentationUrl: "https://prettier.io/docs/en/",
+    setup: {
+      packageName: "prettier",
+      scriptName: "health:format",
+      scriptCommand: () => "prettier --check .",
+      checks: ["Consistent file formatting across repository files."],
+    },
   },
   {
     id: "oxfmt",
@@ -159,7 +174,8 @@ export const PROVIDERS: ProviderDescriptor[] = [
     setup: {
       packageName: "c8",
       scriptName: "health:coverage",
-      scriptCommand: (context) => `c8 --all --reporter=text ${packageManagerRun(context, safeTestScript(context.scripts) ?? "test")}`,
+      scriptCommand: (context) =>
+        `c8 --all --reporter=text ${packageManagerRun(context, safeTestScript(context.scripts) ?? "test")}`,
       checks: ["Test coverage reported for the repository's safe test command."],
     },
   },
@@ -299,7 +315,8 @@ export const PROVIDERS: ProviderDescriptor[] = [
     setup: {
       packageName: "dependency-cruiser",
       scriptName: "health:architecture",
-      scriptCommand: (context) => `depcruise --output-type json --config -- ${context.sourceRoots.map(quoteScriptArg).join(" ")}`,
+      scriptCommand: (context) =>
+        `depcruise --output-type json --config -- ${context.sourceRoots.map(quoteScriptArg).join(" ")}`,
       checks: ["Circular dependencies and configured module-boundary violations."],
     },
   },
@@ -353,7 +370,11 @@ export const PROVIDERS: ProviderDescriptor[] = [
     capabilities: { secrets: true },
     binary: "gitleaks",
     searchPath: true,
-    command: { binary: "gitleaks", args: ["detect", "--source", ".", "--no-banner", "--redact", "--exit-code", "1"], searchPath: true },
+    command: {
+      binary: "gitleaks",
+      args: ["detect", "--source", ".", "--no-banner", "--redact", "--exit-code", "1"],
+      searchPath: true,
+    },
     zeroConfig: true,
     description: "Scans repository history and files for leaked secrets.",
     documentationUrl: "https://github.com/gitleaks/gitleaks",
@@ -521,24 +542,30 @@ export async function detectProvider(
       continue;
     }
     try {
-      if (descriptor.activeConfigPattern.test(await readFile(path.join(context.root, file), "utf8"))) configFiles.push(file);
+      if (descriptor.activeConfigPattern.test(await readFile(path.join(context.root, file), "utf8")))
+        configFiles.push(file);
     } catch {
       // Repository diagnostics handle malformed manifests; unreadable optional tool configs stay inactive.
     }
   }
   const scriptEntries = Object.entries(context.scripts).filter(([name, command]) => {
     if (!descriptor.scriptNames) return matchesScriptPattern(command, descriptor.scriptPattern);
-    const safe = descriptor.scriptKind === "quality" ? isNonMutatingQualityCommand(command) : isNonMutatingTestCommand(command);
+    const safe =
+      descriptor.scriptKind === "quality" ? isNonMutatingQualityCommand(command) : isNonMutatingTestCommand(command);
     // A conventional script name does not always identify its provider. In
     // particular, Vitest's --coverage mode is not c8, and an unrestricted
     // Markdown glob would lint dependency documentation as well as the app.
     const invokesNamedProvider = descriptor.id !== "c8" || matchesScriptPattern(command, descriptor.scriptPattern);
-    const excludesDependencyDocs = descriptor.id !== "markdownlint" || /(?:^|\s)["']?#node_modules["']?(?:\s|$)/.test(command);
+    const excludesDependencyDocs =
+      descriptor.id !== "markdownlint" || /(?:^|\s)["']?#node_modules["']?(?:\s|$)/.test(command);
     return descriptor.scriptNames.includes(name) && safe && invokesNamedProvider && excludesDependencyDocs;
   });
   const packageConfigKey = descriptor.packageJsonConfigKey ?? descriptor.id;
   const packageJsonConfig = Object.hasOwn(context.packageJson, packageConfigKey);
-  const packageJsonConfigActive = packageJsonConfig && (!descriptor.activeConfigPattern || descriptor.activeConfigPattern.test(JSON.stringify(context.packageJson[packageConfigKey])));
+  const packageJsonConfigActive =
+    packageJsonConfig &&
+    (!descriptor.activeConfigPattern ||
+      descriptor.activeConfigPattern.test(JSON.stringify(context.packageJson[packageConfigKey])));
   const pathBinary = descriptor.searchPath && descriptor.binary ? await executableOnPath(descriptor.binary) : null;
   const installed = Boolean(packageName || pathBinary);
   const installedAtRoot = packageName
@@ -549,7 +576,8 @@ export async function detectProvider(
   const active = descriptor.requiresConfiguration
     ? installed && (configFiles.length > 0 || packageJsonConfigActive)
     : scriptEntries.length > 0 ||
-      ((installedAtRoot || pathBinaryConfigured) && (configFiles.length > 0 || packageJsonConfigActive || descriptor.zeroConfig === true));
+      ((installedAtRoot || pathBinaryConfigured) &&
+        (configFiles.length > 0 || packageJsonConfigActive || descriptor.zeroConfig === true));
   const evidence: string[] = [];
   if (packageName) evidence.push(`${packageName} ${context.installedPackages.get(packageName)}`);
   if (pathBinary) evidence.push(pathBinary);
@@ -568,8 +596,13 @@ export async function detectProvider(
   return detection;
 }
 
-export async function detectAllProviders(context: RepositoryContext, providers: readonly ProviderDescriptor[] = PROVIDERS): Promise<Map<string, ProviderDetection>> {
-  const detections = await Promise.all(providers.map(async (provider) => [provider.id, await detectProvider(provider, context)] as const));
+export async function detectAllProviders(
+  context: RepositoryContext,
+  providers: readonly ProviderDescriptor[] = PROVIDERS,
+): Promise<Map<string, ProviderDetection>> {
+  const detections = await Promise.all(
+    providers.map(async (provider) => [provider.id, await detectProvider(provider, context)] as const),
+  );
   const result = new Map(detections);
   if (["jest", "vitest"].some((id) => result.get(id)?.activeCapabilities.testing)) {
     const generic = result.get("test-script");

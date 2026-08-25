@@ -82,7 +82,9 @@ async function setupWithPrompts(options: SetupOptions = {}): Promise<number> {
       value: recommendation.provider,
       label: `${recommendation.name} — ${builtinProvider(recommendation.provider)?.description ?? recommendation.reason}`,
     })),
-    initialValues: setupRecommendations.filter((recommendation) => recommendation.priority === "baseline").map((recommendation) => recommendation.provider),
+    initialValues: setupRecommendations
+      .filter((recommendation) => recommendation.priority === "baseline")
+      .map((recommendation) => recommendation.provider),
     required: false,
   });
   if (isCancel(selected)) return 0;
@@ -103,15 +105,26 @@ async function setupWithPrompts(options: SetupOptions = {}): Promise<number> {
   note(preview || "No changes", "Planned changes");
   const apply = await confirm({ message: "Apply these reviewed changes?", initialValue: false });
   if (isCancel(apply) || !apply) return 0;
-  await applyInstallPlan(audit.context, plan, logger, options.timeout === undefined ? undefined : options.timeout * 1000);
+  await applyInstallPlan(
+    audit.context,
+    plan,
+    logger,
+    options.timeout === undefined ? undefined : options.timeout * 1000,
+  );
   const after = await auditRepository(process.cwd(), { ...options, logger });
   const beforeCovered = audit.coverage.filter((entry) => entry.status === "covered").length;
   const gained = Math.max(after.coverage.filter((entry) => entry.status === "covered").length - beforeCovered, 0);
-  outro(pc.green(`Repository health setup complete${gained ? ` with ${gained} newly covered categor${gained === 1 ? "y" : "ies"}` : ""}. Run \`repnix check\` to verify the checks; add a category and \`--details\` only when troubleshooting.`));
+  outro(
+    pc.green(
+      `Repository health setup complete${gained ? ` with ${gained} newly covered categor${gained === 1 ? "y" : "ies"}` : ""}. Run \`repnix check\` to verify the checks; add a category and \`--details\` only when troubleshooting.`,
+    ),
+  );
   return 0;
 }
 
-async function createDefaultPlan(options: SetupOptions): Promise<{ audit: Awaited<ReturnType<typeof auditRepository>>; plan: InstallPlan; selected: SetupProviderId[] }> {
+async function createDefaultPlan(
+  options: SetupOptions,
+): Promise<{ audit: Awaited<ReturnType<typeof auditRepository>>; plan: InstallPlan; selected: SetupProviderId[] }> {
   const audit = await auditRepository(process.cwd(), options);
   const selected = audit.recommendations
     .filter((recommendation) => recommendation.actionable && recommendation.priority === "baseline")
@@ -120,33 +133,57 @@ async function createDefaultPlan(options: SetupOptions): Promise<{ audit: Awaite
 }
 
 export async function setupCommand(options: SetupOptions = {}): Promise<number> {
-  if (options.format && !["text", "json"].includes(options.format)) throw new Error(`Unknown setup format '${options.format}'. Use text or json.`);
+  if (options.format && !["text", "json"].includes(options.format))
+    throw new Error(`Unknown setup format '${options.format}'. Use text or json.`);
   if (options.plan && options.applyPlan) throw new Error("Use either --plan or --apply-plan, not both.");
   if (options.plan) {
     const { audit, plan, selected } = await createDefaultPlan(options);
     const saved = serializeInstallPlan(plan, { providers: selected, includeCi: false });
-    process.stdout.write(options.format === "json" ? `${JSON.stringify(saved, null, 2)}\n` : `${renderSetupPreview(plan) || "No setup changes are needed."}\n`);
+    process.stdout.write(
+      options.format === "json"
+        ? `${JSON.stringify(saved, null, 2)}\n`
+        : `${renderSetupPreview(plan) || "No setup changes are needed."}\n`,
+    );
     return audit.context.diagnostics.some((diagnostic) => diagnostic.severity === "error") ? 2 : 0;
   }
   if (options.applyPlan) {
-    if (!process.stdin.isTTY || !process.stdout.isTTY) throw new Error("Applying a saved setup plan requires an interactive terminal for confirmation.");
+    if (!process.stdin.isTTY || !process.stdout.isTTY)
+      throw new Error("Applying a saved setup plan requires an interactive terminal for confirmation.");
     const raw: unknown = JSON.parse(await readFile(path.resolve(options.applyPlan), "utf8"));
     const saved = parseSavedInstallPlan(raw);
     const audit = await auditRepository(process.cwd(), options);
     if (saved.selection.providers.some((provider) => !audit.registry?.get(provider))) {
-      throw new Error("Saved setup plan selects a provider that is not available in this repository. Generate a new plan before applying it.");
+      throw new Error(
+        "Saved setup plan selects a provider that is not available in this repository. Generate a new plan before applying it.",
+      );
     }
-    const plan = await buildInstallPlan(audit.context, saved.selection.providers, saved.selection.includeCi, audit.registry);
+    const plan = await buildInstallPlan(
+      audit.context,
+      saved.selection.providers,
+      saved.selection.includeCi,
+      audit.registry,
+    );
     assertSavedPlanMatches(saved, plan);
     note(renderSetupPreview(plan), "Saved setup plan");
     const apply = await confirm({ message: "Apply this saved and revalidated setup plan?", initialValue: false });
     if (isCancel(apply) || !apply) return 0;
-    await applyInstallPlan(audit.context, plan, resolveDiagnosticLogger(options), options.timeout === undefined ? undefined : options.timeout * 1000);
-    outro(pc.green("Repository health setup complete. Run `repnix check` to verify the checks; add a category and `--details` only when troubleshooting."));
+    await applyInstallPlan(
+      audit.context,
+      plan,
+      resolveDiagnosticLogger(options),
+      options.timeout === undefined ? undefined : options.timeout * 1000,
+    );
+    outro(
+      pc.green(
+        "Repository health setup complete. Run `repnix check` to verify the checks; add a category and `--details` only when troubleshooting.",
+      ),
+    );
     return 0;
   }
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
-    process.stderr.write("repnix setup is interactive. Use `repnix setup --plan --format json` for a read-only non-interactive plan.\n");
+    process.stderr.write(
+      "repnix setup is interactive. Use `repnix setup --plan --format json` for a read-only non-interactive plan.\n",
+    );
     return 2;
   }
   return supportsTui() ? runSetupTui(options) : setupWithPrompts(options);

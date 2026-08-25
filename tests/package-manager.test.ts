@@ -12,7 +12,10 @@ describe("package manager commands", () => {
   });
 
   it("builds local exec and script commands", () => {
-    expect(execCommand("npm", "knip", ["--reporter", "json"])).toEqual({ command: "npm", args: ["exec", "--", "knip", "--reporter", "json"] });
+    expect(execCommand("npm", "knip", ["--reporter", "json"])).toEqual({
+      command: "npm",
+      args: ["exec", "--", "knip", "--reporter", "json"],
+    });
     expect(execCommand("bun", "jscpd", ["src"])).toEqual({ command: "bun", args: ["x", "jscpd", "src"] });
     expect(runScriptCommand("pnpm", "test")).toEqual({ command: "pnpm", args: ["run", "test"] });
   });

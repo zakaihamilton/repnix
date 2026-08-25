@@ -12,9 +12,27 @@ function checkModel(findings = 133): SetupTuiModel {
     repository: { packageManager: "yarn", categories: [] },
     results: [
       { provider: "typescript", name: "TypeScript", category: "types", status: "pass", findings: [] },
-      { provider: "script:lint", name: "Lint", category: "lint", status: "fail", findings: Array.from({ length: 40 }, () => ({ id: "x" })) },
-      { provider: "knip", name: "knip", category: "dead-code", status: "warn", findings: Array.from({ length: 50 }, () => ({ id: "x" })) },
-      { provider: "jscpd", name: "jscpd", category: "duplication", status: "warn", findings: Array.from({ length: findings - 90 }, () => ({ id: "x" })) },
+      {
+        provider: "script:lint",
+        name: "Lint",
+        category: "lint",
+        status: "fail",
+        findings: Array.from({ length: 40 }, () => ({ id: "x" })),
+      },
+      {
+        provider: "knip",
+        name: "knip",
+        category: "dead-code",
+        status: "warn",
+        findings: Array.from({ length: 50 }, () => ({ id: "x" })),
+      },
+      {
+        provider: "jscpd",
+        name: "jscpd",
+        category: "duplication",
+        status: "warn",
+        findings: Array.from({ length: findings - 90 }, () => ({ id: "x" })),
+      },
     ],
   });
   return {
@@ -41,12 +59,37 @@ function screenshotModel(): SetupTuiModel {
     repository: { packageManager: "yarn", categories: [] },
     results: [
       { provider: "typescript", name: "TypeScript", category: "types", status: "pass", findings: [] },
-      { provider: "script:lint", name: "script:lint", category: "lint", status: "warn", findings: Array.from({ length: 26 }, () => ({ id: "x" })) },
+      {
+        provider: "script:lint",
+        name: "script:lint",
+        category: "lint",
+        status: "warn",
+        findings: Array.from({ length: 26 }, () => ({ id: "x" })),
+      },
       { provider: "vitest", name: "Vitest", category: "tests", status: "pass", findings: [] },
       { provider: "c8", name: "c8", category: "coverage", status: "pass", findings: [] },
-      { provider: "markdownlint", name: "markdownlint", category: "documentation", status: "error", findings: [], message: "unavailable" },
-      { provider: "knip", name: "knip", category: "dead-code", status: "warn", findings: Array.from({ length: 10 }, () => ({ id: "x" })) },
-      { provider: "jscpd", name: "jscpd", category: "duplication", status: "warn", findings: Array.from({ length: 5 }, () => ({ id: "x" })) },
+      {
+        provider: "markdownlint",
+        name: "markdownlint",
+        category: "documentation",
+        status: "error",
+        findings: [],
+        message: "unavailable",
+      },
+      {
+        provider: "knip",
+        name: "knip",
+        category: "dead-code",
+        status: "warn",
+        findings: Array.from({ length: 10 }, () => ({ id: "x" })),
+      },
+      {
+        provider: "jscpd",
+        name: "jscpd",
+        category: "duplication",
+        status: "warn",
+        findings: Array.from({ length: 5 }, () => ({ id: "x" })),
+      },
     ],
   });
   return { ...checkModel(), checkOutput: output };
@@ -86,7 +129,9 @@ describe("setup TUI narrow layout", () => {
   });
 
   it("does not leak finding counts onto next-step commands", () => {
-    const lines = renderCheckScreen(159, 34, false, screenshotModel()).split("\n").map((line) => stripVTControlCharacters(line));
+    const lines = renderCheckScreen(159, 34, false, screenshotModel())
+      .split("\n")
+      .map((line) => stripVTControlCharacters(line));
     const commands = lines.filter((line) => /\$ yarn run /.test(line));
     expect(commands.length).toBeGreaterThan(0);
     for (const line of commands) {
@@ -100,9 +145,13 @@ describe("setup TUI narrow layout", () => {
   });
 
   it("keeps table rows and next-step commands on separate lines in a typical window", () => {
-    const lines = renderCheckScreen(90, 40).split("\n").map((line) => stripVTControlCharacters(line));
+    const lines = renderCheckScreen(90, 40)
+      .split("\n")
+      .map((line) => stripVTControlCharacters(line));
     expect(lines.find((line) => line.includes("Type safety"))).toMatch(/PASS\s+Type safety\s+Passed/);
-    expect(lines.find((line) => line.includes("Linting") && line.includes("WARN"))).toMatch(/WARN\s+Linting\s+40 findings/);
+    expect(lines.find((line) => line.includes("Linting") && line.includes("WARN"))).toMatch(
+      /WARN\s+Linting\s+40 findings/,
+    );
     expect(lines.find((line) => /\$ yarn run lint/.test(line))).toMatch(/yarn run lint\s+│/);
     expect(lines.find((line) => /health:dead-code/.test(line))).toMatch(/health:dead-code\s+│/);
     expect(lines.filter((line) => /findings\)/.test(line) && /yarn run/.test(line))).toEqual([]);

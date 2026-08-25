@@ -1,7 +1,14 @@
-import type { HealthProvider, HealthResult, InstallPlan, ProviderRecommendation, RepositoryContext } from "../core/types.js";
+import type {
+  HealthProvider,
+  HealthResult,
+  InstallPlan,
+  ProviderRecommendation,
+  RepositoryContext,
+} from "../core/types.js";
 import { resolveDiagnosticLogger } from "../cli/options.js";
 import { runCommand } from "../runners/command-runner.js";
 import { buildInstallPlan, type SetupProviderId } from "../setup/install-plan.js";
+import { runProviderModule } from "../runners/health/task-executor.js";
 import { detectProvider, type ProviderDescriptor } from "./catalog.js";
 import { createBuiltinRegistry, type ProviderRegistry } from "./registry.js";
 
@@ -38,18 +45,23 @@ class ExternalToolAdapter implements HealthProvider {
   async run(context: RepositoryContext): Promise<HealthResult> {
     const logger = resolveDiagnosticLogger(false);
     if (this.descriptor.run) {
-      return this.descriptor.run({
-        context,
-        runtime: {
-          logger,
-          runCommand: (command, args, options = {}) => runCommand(command, args, { cwd: options.cwd ?? context.root, logger, ...(options.env ? { env: options.env } : {}), ...(options.maxOutputBytes === undefined ? {} : { maxOutputBytes: options.maxOutputBytes }) }),
-        },
-      });
+      return runProviderModule(context, this.descriptor, logger);
     }
     if (!this.descriptor.command) {
-      return { provider: this.id, name: this.name, category: this.category, status: "skipped", findings: [], durationMs: 0, message: "Detection-only provider." };
+      return {
+        provider: this.id,
+        name: this.name,
+        category: this.category,
+        status: "skipped",
+        findings: [],
+        durationMs: 0,
+        message: "Detection-only provider.",
+      };
     }
-    const result = await runCommand(this.descriptor.command.binary, this.descriptor.command.args, { cwd: context.root, logger });
+    const result = await runCommand(this.descriptor.command.binary, this.descriptor.command.args, {
+      cwd: context.root,
+      logger,
+    });
     return {
       provider: this.id,
       name: this.name,

@@ -16,32 +16,74 @@ export interface SetupTuiTheme {
 }
 
 const truecolorTheme: SetupTuiTheme = {
-  panelRaised: "#1e293b", active: "#134e4a", border: "#334155", borderStrong: "#64748b",
-  primary: "#5eead4", secondary: "#a5b4fc", text: "#e5e7eb", muted: "#94a3b8",
-  success: "#34d399", warning: "#fbbf24", danger: "#fb7185", info: "#60a5fa",
+  panelRaised: "#1e293b",
+  active: "#134e4a",
+  border: "#334155",
+  borderStrong: "#64748b",
+  primary: "#5eead4",
+  secondary: "#a5b4fc",
+  text: "#e5e7eb",
+  muted: "#94a3b8",
+  success: "#34d399",
+  warning: "#fbbf24",
+  danger: "#fb7185",
+  info: "#60a5fa",
 };
 
 const lightTruecolorTheme: SetupTuiTheme = {
-  panelRaised: "#f1f5f9", active: "#ccfbf1", border: "#94a3b8", borderStrong: "#64748b",
-  primary: "#0f766e", secondary: "#475569", text: "#0f172a", muted: "#475569",
-  success: "#15803d", warning: "#a16207", danger: "#b91c1c", info: "#2563eb",
+  panelRaised: "#f1f5f9",
+  active: "#ccfbf1",
+  border: "#94a3b8",
+  borderStrong: "#64748b",
+  primary: "#0f766e",
+  secondary: "#475569",
+  text: "#0f172a",
+  muted: "#475569",
+  success: "#15803d",
+  warning: "#a16207",
+  danger: "#b91c1c",
+  info: "#2563eb",
 };
 
 const ansiDarkTheme: SetupTuiTheme = {
-  panelRaised: "blue", active: "blue", border: "gray", borderStrong: "blackBright",
-  primary: "cyan", secondary: "magenta", muted: "gray", success: "green", warning: "yellow", danger: "red", info: "blue",
+  panelRaised: "blue",
+  active: "blue",
+  border: "gray",
+  borderStrong: "blackBright",
+  primary: "cyan",
+  secondary: "magenta",
+  muted: "gray",
+  success: "green",
+  warning: "yellow",
+  danger: "red",
+  info: "blue",
 };
 
 const ansiLightTheme: SetupTuiTheme = {
-  panelRaised: "blackBright", active: "blackBright", border: "gray", borderStrong: "blackBright",
-  primary: "blue", secondary: "blackBright", muted: "blackBright", success: "green", warning: "yellow", danger: "red", info: "blue",
+  panelRaised: "blackBright",
+  active: "blackBright",
+  border: "gray",
+  borderStrong: "blackBright",
+  primary: "blue",
+  secondary: "blackBright",
+  muted: "blackBright",
+  success: "green",
+  warning: "yellow",
+  danger: "red",
+  info: "blue",
 };
 
 export type ColorOutput = Pick<NodeJS.WriteStream, "isTTY" | "hasColors"> & { columns?: number };
-export interface ThemeEnvironment { COLORTERM?: string; COLORFGBG?: string }
+export interface ThemeEnvironment {
+  COLORTERM?: string;
+  COLORFGBG?: string;
+}
 
 function supportsTruecolor(stdout: ColorOutput, environment: ThemeEnvironment): boolean {
-  return Boolean(stdout.isTTY && (stdout.hasColors?.(16_777_216) || environment.COLORTERM === "truecolor" || environment.COLORTERM === "24bit"));
+  return Boolean(
+    stdout.isTTY &&
+    (stdout.hasColors?.(16_777_216) || environment.COLORTERM === "truecolor" || environment.COLORTERM === "24bit"),
+  );
 }
 
 function terminalBackground(environment: ThemeEnvironment): "light" | "dark" | undefined {
@@ -66,11 +108,15 @@ export function textColor(theme: SetupTuiTheme): { color?: string } {
   return foregroundColor(theme.text);
 }
 
-export function selectionIndicator(checked: boolean): string { return checked ? "■" : "□"; }
+export function selectionIndicator(checked: boolean): string {
+  return checked ? "■" : "□";
+}
 
 const ansiEscapePattern = new RegExp(`${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`, "g");
 
-export function normalizeTuiDiffLine(line: string): string { return line.replace(ansiEscapePattern, ""); }
+export function normalizeTuiDiffLine(line: string): string {
+  return line.replace(ansiEscapePattern, "");
+}
 
 export function diffLineColor(line: string, theme: SetupTuiTheme): string | undefined {
   const normalized = normalizeTuiDiffLine(line);
@@ -79,18 +125,39 @@ export function diffLineColor(line: string, theme: SetupTuiTheme): string | unde
   return theme.text;
 }
 
-export interface SelectionRowPresentation { label: string; color?: string; backgroundColor?: string; bold: boolean }
+export interface SelectionRowPresentation {
+  label: string;
+  color?: string;
+  backgroundColor?: string;
+  bold: boolean;
+}
 
-export function selectionRowPresentation(name: string, checked: boolean, active: boolean, priority: string | undefined, theme: SetupTuiTheme, width = 30): SelectionRowPresentation {
+export function selectionRowPresentation(
+  name: string,
+  checked: boolean,
+  active: boolean,
+  priority: string | undefined,
+  theme: SetupTuiTheme,
+  width = 30,
+): SelectionRowPresentation {
   const prefix = `${active ? "▸" : " "} ${selectionIndicator(checked)} `;
   const priorityLabel = priority ? `· ${priority}` : "";
-  const priorityGap = priority ? " ".repeat(Math.max(1, width - prefix.length - name.length - priorityLabel.length)) : "";
+  const priorityGap = priority
+    ? " ".repeat(Math.max(1, width - prefix.length - name.length - priorityLabel.length))
+    : "";
   const label = `${prefix}${name}${priorityGap}${priorityLabel}`.padEnd(width, " ");
-  const base = { label: label.padEnd(width, " "), ...(active ? { color: theme.primary } : textColor(theme)), bold: active };
+  const base = {
+    label: label.padEnd(width, " "),
+    ...(active ? { color: theme.primary } : textColor(theme)),
+    bold: active,
+  };
   return active ? { ...base, backgroundColor: theme.active } : base;
 }
 
-export interface TuiLayoutMetrics { bodyHeight: number; detailViewport: number }
+export interface TuiLayoutMetrics {
+  bodyHeight: number;
+  detailViewport: number;
+}
 const HEADER_ROWS = 4;
 const FOOTER_ROWS = 4;
 const DETAIL_PANEL_CHROME_ROWS = 6;

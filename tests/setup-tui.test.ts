@@ -2,7 +2,47 @@ import { describe, expect, it } from "vitest";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { AUDIT_LABEL_COLUMN_WIDTH, AUDIT_TWO_COLUMN_MIN_WIDTH, COMPACT_LAYOUT_HEIGHT, COMPACT_LAYOUT_WIDTH, HORIZONTAL_PANE_MIN_WIDTH, auditContentLineCount, auditPageSummary, auditRecommendationSummary, auditSetupOptions, auditStatusPresentation, auditUsesSingleColumn, checkDetailViewport, checkTableColumns, clipTuiLine, clampTuiScroll, createSetupTuiTheme, diffLineColor, manualContentLineCount, manualRecommendationLines, manualRecommendationSteps, manualRecommendationViewport, normalizeTuiDiffLine, renderSetupCheckSummary, renderSetupHealthReport, saveSetupCheckReports, selectedSetupOptions, selectionIndicator, selectionRowPresentation, setupCheckActions, setupCheckDetailItems, setupCheckDetails, setupCheckOutputLines, setupCheckResultOutput, setupCheckRows, setupDetectionErrorMessage, setupPaneLayout, setupStepIndex, tuiLayoutMetrics, tuiPanelContentWidth } from "../src/tui/setup-app.js";
+import {
+  AUDIT_LABEL_COLUMN_WIDTH,
+  AUDIT_TWO_COLUMN_MIN_WIDTH,
+  COMPACT_LAYOUT_HEIGHT,
+  COMPACT_LAYOUT_WIDTH,
+  HORIZONTAL_PANE_MIN_WIDTH,
+  auditContentLineCount,
+  auditPageSummary,
+  auditRecommendationSummary,
+  auditSetupOptions,
+  auditStatusPresentation,
+  auditUsesSingleColumn,
+  checkDetailViewport,
+  checkTableColumns,
+  clipTuiLine,
+  clampTuiScroll,
+  createSetupTuiTheme,
+  diffLineColor,
+  manualContentLineCount,
+  manualRecommendationLines,
+  manualRecommendationSteps,
+  manualRecommendationViewport,
+  normalizeTuiDiffLine,
+  renderSetupCheckSummary,
+  renderSetupHealthReport,
+  saveSetupCheckReports,
+  selectedSetupOptions,
+  selectionIndicator,
+  selectionRowPresentation,
+  setupCheckActions,
+  setupCheckDetailItems,
+  setupCheckDetails,
+  setupCheckOutputLines,
+  setupCheckResultOutput,
+  setupCheckRows,
+  setupDetectionErrorMessage,
+  setupPaneLayout,
+  setupStepIndex,
+  tuiLayoutMetrics,
+  tuiPanelContentWidth,
+} from "../src/tui/setup-app.js";
 import { createSetupTuiModel, selectionItems, setupTuiReducer } from "../src/tui/setup-state.js";
 import type { AuditModel, Recommendation } from "../src/recommendations/recommendation-engine.js";
 import type { RepositoryContext } from "../src/core/types.js";
@@ -55,17 +95,31 @@ const context: RepositoryContext = {
   files: new Set(["src/index.ts"]),
   sourceFiles: ["src/index.ts", "src/other.ts"],
   sourceRoots: ["src"],
-  scopes: [{ path: ".", manifestPath: "package.json", packageJson: { name: "example" }, roles: ["node-app"], roleEvidence: [{ role: "node-app", confidence: "medium", signals: ["test"] }], frameworks: [], languages: ["TypeScript"], sourceFiles: ["src/index.ts", "src/other.ts"], sourceRoots: ["src"] }],
+  scopes: [
+    {
+      path: ".",
+      manifestPath: "package.json",
+      packageJson: { name: "example" },
+      roles: ["node-app"],
+      roleEvidence: [{ role: "node-app", confidence: "medium", signals: ["test"] }],
+      frameworks: [],
+      languages: ["TypeScript"],
+      sourceFiles: ["src/index.ts", "src/other.ts"],
+      sourceRoots: ["src"],
+    },
+  ],
   diagnostics: [],
 };
 
 describe("setup TUI presentation", () => {
   it("shows the repository diagnostic and a package-manager fix", () => {
-    const message = setupDetectionErrorMessage([{
-      code: "ambiguous-package-manager",
-      severity: "error",
-      message: "Conflicting lockfiles detected: package-lock.json, yarn.lock.",
-    }]);
+    const message = setupDetectionErrorMessage([
+      {
+        code: "ambiguous-package-manager",
+        severity: "error",
+        message: "Conflicting lockfiles detected: package-lock.json, yarn.lock.",
+      },
+    ]);
 
     expect(message).toContain("Conflicting lockfiles detected: package-lock.json, yarn.lock.");
     expect(message).toContain("add its packageManager entry to package.json");
@@ -143,19 +197,47 @@ describe("setup TUI presentation", () => {
       },
       detections: new Map(),
       coverage: [
-        { category: "types", status: "covered", providers: ["TypeScript"], capabilities: ["typeChecking"], missingCapabilities: [], scopes: ["."], evidence: ["TypeScript source"] },
-        { category: "security", status: "missing", providers: [], capabilities: [], missingCapabilities: ["vulnerabilities"], scopes: ["."], evidence: ["source"] },
+        {
+          category: "types",
+          status: "covered",
+          providers: ["TypeScript"],
+          capabilities: ["typeChecking"],
+          missingCapabilities: [],
+          scopes: ["."],
+          evidence: ["TypeScript source"],
+        },
+        {
+          category: "security",
+          status: "missing",
+          providers: [],
+          capabilities: [],
+          missingCapabilities: ["vulnerabilities"],
+          scopes: ["."],
+          evidence: ["source"],
+        },
       ],
       recommendations,
     };
-    expect(auditPageSummary(audit)).toMatchObject({ repositoryName: "example-app", packageManager: "pnpm", ci: "GitHub Actions", workspaceCount: 2 });
+    expect(auditPageSummary(audit)).toMatchObject({
+      repositoryName: "example-app",
+      packageManager: "pnpm",
+      ci: "GitHub Actions",
+      workspaceCount: 2,
+    });
     expect(auditRecommendationSummary(recommendations)).toEqual({ baseline: 2, optional: 1, advanced: 0, total: 3 });
-    expect(auditRecommendationSummary(recommendations, true)).toEqual({ baseline: 1, optional: 1, advanced: 0, total: 2 });
+    expect(auditRecommendationSummary(recommendations, true)).toEqual({
+      baseline: 1,
+      optional: 1,
+      advanced: 0,
+      total: 2,
+    });
     expect(auditSetupOptions(audit)).toEqual(["jscpd", "dependency-cruiser", "GitHub Actions health step"]);
     const manualLines = manualRecommendationLines(audit, 80);
     expect(manualLines.join("\n")).toContain("1. OSV-Scanner");
     expect(manualLines.join("\n")).toContain("HOW TO DO IT");
-    expect(manualLines[1]).toBe("Review the guidance below. Then add the provider and its configuration to your normal development or CI workflow.");
+    expect(manualLines[1]).toBe(
+      "Review the guidance below. Then add the provider and its configuration to your normal development or CI workflow.",
+    );
     expect(manualLines[2]).toBe("");
     expect(manualContentLineCount(audit, 80)).toBeGreaterThan(2);
     expect(manualRecommendationViewport(10)).toBe(9);
@@ -166,7 +248,11 @@ describe("setup TUI presentation", () => {
     const setupModel = createSetupTuiModel(recommendations);
     setupModel.selectedProviders = ["jscpd", "dependency-cruiser"];
     setupModel.includeCi = true;
-    expect(selectedSetupOptions(audit, setupModel)).toEqual(["jscpd", "dependency-cruiser", "GitHub Actions health step"]);
+    expect(selectedSetupOptions(audit, setupModel)).toEqual([
+      "jscpd",
+      "dependency-cruiser",
+      "GitHub Actions health step",
+    ]);
     const theme = createSetupTuiTheme({ isTTY: false, hasColors: () => false });
     expect(auditStatusPresentation("covered", theme)).toMatchObject({ symbol: "✓" });
     expect(auditStatusPresentation("missing", theme)).toMatchObject({ symbol: "✗" });
@@ -218,11 +304,16 @@ describe("setup TUI presentation", () => {
       ],
     });
     const items = setupCheckDetailItems(output, 80, { reportPath: ".repnix/health-report.md" });
-    expect(items).toEqual(expect.arrayContaining([
-      expect.objectContaining({ kind: "text", text: "2 findings to review" }),
-      expect.objectContaining({ kind: "table-row", row: expect.objectContaining({ category: "Type safety", result: "Passed" }) }),
-      expect.objectContaining({ kind: "text", text: "   $ yarn run lint" }),
-    ]));
+    expect(items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "text", text: "2 findings to review" }),
+        expect.objectContaining({
+          kind: "table-row",
+          row: expect.objectContaining({ category: "Type safety", result: "Passed" }),
+        }),
+        expect.objectContaining({ kind: "text", text: "   $ yarn run lint" }),
+      ]),
+    );
     expect(items.some((item) => item.kind === "text" && item.text.includes("AI-ready report saved"))).toBe(true);
   });
 
@@ -249,12 +340,15 @@ describe("setup TUI presentation", () => {
   it("gives manual recommendations concrete project-specific steps", () => {
     const manual = recommendations[2]!;
     const details = setupCheckDetails(manual, context);
-    expect(manualRecommendationSteps(manual, details)).toContain("Install the OSV-Scanner binary in your local toolchain or CI image.");
+    expect(manualRecommendationSteps(manual, details)).toContain(
+      "Install the OSV-Scanner binary in your local toolchain or CI image.",
+    );
     expect(manualRecommendationSteps(manual, details)).toHaveLength(3);
   });
 
   it("wraps check details to the setup viewport without discarding output", () => {
-    const output = "Repository health\nA deliberately long finding message that must be readable in a narrow terminal viewport.";
+    const output =
+      "Repository health\nA deliberately long finding message that must be readable in a narrow terminal viewport.";
     const lines = setupCheckOutputLines(output, 32);
 
     expect(lines).toContain("Repository health");
@@ -263,10 +357,46 @@ describe("setup TUI presentation", () => {
   });
 
   it("keeps stderr and explains silent check failures", () => {
-    expect(setupCheckResultOutput({ command: "repnix", args: ["check", "--format", "json"], exitCode: 1, signal: null, stdout: "", stderr: "configuration failed" })).toBe("configuration failed");
-    expect(setupCheckResultOutput({ command: "repnix", args: ["check", "--format", "json"], exitCode: 0, signal: null, stdout: "{\"results\":[]}", stderr: "diagnostic log" })).toBe("{\"results\":[]}");
-    expect(setupCheckResultOutput({ command: "repnix", args: ["check", "--format", "json"], exitCode: 1, signal: null, stdout: "", stderr: "", })).toContain("The check failed without producing output.");
-    expect(setupCheckResultOutput({ command: "repnix", args: ["check", "--format", "json"], exitCode: 1, signal: null, stdout: "", stderr: "", })).toContain("exited with code 1");
+    expect(
+      setupCheckResultOutput({
+        command: "repnix",
+        args: ["check", "--format", "json"],
+        exitCode: 1,
+        signal: null,
+        stdout: "",
+        stderr: "configuration failed",
+      }),
+    ).toBe("configuration failed");
+    expect(
+      setupCheckResultOutput({
+        command: "repnix",
+        args: ["check", "--format", "json"],
+        exitCode: 0,
+        signal: null,
+        stdout: '{"results":[]}',
+        stderr: "diagnostic log",
+      }),
+    ).toBe('{"results":[]}');
+    expect(
+      setupCheckResultOutput({
+        command: "repnix",
+        args: ["check", "--format", "json"],
+        exitCode: 1,
+        signal: null,
+        stdout: "",
+        stderr: "",
+      }),
+    ).toContain("The check failed without producing output.");
+    expect(
+      setupCheckResultOutput({
+        command: "repnix",
+        args: ["check", "--format", "json"],
+        exitCode: 1,
+        signal: null,
+        stdout: "",
+        stderr: "",
+      }),
+    ).toContain("exited with code 1");
   });
 
   it("turns structured check output into clear status rows", () => {
@@ -285,7 +415,30 @@ describe("setup TUI presentation", () => {
 
   it("automatically saves structured results and a runnable check summary in the repository", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "repnix-setup-report-"));
-    const output = JSON.stringify({ repository: { packageManager: "yarn", categories: [] }, results: [{ provider: "jscpd", name: "jscpd", category: "duplication", status: "warn", findings: [{ id: "duplicate", fingerprint: "duplicate", type: "duplicate-block", provider: "jscpd", category: "duplication", severity: "warning", message: "Duplicated code", file: "src/example.ts", remediation: "Extract shared code." }] }] });
+    const output = JSON.stringify({
+      repository: { packageManager: "yarn", categories: [] },
+      results: [
+        {
+          provider: "jscpd",
+          name: "jscpd",
+          category: "duplication",
+          status: "warn",
+          findings: [
+            {
+              id: "duplicate",
+              fingerprint: "duplicate",
+              type: "duplicate-block",
+              provider: "jscpd",
+              category: "duplication",
+              severity: "warning",
+              message: "Duplicated code",
+              file: "src/example.ts",
+              remediation: "Extract shared code.",
+            },
+          ],
+        },
+      ],
+    });
     try {
       const saved = await saveSetupCheckReports(root, output);
       expect(saved).toEqual({ reportPath: ".repnix/health-report.md", summaryPath: ".repnix/check-results.md" });
@@ -300,7 +453,35 @@ describe("setup TUI presentation", () => {
   });
 
   it("renders all finding context in the AI-ready health report", () => {
-    const output = JSON.stringify({ repository: { root: "/repo", packageManager: "npm", categories: [] }, results: [{ provider: "script:lint", name: "Lint", category: "lint", status: "fail", findings: [{ id: "lint", fingerprint: "lint", type: "lint-rule", ruleId: "no-any", provider: "Lint", category: "lint", severity: "error", message: "Avoid any.", file: "src/index.ts", line: 4, column: 12, remediation: "Use a concrete type.", documentationUrl: "https://example.com/no-any", metadata: { source: "eslint" } }] }] });
+    const output = JSON.stringify({
+      repository: { root: "/repo", packageManager: "npm", categories: [] },
+      results: [
+        {
+          provider: "script:lint",
+          name: "Lint",
+          category: "lint",
+          status: "fail",
+          findings: [
+            {
+              id: "lint",
+              fingerprint: "lint",
+              type: "lint-rule",
+              ruleId: "no-any",
+              provider: "Lint",
+              category: "lint",
+              severity: "error",
+              message: "Avoid any.",
+              file: "src/index.ts",
+              line: 4,
+              column: 12,
+              remediation: "Use a concrete type.",
+              documentationUrl: "https://example.com/no-any",
+              metadata: { source: "eslint" },
+            },
+          ],
+        },
+      ],
+    });
     const report = renderSetupHealthReport(output);
     expect(report).toContain("## How to use this report");
     expect(report).toContain("## Instructions for an AI assistant");
@@ -311,7 +492,13 @@ describe("setup TUI presentation", () => {
   });
 
   it("renders every actionable check command in the saved summary", () => {
-    const output = JSON.stringify({ repository: { packageManager: "npm", categories: [] }, results: [{ provider: "script:format:check", name: "format", category: "format", status: "warn", findings: [{}] }, { provider: "jscpd", name: "jscpd", category: "duplication", status: "warn", findings: [{}, {}] }] });
+    const output = JSON.stringify({
+      repository: { packageManager: "npm", categories: [] },
+      results: [
+        { provider: "script:format:check", name: "format", category: "format", status: "warn", findings: [{}] },
+        { provider: "jscpd", name: "jscpd", category: "duplication", status: "warn", findings: [{}, {}] },
+      ],
+    });
     const summary = renderSetupCheckSummary(output);
     expect(summary).toContain("npm run format:check");
     expect(summary).toContain("npm run health:duplication");
@@ -324,15 +511,40 @@ describe("setup TUI presentation", () => {
     const output = JSON.stringify({
       repository: { packageManager: "yarn", categories: [] },
       results: [
-        { provider: "markdownlint", name: "markdownlint", category: "documentation", status: "error", findings: [], message: "Command output exceeded 10485760 bytes" },
-        { provider: "script:format:check", name: "script:format:check", category: "format", status: "warn", findings: [{}] },
+        {
+          provider: "markdownlint",
+          name: "markdownlint",
+          category: "documentation",
+          status: "error",
+          findings: [],
+          message: "Command output exceeded 10485760 bytes",
+        },
+        {
+          provider: "script:format:check",
+          name: "script:format:check",
+          category: "format",
+          status: "warn",
+          findings: [{}],
+        },
         { provider: "jscpd", name: "jscpd", category: "duplication", status: "warn", findings: [{}, {}] },
       ],
     });
     expect(setupCheckActions(output)).toEqual([
-      expect.objectContaining({ kind: "setup", title: "Set up Documentation", command: "yarn run health:documentation" }),
-      expect.objectContaining({ kind: "review", title: "Review Duplication (2 findings)", command: "yarn run health:duplication" }),
-      expect.objectContaining({ kind: "review", title: "Review Formatting (1 finding)", command: "yarn run format:check" }),
+      expect.objectContaining({
+        kind: "setup",
+        title: "Set up Documentation",
+        command: "yarn run health:documentation",
+      }),
+      expect.objectContaining({
+        kind: "review",
+        title: "Review Duplication (2 findings)",
+        command: "yarn run health:duplication",
+      }),
+      expect.objectContaining({
+        kind: "review",
+        title: "Review Formatting (1 finding)",
+        command: "yarn run format:check",
+      }),
     ]);
     expect(setupCheckActions(output)[1]?.detail).toBeUndefined();
   });
@@ -366,7 +578,9 @@ describe("setup TUI state", () => {
   });
 
   it("shows the empty state after an audit with no actionable recommendations", () => {
-    let model = createSetupTuiModel(recommendations.map((recommendation) => ({ ...recommendation, actionable: false })));
+    let model = createSetupTuiModel(
+      recommendations.map((recommendation) => ({ ...recommendation, actionable: false })),
+    );
     expect(model.screen).toBe("audit");
     model = setupTuiReducer(model, { type: "show-empty" });
     expect(model.screen).toBe("empty");

@@ -3,7 +3,14 @@ import { readFile } from "node:fs/promises";
 import type { FileChange, InstallPlan, InstallProgress, RepositoryContext } from "../core/types.js";
 import { createDiagnosticLogger, type DiagnosticLogger } from "../cli/options.js";
 import { DEFAULT_COMMAND_TIMEOUT_MS, runCommand } from "../runners/command-runner.js";
-import { contentHash, readOptional, restoreBinaryFile, restoreChanges, validateChanges, writeChanges } from "./file-plan.js";
+import {
+  contentHash,
+  readOptional,
+  restoreBinaryFile,
+  restoreChanges,
+  validateChanges,
+  writeChanges,
+} from "./file-plan.js";
 
 const TEXT_LOCKFILES = ["package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock"];
 const BINARY_LOCKFILES = ["bun.lockb"];
@@ -59,16 +66,30 @@ export async function applyInstallPlan(
   const rollbackFiles = await snapshotInstallState(context, plan.files);
   if (!plan.files.length) onProgress?.({ phase: "writing-files", current: 0, total: 0 });
   await writeChanges(context.root, plan.files, (change, current, total) => {
-    onProgress?.({ phase: "writing-files", current, total, label: `${change.kind === "create" ? "Created" : "Updated"} ${change.path}` });
+    onProgress?.({
+      phase: "writing-files",
+      current,
+      total,
+      label: `${change.kind === "create" ? "Created" : "Updated"} ${change.path}`,
+    });
   });
   try {
     for (const [index, command] of plan.commands.entries()) {
-      onProgress?.({ phase: "running-command", current: index + 1, total: plan.commands.length, label: `${command.command} ${command.args.join(" ")}` });
+      onProgress?.({
+        phase: "running-command",
+        current: index + 1,
+        total: plan.commands.length,
+        label: `${command.command} ${command.args.join(" ")}`,
+      });
       const result = await runCommand(command.command, command.args, { cwd: context.root, logger, timeoutMs });
       if (result.spawnError || result.exitCode !== 0) {
         const output = [result.stderr, result.stdout].map((value) => value.trim()).find(Boolean);
         const invocation = [command.command, ...command.args].map((part) => JSON.stringify(part)).join(" ");
-        throw new Error(result.spawnError ?? output ?? `Command ${invocation} exited with code ${result.exitCode ?? "unknown"} without producing output.`);
+        throw new Error(
+          result.spawnError ??
+            output ??
+            `Command ${invocation} exited with code ${result.exitCode ?? "unknown"} without producing output.`,
+        );
       }
     }
     onProgress?.({ phase: "complete" });

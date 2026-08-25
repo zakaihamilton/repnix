@@ -26,8 +26,8 @@ const JSCPD_IGNORES = [
 const MARKDOWNLINT_SCRIPT = markdownlintScriptCommand();
 const GENERATED_SCRIPT_MIGRATIONS: Record<string, Record<string, string>> = {
   "health:documentation": {
-    "markdownlint-cli2 \"**/*.md\"": MARKDOWNLINT_SCRIPT,
-    "markdownlint-cli2 \"**/*.md\" \"#node_modules\"": MARKDOWNLINT_SCRIPT,
+    'markdownlint-cli2 "**/*.md"': MARKDOWNLINT_SCRIPT,
+    'markdownlint-cli2 "**/*.md" "#node_modules"': MARKDOWNLINT_SCRIPT,
   },
 };
 
@@ -73,14 +73,23 @@ export async function buildInstallPlan(
     plan.commands.push(...customPlan.commands);
     plan.warnings.push(...customPlan.warnings);
     plan.conflicts.push(...customPlan.conflicts);
-    if (!definition.setup || (customPlan.conflicts.length > 0 && customPlan.files.length === 0 && customPlan.packages.length === 0)) {
+    if (
+      !definition.setup ||
+      (customPlan.conflicts.length > 0 && customPlan.files.length === 0 && customPlan.packages.length === 0)
+    ) {
       skipGenericSetup.add(providerId);
     }
   }
-  const installedAtRoot = (name: string) => context.installedPackageOrigins.get(name)?.includes("package.json") === true;
+  const installedAtRoot = (name: string) =>
+    context.installedPackageOrigins.get(name)?.includes("package.json") === true;
   if (context.packageJson.name !== "repnix" && !installedAtRoot("repnix")) {
-    const version = await localRepnixPackageSpec() ?? `^${VERSION}`;
-    plan.packages.push({ name: "repnix", version, dev: true, reason: "Keep the generated health script locally runnable" });
+    const version = (await localRepnixPackageSpec()) ?? `^${VERSION}`;
+    plan.packages.push({
+      name: "repnix",
+      version,
+      dev: true,
+      reason: "Keep the generated health script locally runnable",
+    });
   }
   for (const provider of selected) {
     plan.packages.push(...(customPackages.get(provider) ?? []));
@@ -135,12 +144,21 @@ export async function buildInstallPlan(
   const repnixConfigPath = path.join(context.root, "repnix.config.json");
   const repnixConfigBefore = await readOptional(repnixConfigPath);
   if (repnixConfigBefore === null) {
-    const repnixConfigAfter = `${JSON.stringify({
-      schemaVersion: 1,
-      severityThreshold: "warning",
-      execution: { jobs: 2, timeoutSeconds: 300 },
-    }, null, 2)}\n`;
-    const change = fileChange("repnix.config.json", null, repnixConfigAfter, "Record repository health policy and selected built-in providers");
+    const repnixConfigAfter = `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        severityThreshold: "warning",
+        execution: { jobs: 2, timeoutSeconds: 300 },
+      },
+      null,
+      2,
+    )}\n`;
+    const change = fileChange(
+      "repnix.config.json",
+      null,
+      repnixConfigAfter,
+      "Record repository health policy and selected built-in providers",
+    );
     if (change) plan.files.push(change);
   }
 
@@ -157,7 +175,7 @@ export async function buildInstallPlan(
           ) {
             plan.conflicts.push(`${configFile} has a non-array ignore value and was preserved.`);
           } else {
-            const ignore = [...new Set([...(parsed.ignore as string[] | undefined ?? []), ...JSCPD_IGNORES])];
+            const ignore = [...new Set([...((parsed.ignore as string[] | undefined) ?? []), ...JSCPD_IGNORES])];
             const after = setJsonValue(before, ["ignore"], ignore);
             const change = fileChange(configFile, before, after, "Add safe jscpd exclusions");
             if (change) plan.files.push(change);
@@ -192,9 +210,21 @@ export async function buildInstallPlan(
     }
   }
 
+  if (selected.includes("prettier")) {
+    const hasPrettierConfig = [...context.files].some((file) =>
+      /(^|\/)(?:\.prettierrc(?:\.[^/]+)?|prettier\.config\.[cm]?[jt]s)$/.test(file),
+    );
+    if (!hasPrettierConfig && !Object.hasOwn(context.packageJson, "prettier")) {
+      const config = `${JSON.stringify({ semi: true, singleQuote: false, trailingComma: "all" }, null, 2)}\n`;
+      const change = fileChange(".prettierrc.json", null, config, "Create standard Prettier configuration");
+      if (change) plan.files.push(change);
+    }
+  }
+
   if (includeCi) {
     const ci = await planCiChange(context, context.packageManager);
-    if (ci.change && !plan.conflicts.some((conflict) => conflict.includes("script 'health'"))) plan.files.push(ci.change);
+    if (ci.change && !plan.conflicts.some((conflict) => conflict.includes("script 'health'")))
+      plan.files.push(ci.change);
     if (ci.warning) plan.warnings.push(ci.warning);
   }
   if (plan.packages.length) {

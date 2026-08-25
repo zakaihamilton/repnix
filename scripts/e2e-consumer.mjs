@@ -68,21 +68,38 @@ async function runInteractiveSetup(bin, expectNoChanges = false) {
 try {
   await mkdir(path.join(consumer, "src"), { recursive: true });
   await mkdir(path.join(consumer, "test"), { recursive: true });
-  await writeFile(path.join(consumer, "package.json"), `${JSON.stringify({
-    name: `repnix-${manager}-consumer`,
-    version: "1.0.0",
-    private: true,
-    type: "module",
-    scripts: { test: "node --test" },
-  }, null, 2)}\n`);
-  await writeFile(path.join(consumer, "tsconfig.json"), `${JSON.stringify({
-    compilerOptions: { module: "NodeNext", moduleResolution: "NodeNext", strict: true, noEmit: true },
-    include: ["src/**/*.ts"],
-  }, null, 2)}\n`);
+  await writeFile(
+    path.join(consumer, "package.json"),
+    `${JSON.stringify(
+      {
+        name: `repnix-${manager}-consumer`,
+        version: "1.0.0",
+        private: true,
+        type: "module",
+        scripts: { test: "node --test" },
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  await writeFile(
+    path.join(consumer, "tsconfig.json"),
+    `${JSON.stringify(
+      {
+        compilerOptions: { module: "NodeNext", moduleResolution: "NodeNext", strict: true, noEmit: true },
+        include: ["src/**/*.ts"],
+      },
+      null,
+      2,
+    )}\n`,
+  );
   const duplicatedBody = `export function summarize(values: number[]): number {\n  const positive = values.filter((value) => value > 0);\n  const doubled = positive.map((value) => value * 2);\n  const limited = doubled.slice(0, 100);\n  const sorted = limited.sort((left, right) => left - right);\n  const unique = [...new Set(sorted)];\n  const total = unique.reduce((sum, value) => sum + value, 0);\n  const count = unique.length;\n  const average = count === 0 ? 0 : total / count;\n  return Math.round(average);\n}\n`;
   await writeFile(path.join(consumer, "src", "first.ts"), duplicatedBody);
   await writeFile(path.join(consumer, "src", "second.ts"), duplicatedBody.replace("summarize", "calculate"));
-  await writeFile(path.join(consumer, "test", "smoke.test.js"), `import assert from "node:assert/strict";\nimport test from "node:test";\ntest("consumer", () => assert.equal(2 + 2, 4));\n`);
+  await writeFile(
+    path.join(consumer, "test", "smoke.test.js"),
+    `import assert from "node:assert/strict";\nimport test from "node:test";\ntest("consumer", () => assert.equal(2 + 2, 4));\n`,
+  );
 
   const tarball = await packProject(temporary);
   await run(manager, [...installArgs[manager], tarball, "typescript"], { cwd: consumer, timeoutMs: 600_000 });
@@ -102,19 +119,47 @@ try {
   assert(manifest.devDependencies?.knip, "Setup did not install Knip.");
   assert(manifest.devDependencies?.jscpd, "Setup did not install jscpd.");
   await readFile(path.join(consumer, ".jscpd.json"), "utf8");
-  assert((await readFile(path.join(consumer, ".gitignore"), "utf8")).includes(".repnix/"), "Setup did not ignore generated RepNix reports.");
+  assert(
+    (await readFile(path.join(consumer, ".gitignore"), "utf8")).includes(".repnix/"),
+    "Setup did not ignore generated RepNix reports.",
+  );
 
-  const check = await run(bin, ["check", "--format", "json"], { cwd: consumer, allowExitCodes: [0, 1], timeoutMs: 600_000 });
+  const check = await run(bin, ["check", "--format", "json"], {
+    cwd: consumer,
+    allowExitCodes: [0, 1],
+    timeoutMs: 600_000,
+  });
   const report = JSON.parse(check.stdout);
   assert(report.schemaVersion === 1, "check --format json did not emit schema version 1.");
   assert(report.summary?.errors === 0, `Health check contained execution errors: ${check.stdout}`);
-  assert(report.results?.some((result) => result.provider === "knip"), "Health check did not run Knip.");
-  assert(report.results?.some((result) => result.provider === "jscpd"), "Health check did not run jscpd.");
+  assert(
+    report.results?.some((result) => result.provider === "knip"),
+    "Health check did not run Knip.",
+  );
+  assert(
+    report.results?.some((result) => result.provider === "jscpd"),
+    "Health check did not run jscpd.",
+  );
 
-  const explanation = await run(bin, ["check", "--details"], { cwd: consumer, allowExitCodes: [0, 1], timeoutMs: 600_000 });
-  assert(explanation.stdout.includes("Knip") || explanation.stdout.includes("jscpd"), "Explain omitted provider attribution.");
+  const explanation = await run(bin, ["check", "--details"], {
+    cwd: consumer,
+    allowExitCodes: [0, 1],
+    timeoutMs: 600_000,
+  });
+  assert(
+    explanation.stdout.includes("Knip") || explanation.stdout.includes("jscpd"),
+    "Explain omitted provider attribution.",
+  );
 
-  const trackedFiles = ["package.json", ".jscpd.json", "package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock", "bun.lockb"];
+  const trackedFiles = [
+    "package.json",
+    ".jscpd.json",
+    "package-lock.json",
+    "pnpm-lock.yaml",
+    "yarn.lock",
+    "bun.lock",
+    "bun.lockb",
+  ];
   const beforeSecondSetup = await snapshotFiles(consumer, trackedFiles);
   const secondSetupOutput = await runInteractiveSetup(bin, true);
   assert(
@@ -123,7 +168,10 @@ try {
     "Second setup was not a no-op.",
   );
   const afterSecondSetup = await snapshotFiles(consumer, trackedFiles);
-  assert(JSON.stringify([...afterSecondSetup]) === JSON.stringify([...beforeSecondSetup]), "Second setup changed repository files.");
+  assert(
+    JSON.stringify([...afterSecondSetup]) === JSON.stringify([...beforeSecondSetup]),
+    "Second setup changed repository files.",
+  );
 
   process.stdout.write(`${manager} consumer acceptance test passed.\n`);
 } finally {

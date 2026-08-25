@@ -41,7 +41,12 @@ export function recommendJscpd(context: RepositoryContext, helpers?: RecommendHe
 
 export function recommendOsv(context: RepositoryContext, helpers?: RecommendHelpers): ProviderRecommendation | null {
   const lockfiles = LOCKFILES.filter((file) => context.files.has(file));
-  if (coveredOrOff(helpers) || lockfiles.length === 0 || helpers?.detections.get("osv-scanner")?.activeCapabilities.vulnerabilities) return null;
+  if (
+    coveredOrOff(helpers) ||
+    lockfiles.length === 0 ||
+    helpers?.detections.get("osv-scanner")?.activeCapabilities.vulnerabilities
+  )
+    return null;
   return {
     recommended: true,
     priority: "baseline",
@@ -50,62 +55,83 @@ export function recommendOsv(context: RepositoryContext, helpers?: RecommendHelp
   };
 }
 
-export function recommendEslintBoundaries(context: RepositoryContext, helpers?: RecommendHelpers): ProviderRecommendation | null {
+function eligibleForArchitectureCheck(context: RepositoryContext, helpers?: RecommendHelpers): boolean {
   const sourceCount = context.productionSourceFiles?.length ?? context.sourceFiles.length;
-  if (coveredOrOff(helpers) || sourceCount < 2) return null;
+  return !coveredOrOff(helpers) && sourceCount >= 2;
+}
+
+export function recommendEslintBoundaries(
+  context: RepositoryContext,
+  helpers?: RecommendHelpers,
+): ProviderRecommendation | null {
+  if (!eligibleForArchitectureCheck(context, helpers)) return null;
   if (helpers?.detections.get("eslint")?.activeCapabilities.linting !== true) return null;
   if (helpers?.detections.get("eslint-boundaries")?.activeCapabilities.architectureRules) return null;
   return {
     recommended: true,
     priority: "optional",
     actionable: false,
-    reason: "ESLint is already active, so eslint-plugin-boundaries can add dependency rules without introducing another lint command. You will need to define which folders or module types may depend on each other.",
+    reason:
+      "ESLint is already active, so eslint-plugin-boundaries can add dependency rules without introducing another lint command. You will need to define which folders or module types may depend on each other.",
   };
 }
 
-export function recommendDependencyCruiser(context: RepositoryContext, helpers?: RecommendHelpers): ProviderRecommendation | null {
-  const sourceCount = context.productionSourceFiles?.length ?? context.sourceFiles.length;
-  if (coveredOrOff(helpers) || sourceCount < 2) return null;
+export function recommendDependencyCruiser(
+  context: RepositoryContext,
+  helpers?: RecommendHelpers,
+): ProviderRecommendation | null {
+  if (!eligibleForArchitectureCheck(context, helpers)) return null;
   if (helpers?.detections.get("eslint")?.activeCapabilities.linting === true) return null;
   if (helpers?.detections.get("dependency-cruiser")?.activeCapabilities.architectureRules) return null;
   return {
     recommended: true,
     priority: "optional",
     actionable: true,
-    reason: "No ESLint architecture rules are active. dependency-cruiser can find dependency cycles and stop production code from importing test code, without changing your existing lint setup.",
+    reason:
+      "No ESLint architecture rules are active. dependency-cruiser can find dependency cycles and stop production code from importing test code, without changing your existing lint setup.",
   };
 }
 
-export function recommendSizeLimit(_context: RepositoryContext, helpers?: RecommendHelpers): ProviderRecommendation | null {
+export function recommendSizeLimit(
+  _context: RepositoryContext,
+  helpers?: RecommendHelpers,
+): ProviderRecommendation | null {
   if (coveredOrOff(helpers) || helpers?.coverageStatus === "not-applicable") return null;
   if (helpers?.detections.get("size-limit")?.activeCapabilities.bundleBudget) return null;
   return {
     recommended: true,
     priority: "optional",
     actionable: false,
-    reason: "This frontend or publishable package ships JavaScript that can grow over time. Size Limit is useful after you choose a real build artifact and an explicit size budget; RepNix will not guess that budget for you.",
+    reason:
+      "This frontend or publishable package ships JavaScript that can grow over time. Size Limit is useful after you choose a real build artifact and an explicit size budget; RepNix will not guess that budget for you.",
   };
 }
 
-export function recommendPublint(_context: RepositoryContext, helpers?: RecommendHelpers): ProviderRecommendation | null {
+export function recommendPublint(
+  _context: RepositoryContext,
+  helpers?: RecommendHelpers,
+): ProviderRecommendation | null {
   if (helpers?.coverageStatus === "off" || helpers?.coverageStatus === "not-applicable") return null;
   if (helpers?.detections.get("publint")?.activeCapabilities.packagePublishing) return null;
   return {
     recommended: true,
     priority: "baseline",
     actionable: true,
-    reason: "This repository is publishable to npm, but nothing currently checks whether the package metadata, entry points, and published files agree. Publint checks the package consumers will actually install.",
+    reason:
+      "This repository is publishable to npm, but nothing currently checks whether the package metadata, entry points, and published files agree. Publint checks the package consumers will actually install.",
   };
 }
 
 export function recommendAttw(context: RepositoryContext, helpers?: RecommendHelpers): ProviderRecommendation | null {
   if (helpers?.coverageStatus === "off" || helpers?.coverageStatus === "not-applicable") return null;
-  if (!hasPublishedTypes(context) || helpers?.detections.get("attw")?.activeCapabilities.typesCompatibility) return null;
-  const evidence = typeof context.packageJson.types === "string"
-    ? `package.json#types points to ${context.packageJson.types}`
-    : typeof context.packageJson.typings === "string"
-      ? `package.json#typings points to ${context.packageJson.typings}`
-      : "package.json exports contains a types condition";
+  if (!hasPublishedTypes(context) || helpers?.detections.get("attw")?.activeCapabilities.typesCompatibility)
+    return null;
+  const evidence =
+    typeof context.packageJson.types === "string"
+      ? `package.json#types points to ${context.packageJson.types}`
+      : typeof context.packageJson.typings === "string"
+        ? `package.json#typings points to ${context.packageJson.typings}`
+        : "package.json exports contains a types condition";
   return {
     recommended: true,
     priority: "baseline",
@@ -131,7 +157,8 @@ export function recommendSyncpack(): ProviderRecommendation {
     recommended: true,
     priority: "baseline",
     actionable: true,
-    reason: "This repository contains multiple workspaces, but dependency versions and package metadata are not being checked for consistency.",
+    reason:
+      "This repository contains multiple workspaces, but dependency versions and package metadata are not being checked for consistency.",
   };
 }
 
@@ -152,7 +179,8 @@ export function recommendStryker(): ProviderRecommendation {
     recommended: true,
     priority: "advanced",
     actionable: false,
-    reason: "Mutation testing measures whether tests catch behavior changes. It requires a test-specific configuration and can be expensive, so it is an advanced recommendation.",
+    reason:
+      "Mutation testing measures whether tests catch behavior changes. It requires a test-specific configuration and can be expensive, so it is an advanced recommendation.",
   };
 }
 
@@ -161,7 +189,8 @@ export function recommendGitleaks(): ProviderRecommendation {
     recommended: true,
     priority: "baseline",
     actionable: false,
-    reason: "No secret scanner is active. Gitleaks can detect credentials before they reach the repository or CI artifacts.",
+    reason:
+      "No secret scanner is active. Gitleaks can detect credentials before they reach the repository or CI artifacts.",
   };
 }
 
@@ -170,7 +199,8 @@ export function recommendLicenseChecker(): ProviderRecommendation {
     recommended: true,
     priority: "optional",
     actionable: true,
-    reason: "Dependencies are present, but no license report is active. Add an allow/deny policy before making license violations fail CI.",
+    reason:
+      "Dependencies are present, but no license report is active. Add an allow/deny policy before making license violations fail CI.",
   };
 }
 
@@ -188,7 +218,8 @@ export function recommendLhci(): ProviderRecommendation {
     recommended: true,
     priority: "optional",
     actionable: false,
-    reason: "This repository ships frontend or package output, but no runtime performance budget is active. Configure Lighthouse CI against a real URL or build.",
+    reason:
+      "This repository ships frontend or package output, but no runtime performance budget is active. Configure Lighthouse CI against a real URL or build.",
   };
 }
 
@@ -209,6 +240,7 @@ export function recommendActionlint(): ProviderRecommendation {
     recommended: true,
     priority: "optional",
     actionable: false,
-    reason: "GitHub Actions workflows are present, but their syntax and common automation mistakes are not being checked.",
+    reason:
+      "GitHub Actions workflows are present, but their syntax and common automation mistakes are not being checked.",
   };
 }

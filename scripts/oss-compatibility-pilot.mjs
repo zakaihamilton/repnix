@@ -37,7 +37,11 @@ async function checkoutPilot(pilot, root) {
   await run("git", ["remote", "add", "origin", pilot.repository], { cwd: root });
   await run("git", ["fetch", "--depth", "1", "origin", pilot.revision], { cwd: root, timeoutMs: 300_000 });
   const revision = await run("git", ["rev-parse", "FETCH_HEAD"], { cwd: root });
-  assertEqual(revision.stdout.trim(), pilot.revision, `${pilot.id}: fetched revision differs from the pinned revision.`);
+  assertEqual(
+    revision.stdout.trim(),
+    pilot.revision,
+    `${pilot.id}: fetched revision differs from the pinned revision.`,
+  );
   await run("git", ["checkout", "--detach", "--quiet", "FETCH_HEAD"], { cwd: root });
 }
 
@@ -60,9 +64,15 @@ async function runPilot(pilot, temporary) {
   const plan = await execute(["setup", "--plan", "--format", "json", "--quiet"]);
   assertEqual(plan.warnings, [], `${pilot.id}: setup plan emitted warnings.`);
   assertEqual(plan.conflicts, [], `${pilot.id}: setup plan reported conflicts.`);
-  assertEqual([...await snapshotDirectory(root)], [...before], `${pilot.id}: read-only commands changed the repository.`);
+  assertEqual(
+    [...(await snapshotDirectory(root))],
+    [...before],
+    `${pilot.id}: read-only commands changed the repository.`,
+  );
 
-  process.stdout.write(`OSS compatibility pilot passed: ${pilot.id} (${audit.recommendations.map((item) => item.provider).join(", ") || "no recommendations"})\n`);
+  process.stdout.write(
+    `OSS compatibility pilot passed: ${pilot.id} (${audit.recommendations.map((item) => item.provider).join(", ") || "no recommendations"})\n`,
+  );
 }
 
 const temporary = await mkdtemp(path.join(os.tmpdir(), "repnix-oss-compatibility-"));

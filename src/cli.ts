@@ -12,20 +12,29 @@ const program = new Command()
   .description("Find missing checks and make software repositories safer to change")
   .version(VERSION)
   .showHelpAfterError()
-  .addHelpText("after", `\nStart here:\n  repnix audit   See what your repository already checks and what is missing.\n  repnix setup   Add recommended checks after reviewing a preview.\n  repnix check   Run active checks; add --details for remediation.\n\nAI-assisted fixes:\n  The full-screen setup check saves .repnix/health-report.md. Attach or drop that\n  file into an AI coding assistant, ask it to fix the reported issues, review its\n  changes, then run repnix check to verify them.\n\nHealth categories:\n${HEALTH_CATEGORIES.map((category) => `  ${category.padEnd(16)} ${CATEGORY_LABELS[category]} — ${CATEGORY_DESCRIPTIONS[category]}`).join("\n")}\n`);
+  .addHelpText(
+    "after",
+    `\nStart here:\n  repnix audit   See what your repository already checks and what is missing.\n  repnix setup   Add recommended checks after reviewing a preview.\n  repnix check   Run active checks; add --details for remediation.\n\nAI-assisted fixes:\n  The full-screen setup check saves .repnix/health-report.md. Attach or drop that\n  file into an AI coding assistant, ask it to fix the reported issues, review its\n  changes, then run repnix check to verify them.\n\nHealth categories:\n${HEALTH_CATEGORIES.map((category) => `  ${category.padEnd(16)} ${CATEGORY_LABELS[category]} — ${CATEGORY_DESCRIPTIONS[category]}`).join("\n")}\n`,
+  );
 
-addDiagnosticOptions(program.command("audit").description("Read-only overview of active checks, missing coverage, and recommendations")
-  .option("--format <format>", "output format: text or json", "text")
-  .option("--details", "show every applicable recommendation and its evidence"))
-  .action(async (options: DiagnosticOptions & { format?: "text" | "json"; details?: boolean }) => {
+addDiagnosticOptions(
+  program
+    .command("audit")
+    .description("Read-only overview of active checks, missing coverage, and recommendations")
+    .option("--format <format>", "output format: text or json", "text")
+    .option("--details", "show every applicable recommendation and its evidence"),
+).action(async (options: DiagnosticOptions & { format?: "text" | "json"; details?: boolean }) => {
   process.exitCode = await auditCommand(options);
 });
 
-addDiagnosticOptions(program.command("setup").description("Review and interactively add recommended checks")
-  .option("--plan", "print a read-only plan for recommended baseline checks")
-  .option("--apply-plan <file>", "review and apply a previously serialized setup plan")
-  .option("--format <format>", "plan output format: text or json", "text"))
-  .action(async (options: DiagnosticOptions & { plan?: boolean; applyPlan?: string; format?: "text" | "json" }) => {
+addDiagnosticOptions(
+  program
+    .command("setup")
+    .description("Review and interactively add recommended checks")
+    .option("--plan", "print a read-only plan for recommended baseline checks")
+    .option("--apply-plan <file>", "review and apply a previously serialized setup plan")
+    .option("--format <format>", "plan output format: text or json", "text"),
+).action(async (options: DiagnosticOptions & { plan?: boolean; applyPlan?: string; format?: "text" | "json" }) => {
   process.exitCode = await setupCommand(options);
 });
 
@@ -41,10 +50,20 @@ const check = program
     return jobs;
   })
   .option("--write-baseline [path]", "record current findings and fail future checks only on new findings")
-  .action(async (category: string | undefined, options: DiagnosticOptions & { format?: "summary" | "details" | "json" | "sarif"; details?: boolean; jobs?: number; writeBaseline?: boolean | string }) => {
-    if (options.details) options.format = "details";
-    process.exitCode = await checkCommand(category, options);
-  });
+  .action(
+    async (
+      category: string | undefined,
+      options: DiagnosticOptions & {
+        format?: "summary" | "details" | "json" | "sarif";
+        details?: boolean;
+        jobs?: number;
+        writeBaseline?: boolean | string;
+      },
+    ) => {
+      if (options.details) options.format = "details";
+      process.exitCode = await checkCommand(category, options);
+    },
+  );
 addDiagnosticOptions(check);
 
 try {
@@ -55,15 +74,18 @@ try {
   const formatIndex = process.argv.indexOf("--log-format");
   const structured = formatArgument === "--log-format=json" || process.argv[formatIndex + 1] === "json";
   const stackRequested = process.argv.includes("--verbose") || process.argv.includes("--log-level");
-  const stack = stackRequested && error instanceof Error && error.stack ? error.stack.split("\n").slice(1).join("\n") : undefined;
+  const stack =
+    stackRequested && error instanceof Error && error.stack ? error.stack.split("\n").slice(1).join("\n") : undefined;
   if (structured) {
-    process.stderr.write(`${JSON.stringify({
-      timestamp: new Date().toISOString(),
-      level: "error",
-      event: "cli.error",
-      message,
-      ...(stack ? { stack } : {}),
-    })}\n`);
+    process.stderr.write(
+      `${JSON.stringify({
+        timestamp: new Date().toISOString(),
+        level: "error",
+        event: "cli.error",
+        message,
+        ...(stack ? { stack } : {}),
+      })}\n`,
+    );
   } else {
     process.stderr.write(`repnix: ${message}\n`);
     if (stack) {

@@ -10,81 +10,322 @@ import type { ProviderRegistry } from "../providers/registry.js";
 import { setupStepIndex, textColor, type SetupTuiTheme } from "./setup-theme.js";
 
 export function progressMessage(progress: InstallProgress): string {
-  if (progress.phase === "validating") return `Validating ${progress.total ?? 0} reviewed file${progress.total === 1 ? "" : "s"}…`;
-  if (progress.phase === "snapshotting") return `Saving rollback snapshots for ${progress.total ?? 0} file${progress.total === 1 ? "" : "s"}…`;
-  if (progress.phase === "writing-files") return progress.label ? `${progress.current ?? 0}/${progress.total ?? 0} files · ${progress.label}` : "No reviewed files need writing.";
-  if (progress.phase === "running-command") return `Running command ${progress.current ?? 0}/${progress.total ?? 0}: ${progress.label ?? ""}`;
+  if (progress.phase === "validating")
+    return `Validating ${progress.total ?? 0} reviewed file${progress.total === 1 ? "" : "s"}…`;
+  if (progress.phase === "snapshotting")
+    return `Saving rollback snapshots for ${progress.total ?? 0} file${progress.total === 1 ? "" : "s"}…`;
+  if (progress.phase === "writing-files")
+    return progress.label
+      ? `${progress.current ?? 0}/${progress.total ?? 0} files · ${progress.label}`
+      : "No reviewed files need writing.";
+  if (progress.phase === "running-command")
+    return `Running command ${progress.current ?? 0}/${progress.total ?? 0}: ${progress.label ?? ""}`;
   if (progress.phase === "rollback") return "Apply failed; rolling back reviewed changes…";
   return "Finishing setup…";
 }
 
-export function Panel({ title, children, theme, flexGrow = 1, flexShrink, width, borderColor, fill = true }: { title: string; children: React.ReactNode; theme: SetupTuiTheme; flexGrow?: number; flexShrink?: number; width?: string | number; borderColor?: string; fill?: boolean }): React.ReactElement {
-  return <Box borderStyle="round" borderColor={borderColor ?? theme.border} flexDirection="column" paddingX={1} flexGrow={flexGrow} flexShrink={flexShrink} width={width ?? "100%"} {...(fill ? { height: "100%" } : {})} overflow="hidden">
-    <Box flexShrink={0} width="100%" overflow="hidden"><Text bold color={theme.primary} wrap="truncate-end">{` ${title} `}</Text></Box>
-    <Box flexDirection="column" flexGrow={1} flexShrink={1} width="100%" minHeight={0} overflow="hidden">{children}</Box>
-  </Box>;
+export function Panel({
+  title,
+  children,
+  theme,
+  flexGrow = 1,
+  flexShrink,
+  width,
+  borderColor,
+  fill = true,
+}: {
+  title: string;
+  children: React.ReactNode;
+  theme: SetupTuiTheme;
+  flexGrow?: number;
+  flexShrink?: number;
+  width?: string | number;
+  borderColor?: string;
+  fill?: boolean;
+}): React.ReactElement {
+  return (
+    <Box
+      borderStyle="round"
+      borderColor={borderColor ?? theme.border}
+      flexDirection="column"
+      paddingX={1}
+      flexGrow={flexGrow}
+      flexShrink={flexShrink}
+      width={width ?? "100%"}
+      {...(fill ? { height: "100%" } : {})}
+      overflow="hidden"
+    >
+      <Box flexShrink={0} width="100%" overflow="hidden">
+        <Text bold color={theme.primary} wrap="truncate-end">{` ${title} `}</Text>
+      </Box>
+      <Box flexDirection="column" flexGrow={1} flexShrink={1} width="100%" minHeight={0} overflow="hidden">
+        {children}
+      </Box>
+    </Box>
+  );
 }
 
 export function ScrollHint({ hasMore, theme }: { hasMore: boolean; theme: SetupTuiTheme }): React.ReactElement {
-  return <Box height={1} flexShrink={0}><Text color={theme.muted}>{hasMore ? "↓ more · use ↑↓ to scroll" : " "}</Text></Box>;
+  return (
+    <Box height={1} flexShrink={0}>
+      <Text color={theme.muted}>{hasMore ? "↓ more · use ↑↓ to scroll" : " "}</Text>
+    </Box>
+  );
 }
 
-export function Header({ model, repositoryName, packageManager, compact, theme }: { model: SetupTuiModel; repositoryName: string; packageManager: string | null; compact: boolean; theme: SetupTuiTheme }): React.ReactElement {
+export function Header({
+  model,
+  repositoryName,
+  packageManager,
+  compact,
+  theme,
+}: {
+  model: SetupTuiModel;
+  repositoryName: string;
+  packageManager: string | null;
+  compact: boolean;
+  theme: SetupTuiTheme;
+}): React.ReactElement {
   const steps = ["Audit", "Manual guidance", "Select checks", "Review changes", "Apply safely"];
   const active = setupStepIndex(model.screen);
-  return <Box flexDirection="column" marginBottom={1} flexShrink={0} width="100%" overflow="hidden">
-    <Box flexDirection={compact ? "column" : "row"} justifyContent="space-between" width="100%" overflow="hidden">
-      <Box flexShrink={0}><Text bold color={theme.primary}>◆ REP<Text color={theme.secondary}>NIX</Text> <Text color={theme.muted}>/ SETUP</Text></Text></Box>
-      <Box flexShrink={1} minWidth={0} overflow="hidden"><Text color={theme.muted} wrap="truncate-end"><Text {...textColor(theme)}>{repositoryName}</Text>  ·  {packageManager ?? "package manager unresolved"}</Text></Box>
+  return (
+    <Box flexDirection="column" marginBottom={1} flexShrink={0} width="100%" overflow="hidden">
+      <Box flexDirection={compact ? "column" : "row"} justifyContent="space-between" width="100%" overflow="hidden">
+        <Box flexShrink={0}>
+          <Text bold color={theme.primary}>
+            ◆ REP<Text color={theme.secondary}>NIX</Text> <Text color={theme.muted}>/ SETUP</Text>
+          </Text>
+        </Box>
+        <Box flexShrink={1} minWidth={0} overflow="hidden">
+          <Text color={theme.muted} wrap="truncate-end">
+            <Text {...textColor(theme)}>{repositoryName}</Text> · {packageManager ?? "package manager unresolved"}
+          </Text>
+        </Box>
+      </Box>
+      <Box marginTop={1} width="100%" flexWrap="wrap" overflow="hidden">
+        {steps.map((step, index) => (
+          <Box key={step} marginRight={2} flexShrink={0}>
+            <Text
+              color={index < active ? theme.success : index === active ? theme.primary : theme.muted}
+              bold={index === active}
+              wrap="truncate"
+            >
+              {index < active ? "● " : index === active ? "◆ " : "○ "}
+              {step}
+            </Text>
+          </Box>
+        ))}
+      </Box>
     </Box>
-    <Box marginTop={1} width="100%" flexWrap="wrap" overflow="hidden">{steps.map((step, index) => <Box key={step} marginRight={2} flexShrink={0}><Text color={index < active ? theme.success : index === active ? theme.primary : theme.muted} bold={index === active} wrap="truncate">{index < active ? "● " : index === active ? "◆ " : "○ "}{step}</Text></Box>)}</Box>
-  </Box>;
+  );
 }
 
-function KeyHint({ label, children, theme }: { label: string; children: React.ReactNode; theme: SetupTuiTheme }): React.ReactElement {
-  return <Text><Text color={theme.primary} backgroundColor={theme.panelRaised} bold>{` ${label} `}</Text> <Text color={theme.muted}>{children}</Text></Text>;
+function KeyHint({
+  label,
+  children,
+  theme,
+}: {
+  label: string;
+  children: React.ReactNode;
+  theme: SetupTuiTheme;
+}): React.ReactElement {
+  return (
+    <Text>
+      <Text color={theme.primary} backgroundColor={theme.panelRaised} bold>{` ${label} `}</Text>{" "}
+      <Text color={theme.muted}>{children}</Text>
+    </Text>
+  );
 }
 
-export function Footer({ model, sidebarMode, hasManualRecommendations, theme }: { model: SetupTuiModel; sidebarMode: boolean; hasManualRecommendations?: boolean; theme: SetupTuiTheme }): React.ReactElement {
-  const hints: Array<[string, string]> = model.screen === "audit"
-    ? [["↑↓/jk", "scroll"], ["Enter", hasManualRecommendations ? "continue to guidance" : "continue to checks"], ["q/Esc", "exit"]]
-    : model.screen === "manual"
-      ? [["↑↓/jk", "scroll"], ["Enter", "continue to checks"], ["Esc/Delete", "back to audit"], ["q", "quit"]]
-    : model.screen === "select"
-      ? [["↑↓/jk", "move"], ["Space", "toggle"], ...(sidebarMode ? [["Tab", model.sidebarCollapsed ? "show checks" : "show details"] as [string, string]] : []), ["Enter", "review"], ["Esc/Delete", "back"], ["q", "quit"]]
-      : model.screen === "review"
-        ? [["↑↓", "move"], ["Space", "inspect"], ...(sidebarMode ? [["Tab", model.sidebarCollapsed ? "show files" : "show details"] as [string, string]] : []), ["Enter", "confirm"], ["Esc/Delete", "back"], ["q", "quit"]]
-        : model.screen === "details" || model.screen === "check-details" ? [["↑↓/jk", "scroll"], ["Esc/Delete", "back"], ["q", "quit"]]
-          : model.screen === "confirm" ? [["←→", "focus"], ["Enter", "select"], ["Esc/Delete", "back"], ["q", "quit"]]
-            : model.screen === "success" ? [["Enter", "run check"], ["q/Esc", "exit"]]
-            : model.screen === "error" ? [["Enter/q", "exit"]] : [["…", "Please wait"]];
-  return <Box borderStyle="single" borderColor={theme.borderStrong} paddingX={1} marginTop={1} flexShrink={0}><Box flexDirection="row" flexWrap="wrap">{hints.map(([label, description], index) => <Box key={label} flexDirection="row" marginRight={index < hints.length - 1 ? 2 : 0} flexShrink={0}>{index > 0 ? <Text color={theme.border}>·  </Text> : null}<KeyHint label={label} theme={theme}>{description}</KeyHint></Box>)}</Box></Box>;
+export function Footer({
+  model,
+  sidebarMode,
+  hasManualRecommendations,
+  theme,
+}: {
+  model: SetupTuiModel;
+  sidebarMode: boolean;
+  hasManualRecommendations?: boolean;
+  theme: SetupTuiTheme;
+}): React.ReactElement {
+  const hints: Array<[string, string]> =
+    model.screen === "audit"
+      ? [
+          ["↑↓/jk", "scroll"],
+          ["Enter", hasManualRecommendations ? "continue to guidance" : "continue to checks"],
+          ["q/Esc", "exit"],
+        ]
+      : model.screen === "manual"
+        ? [
+            ["↑↓/jk", "scroll"],
+            ["Enter", "continue to checks"],
+            ["Esc/Delete", "back to audit"],
+            ["q", "quit"],
+          ]
+        : model.screen === "select"
+          ? [
+              ["↑↓/jk", "move"],
+              ["Space", "toggle"],
+              ...(sidebarMode
+                ? [["Tab", model.sidebarCollapsed ? "show checks" : "show details"] as [string, string]]
+                : []),
+              ["Enter", "review"],
+              ["Esc/Delete", "back"],
+              ["q", "quit"],
+            ]
+          : model.screen === "review"
+            ? [
+                ["↑↓", "move"],
+                ["Space", "inspect"],
+                ...(sidebarMode
+                  ? [["Tab", model.sidebarCollapsed ? "show files" : "show details"] as [string, string]]
+                  : []),
+                ["Enter", "confirm"],
+                ["Esc/Delete", "back"],
+                ["q", "quit"],
+              ]
+            : model.screen === "details" || model.screen === "check-details"
+              ? [
+                  ["↑↓/jk", "scroll"],
+                  ["Esc/Delete", "back"],
+                  ["q", "quit"],
+                ]
+              : model.screen === "confirm"
+                ? [
+                    ["←→", "focus"],
+                    ["Enter", "select"],
+                    ["Esc/Delete", "back"],
+                    ["q", "quit"],
+                  ]
+                : model.screen === "success"
+                  ? [
+                      ["Enter", "run check"],
+                      ["q/Esc", "exit"],
+                    ]
+                  : model.screen === "error"
+                    ? [["Enter/q", "exit"]]
+                    : [["…", "Please wait"]];
+  return (
+    <Box borderStyle="single" borderColor={theme.borderStrong} paddingX={1} marginTop={1} flexShrink={0}>
+      <Box flexDirection="row" flexWrap="wrap">
+        {hints.map(([label, description], index) => (
+          <Box key={label} flexDirection="row" marginRight={index < hints.length - 1 ? 2 : 0} flexShrink={0}>
+            {index > 0 ? <Text color={theme.border}>· </Text> : null}
+            <KeyHint label={label} theme={theme}>
+              {description}
+            </KeyHint>
+          </Box>
+        ))}
+      </Box>
+    </Box>
+  );
 }
 
-function DetailSection({ title, children, theme }: { title: string; children: React.ReactNode; theme: SetupTuiTheme }): React.ReactElement {
-  return <Box flexDirection="column" marginBottom={1}><Text color={theme.secondary} bold>{title}</Text>{children}</Box>;
+function DetailSection({
+  title,
+  children,
+  theme,
+}: {
+  title: string;
+  children: React.ReactNode;
+  theme: SetupTuiTheme;
+}): React.ReactElement {
+  return (
+    <Box flexDirection="column" marginBottom={1}>
+      <Text color={theme.secondary} bold>
+        {title}
+      </Text>
+      {children}
+    </Box>
+  );
 }
 
-export function CheckDetailView({ recommendation, context, registry, theme }: { recommendation: AuditModel["recommendations"][number]; context: RepositoryContext; registry?: ProviderRegistry | undefined; theme: SetupTuiTheme }): React.ReactElement {
+export function CheckDetailView({
+  recommendation,
+  context,
+  registry,
+  theme,
+}: {
+  recommendation: AuditModel["recommendations"][number];
+  context: RepositoryContext;
+  registry?: ProviderRegistry | undefined;
+  theme: SetupTuiTheme;
+}): React.ReactElement {
   const details = setupCheckDetails(recommendation, context, registry);
-  return <><Text color={theme.info} bold>{builtinProvider(recommendation.provider)?.description ?? "Repository health check"}</Text><Text color={theme.muted}>{CATEGORY_LABELS[recommendation.category]}: {CATEGORY_DESCRIPTIONS[recommendation.category]}</Text><Newline />
-    <DetailSection title="WHY THIS REPOSITORY" theme={theme}><Text {...textColor(theme)}>{recommendation.reason}</Text></DetailSection>
-    <DetailSection title="WHAT IT CHECKS" theme={theme}>{details.checks.map((check) => <Text key={check} {...textColor(theme)}>  • {check}</Text>)}</DetailSection>
-    <DetailSection title="SCOPE" theme={theme}><Text {...textColor(theme)}>  {details.scope}</Text></DetailSection>
-    <DetailSection title="SETUP ADDS" theme={theme}>{details.setup.map((item) => <Text key={item} {...textColor(theme)}>  + {item}</Text>)}</DetailSection>
-    <DetailSection title="RUNS" theme={theme}><Text color={theme.primary}>  $ {details.command}</Text></DetailSection>
-    {!recommendation.actionable ? <Text color={theme.warning}>◆ Manual configuration required before this check can run.</Text> : null}
-    {details.caveat ? <Text color={theme.warning}>◆ {details.caveat}</Text> : null}
-  </>;
+  return (
+    <>
+      <Text color={theme.info} bold>
+        {builtinProvider(recommendation.provider)?.description ?? "Repository health check"}
+      </Text>
+      <Text color={theme.muted}>
+        {CATEGORY_LABELS[recommendation.category]}: {CATEGORY_DESCRIPTIONS[recommendation.category]}
+      </Text>
+      <Newline />
+      <DetailSection title="WHY THIS REPOSITORY" theme={theme}>
+        <Text {...textColor(theme)}>{recommendation.reason}</Text>
+      </DetailSection>
+      <DetailSection title="WHAT IT CHECKS" theme={theme}>
+        {details.checks.map((check) => (
+          <Text key={check} {...textColor(theme)}>
+            {" "}
+            • {check}
+          </Text>
+        ))}
+      </DetailSection>
+      <DetailSection title="SCOPE" theme={theme}>
+        <Text {...textColor(theme)}> {details.scope}</Text>
+      </DetailSection>
+      <DetailSection title="SETUP ADDS" theme={theme}>
+        {details.setup.map((item) => (
+          <Text key={item} {...textColor(theme)}>
+            {" "}
+            + {item}
+          </Text>
+        ))}
+      </DetailSection>
+      <DetailSection title="RUNS" theme={theme}>
+        <Text color={theme.primary}> $ {details.command}</Text>
+      </DetailSection>
+      {!recommendation.actionable ? (
+        <Text color={theme.warning}>◆ Manual configuration required before this check can run.</Text>
+      ) : null}
+      {details.caveat ? <Text color={theme.warning}>◆ {details.caveat}</Text> : null}
+    </>
+  );
 }
 
-export function CiDetailView({ context, theme }: { context: RepositoryContext; theme: SetupTuiTheme }): React.ReactElement {
+export function CiDetailView({
+  context,
+  theme,
+}: {
+  context: RepositoryContext;
+  theme: SetupTuiTheme;
+}): React.ReactElement {
   const command = context.packageManager ? `${context.packageManager} run health` : "run health";
-  return <><Text color={theme.info} bold>Add the unified repository health check to GitHub Actions.</Text><Newline />
-    <DetailSection title="WHAT IT ADDS" theme={theme}><Text {...textColor(theme)}>  A Repository health step in the most obvious workflow job after dependencies are installed.</Text></DetailSection>
-    <DetailSection title="RUNS" theme={theme}><Text color={theme.primary}>  $ {command}</Text></DetailSection>
-    <DetailSection title="SAFETY" theme={theme}><Text {...textColor(theme)}>  Existing workflow steps are preserved. If RepNix cannot identify one unambiguous checkout and install job, it leaves the workflow unchanged and shows a manual warning in the review.</Text></DetailSection>
-  </>;
+  return (
+    <>
+      <Text color={theme.info} bold>
+        Add the unified repository health check to GitHub Actions.
+      </Text>
+      <Newline />
+      <DetailSection title="WHAT IT ADDS" theme={theme}>
+        <Text {...textColor(theme)}>
+          {" "}
+          A Repository health step in the most obvious workflow job after dependencies are installed.
+        </Text>
+      </DetailSection>
+      <DetailSection title="RUNS" theme={theme}>
+        <Text color={theme.primary}> $ {command}</Text>
+      </DetailSection>
+      <DetailSection title="SAFETY" theme={theme}>
+        <Text {...textColor(theme)}>
+          {" "}
+          Existing workflow steps are preserved. If RepNix cannot identify one unambiguous checkout and install job, it
+          leaves the workflow unchanged and shows a manual warning in the review.
+        </Text>
+      </DetailSection>
+    </>
+  );
 }
 
 export function planStats(plan: InstallPlan): string {
@@ -92,15 +333,44 @@ export function planStats(plan: InstallPlan): string {
   if (plan.packages.length) parts.push(`${plan.packages.length} package${plan.packages.length === 1 ? "" : "s"}`);
   if (plan.files.length) parts.push(`${plan.files.length} file${plan.files.length === 1 ? "" : "s"}`);
   if (plan.warnings.length) parts.push(`${plan.warnings.length} warning${plan.warnings.length === 1 ? "" : "s"}`);
-  if (plan.conflicts.length) parts.push(`${plan.conflicts.length} preserved conflict${plan.conflicts.length === 1 ? "" : "s"}`);
+  if (plan.conflicts.length)
+    parts.push(`${plan.conflicts.length} preserved conflict${plan.conflicts.length === 1 ? "" : "s"}`);
   return parts.join("  ·  ") || "No changes";
 }
 
 export function ReviewNotes({ plan, theme }: { plan: InstallPlan; theme: SetupTuiTheme }): React.ReactElement {
-  if (!plan.warnings.length && !plan.conflicts.length) return <Text color={theme.success}>● No warnings or conflicts.</Text>;
-  return <Box flexDirection="column">{plan.warnings.map((warning, index) => <Text key={`warning-${index}`} color={theme.warning}>◆ Warning: {warning}</Text>)}{plan.conflicts.map((conflict, index) => <Text key={`conflict-${index}`} color={theme.warning}>◆ Preserved: {conflict}</Text>)}</Box>;
+  if (!plan.warnings.length && !plan.conflicts.length)
+    return <Text color={theme.success}>● No warnings or conflicts.</Text>;
+  return (
+    <Box flexDirection="column">
+      {plan.warnings.map((warning, index) => (
+        <Text key={`warning-${index}`} color={theme.warning}>
+          ◆ Warning: {warning}
+        </Text>
+      ))}
+      {plan.conflicts.map((conflict, index) => (
+        <Text key={`conflict-${index}`} color={theme.warning}>
+          ◆ Preserved: {conflict}
+        </Text>
+      ))}
+    </Box>
+  );
 }
 
-export function ConfirmButton({ label, focused, theme }: { label: string; focused: boolean; theme: SetupTuiTheme }): React.ReactElement {
-  return <Text color={focused ? theme.primary : theme.muted} backgroundColor={focused ? theme.active : theme.panelRaised} bold={focused}>{` ${label} `}</Text>;
+export function ConfirmButton({
+  label,
+  focused,
+  theme,
+}: {
+  label: string;
+  focused: boolean;
+  theme: SetupTuiTheme;
+}): React.ReactElement {
+  return (
+    <Text
+      color={focused ? theme.primary : theme.muted}
+      backgroundColor={focused ? theme.active : theme.panelRaised}
+      bold={focused}
+    >{` ${label} `}</Text>
+  );
 }

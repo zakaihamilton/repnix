@@ -11,7 +11,7 @@ function emptyPlan(): InstallPlan {
 function stringList(value: unknown): string[] | null {
   if (value === undefined) return [];
   if (typeof value === "string") return [value];
-  return Array.isArray(value) && value.every((item) => typeof item === "string") ? value as string[] : null;
+  return Array.isArray(value) && value.every((item) => typeof item === "string") ? (value as string[]) : null;
 }
 
 function installedAtRoot(context: RepositoryContext, name: string): boolean {
@@ -19,20 +19,24 @@ function installedAtRoot(context: RepositoryContext, name: string): boolean {
 }
 
 function changesetsConfig(baseBranch: string): string {
-  return `${JSON.stringify({
-    changelog: "@changesets/cli/changelog",
-    commit: false,
-    fixed: [],
-    linked: [],
-    access: "restricted",
-    baseBranch,
-    updateInternalDependencies: "patch",
-    ignore: [],
-    bumpVersionsWithWorkspaceProtocolOnly: false,
-    changedFilePatterns: ["**"],
-    format: "auto",
-    privatePackages: { version: false, tag: false },
-  }, null, 2)}\n`;
+  return `${JSON.stringify(
+    {
+      changelog: "@changesets/cli/changelog",
+      commit: false,
+      fixed: [],
+      linked: [],
+      access: "restricted",
+      baseBranch,
+      updateInternalDependencies: "patch",
+      ignore: [],
+      bumpVersionsWithWorkspaceProtocolOnly: false,
+      changedFilePatterns: ["**"],
+      format: "auto",
+      privatePackages: { version: false, tag: false },
+    },
+    null,
+    2,
+  )}\n`;
 }
 
 export async function planJsxA11yInstall(context: RepositoryContext): Promise<InstallPlan> {
@@ -79,7 +83,12 @@ export async function planChangesetsInstall(context: RepositoryContext): Promise
     plan.conflicts.push("Changesets needs the Git remote default branch, which could not be resolved safely.");
     return plan;
   }
-  const change = fileChange(configPath, null, changesetsConfig(context.gitDefaultBranch), "Create standard Changesets release configuration");
+  const change = fileChange(
+    configPath,
+    null,
+    changesetsConfig(context.gitDefaultBranch),
+    "Create standard Changesets release configuration",
+  );
   if (change) plan.files.push(change);
   return plan;
 }

@@ -1,4 +1,8 @@
-import { BUILTIN_CATEGORY_DEFINITIONS, createCategoryRegistry, type CategoryDefinition } from "../core/category-registry.js";
+import {
+  BUILTIN_CATEGORY_DEFINITIONS,
+  createCategoryRegistry,
+  type CategoryDefinition,
+} from "../core/category-registry.js";
 import { PROVIDERS } from "./catalog.js";
 import type { CategoryModule, ProviderModule } from "./sdk.js";
 
@@ -34,18 +38,30 @@ export class ProviderRegistry {
   private readonly byId: Map<string, ProviderModule>;
 
   constructor(providers: ProviderModule[], categories: CategoryModule[] = []) {
-    const duplicateProvider = providers.find((provider, index) => providers.findIndex((candidate) => candidate.id === provider.id) !== index);
+    const duplicateProvider = providers.find(
+      (provider, index) => providers.findIndex((candidate) => candidate.id === provider.id) !== index,
+    );
     if (duplicateProvider) throw new Error(`Duplicate provider id '${duplicateProvider.id}' was registered.`);
-    const duplicateCategory = categories.find((category, index) => categories.findIndex((candidate) => candidate.id === category.id) !== index);
+    const duplicateCategory = categories.find(
+      (category, index) => categories.findIndex((candidate) => candidate.id === category.id) !== index,
+    );
     if (duplicateCategory) throw new Error(`Duplicate category id '${duplicateCategory.id}' was registered.`);
     this.providers = providers;
     this.categories = categories;
-    this.categoryRegistry = createCategoryRegistry(categories.filter((category) => !BUILTIN_CATEGORY_DEFINITIONS.some((builtin) => builtin.id === category.id)) as CategoryDefinition[]);
+    this.categoryRegistry = createCategoryRegistry(
+      categories.filter(
+        (category) => !BUILTIN_CATEGORY_DEFINITIONS.some((builtin) => builtin.id === category.id),
+      ) as CategoryDefinition[],
+    );
     this.byId = new Map(providers.map((provider) => [provider.id, provider]));
   }
 
-  get(id: string): ProviderModule | undefined { return this.byId.get(id); }
-  list(): ProviderModule[] { return [...this.providers]; }
+  get(id: string): ProviderModule | undefined {
+    return this.byId.get(id);
+  }
+  list(): ProviderModule[] {
+    return [...this.providers];
+  }
 }
 
 export function createBuiltinRegistry(): ProviderRegistry {
@@ -58,5 +74,9 @@ export function createProviderRegistry(): ProviderRegistry {
 
 const byId = new Map(BUILTIN_PROVIDERS.map((provider) => [provider.id, provider]));
 const byName = new Map(BUILTIN_PROVIDERS.map((provider) => [provider.name, provider]));
-export function builtinProvider(id: string): BuiltinProviderDefinition | undefined { return byId.get(id); }
-export function builtinProviderByName(name: string): BuiltinProviderDefinition | undefined { return byName.get(name); }
+export function builtinProvider(id: string): BuiltinProviderDefinition | undefined {
+  return byId.get(id);
+}
+export function builtinProviderByName(name: string): BuiltinProviderDefinition | undefined {
+  return byName.get(name);
+}

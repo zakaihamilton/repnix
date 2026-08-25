@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { isNonMutatingQualityCommand, matchesScriptPattern, scriptCommandVariants } from "../src/repository/script-detection.js";
+import {
+  isNonMutatingQualityCommand,
+  matchesScriptPattern,
+  scriptCommandVariants,
+} from "../src/repository/script-detection.js";
 
 describe("quality script detection", () => {
   it("accepts common check commands", () => {

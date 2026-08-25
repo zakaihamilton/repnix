@@ -27,7 +27,12 @@ export interface PackedPackage {
 }
 
 function isPackReportEntry(value: unknown): value is Record<string, unknown> {
-  return Boolean(value && typeof value === "object" && !Array.isArray(value) && typeof (value as Record<string, unknown>).filename === "string");
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    typeof (value as Record<string, unknown>).filename === "string",
+  );
 }
 
 export function packFilenameFromReport(report: unknown): string {
@@ -42,14 +47,34 @@ export function packFilenameFromReport(report: unknown): string {
   return entry.filename as string;
 }
 
-export async function packLocalPackage(context: RepositoryContext, temporary: string, logger: DiagnosticLogger, timeoutMs?: number): Promise<PackedPackage> {
-  const result = await runCommand(process.platform === "win32" ? "npm.cmd" : "npm", ["pack", "--json", "--ignore-scripts", "--pack-destination", temporary, "."], {
-    cwd: context.root,
-    logger,
-    env: { ...HEALTH_OFFLINE_ENV, npm_config_cache: path.join(temporary, "npm-cache"), npm_config_ignore_scripts: "true", npm_config_audit: "false", npm_config_fund: "false" },
-    ...(timeoutMs === undefined ? {} : { timeoutMs }),
-  });
-  if (result.spawnError || result.exitCode !== 0) return { durationMs: result.durationMs, error: `The package could not be packed locally with lifecycle scripts disabled. ${result.spawnError ?? outputExcerpt(result)}`.trim() };
+export async function packLocalPackage(
+  context: RepositoryContext,
+  temporary: string,
+  logger: DiagnosticLogger,
+  timeoutMs?: number,
+): Promise<PackedPackage> {
+  const result = await runCommand(
+    process.platform === "win32" ? "npm.cmd" : "npm",
+    ["pack", "--json", "--ignore-scripts", "--pack-destination", temporary, "."],
+    {
+      cwd: context.root,
+      logger,
+      env: {
+        ...HEALTH_OFFLINE_ENV,
+        npm_config_cache: path.join(temporary, "npm-cache"),
+        npm_config_ignore_scripts: "true",
+        npm_config_audit: "false",
+        npm_config_fund: "false",
+      },
+      ...(timeoutMs === undefined ? {} : { timeoutMs }),
+    },
+  );
+  if (result.spawnError || result.exitCode !== 0)
+    return {
+      durationMs: result.durationMs,
+      error:
+        `The package could not be packed locally with lifecycle scripts disabled. ${result.spawnError ?? outputExcerpt(result)}`.trim(),
+    };
   try {
     const report = parseJsonOutput(result.stdout);
     const filename = packFilenameFromReport(report);

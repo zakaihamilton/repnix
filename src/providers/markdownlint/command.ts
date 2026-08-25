@@ -12,10 +12,7 @@ export const MARKDOWNLINT_IGNORE_GLOBS = [
   "generated",
 ] as const;
 
-export const MARKDOWNLINT_CLI_ARGS = [
-  "**/*.md",
-  ...MARKDOWNLINT_IGNORE_GLOBS.map((glob) => `#${glob}`),
-];
+export const MARKDOWNLINT_CLI_ARGS = ["**/*.md", ...MARKDOWNLINT_IGNORE_GLOBS.map((glob) => `#${glob}`)];
 
 export function markdownlintScriptCommand(): string {
   return ["markdownlint-cli2", ...MARKDOWNLINT_CLI_ARGS.map((arg) => `"${arg}"`)].join(" ");

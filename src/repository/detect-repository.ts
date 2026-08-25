@@ -56,7 +56,11 @@ async function gitDefaultBranch(root: string): Promise<string | undefined> {
 }
 
 function hasStringList(value: unknown): boolean {
-  return value === undefined || typeof value === "string" || (Array.isArray(value) && value.every((item) => typeof item === "string"));
+  return (
+    value === undefined ||
+    typeof value === "string" ||
+    (Array.isArray(value) && value.every((item) => typeof item === "string"))
+  );
 }
 
 async function hasEditableLegacyEslintConfig(root: string, files: Set<string>): Promise<boolean> {
@@ -64,8 +68,18 @@ async function hasEditableLegacyEslintConfig(root: string, files: Set<string>): 
   if ([...files].some((file) => /(^|\/)eslint\.config\.[cm]?[jt]s$/.test(file))) return false;
   try {
     const errors: ParseError[] = [];
-    const parsed = parseJsonc(await readFile(path.join(root, ".eslintrc.json"), "utf8"), errors, { allowTrailingComma: true, disallowComments: false });
-    return errors.length === 0 && Boolean(parsed) && typeof parsed === "object" && !Array.isArray(parsed) && hasStringList((parsed as Record<string, unknown>).plugins) && hasStringList((parsed as Record<string, unknown>).extends);
+    const parsed = parseJsonc(await readFile(path.join(root, ".eslintrc.json"), "utf8"), errors, {
+      allowTrailingComma: true,
+      disallowComments: false,
+    });
+    return (
+      errors.length === 0 &&
+      Boolean(parsed) &&
+      typeof parsed === "object" &&
+      !Array.isArray(parsed) &&
+      hasStringList((parsed as Record<string, unknown>).plugins) &&
+      hasStringList((parsed as Record<string, unknown>).extends)
+    );
   } catch {
     return false;
   }
@@ -87,7 +101,7 @@ async function readPackageJson(file: string): Promise<PackageJson> {
 function workspacePatterns(packageJson: PackageJson, pnpmWorkspace: unknown): string[] {
   const declared = Array.isArray(packageJson.workspaces)
     ? packageJson.workspaces
-    : packageJson.workspaces?.packages ?? [];
+    : (packageJson.workspaces?.packages ?? []);
   const pnpm =
     pnpmWorkspace && typeof pnpmWorkspace === "object" && "packages" in pnpmWorkspace
       ? (pnpmWorkspace as { packages?: unknown }).packages
@@ -153,17 +167,20 @@ function detectSourceRoots(sourceFiles: string[]): string[] {
 }
 
 function workspaceRoots(manifests: WorkspaceManifest[]): string[] {
-  return [...new Set(manifests.map((manifest) => {
-    const directory = path.posix.dirname(manifest.path.replaceAll(path.sep, "/"));
-    return directory === "." ? "." : directory;
-  }))].sort();
+  return [
+    ...new Set(
+      manifests.map((manifest) => {
+        const directory = path.posix.dirname(manifest.path.replaceAll(path.sep, "/"));
+        return directory === "." ? "." : directory;
+      }),
+    ),
+  ].sort();
 }
 
 function sourceFilesByWorkspace(sourceFiles: string[], roots: string[]): Record<string, string[]> {
-  return Object.fromEntries(roots.map((root) => [
-    root,
-    sourceFiles.filter((file) => root === "." || file.startsWith(`${root}/`)),
-  ]));
+  return Object.fromEntries(
+    roots.map((root) => [root, sourceFiles.filter((file) => root === "." || file.startsWith(`${root}/`))]),
+  );
 }
 
 function scopeFiles(files: string[], scope: string): string[] {
@@ -234,24 +251,29 @@ function inferScope(
   if (next) {
     addRole("web-app", "high", ["Next.js dependency"]);
   } else if (!manifest.packageJson.bin && jsx && (browserBuild || browserEntry)) {
-    addRole("web-app", "medium", [browserBuild ? "browser build script" : "browser application entry", "JSX/TSX source"]);
+    addRole("web-app", "medium", [
+      browserBuild ? "browser build script" : "browser application entry",
+      "JSX/TSX source",
+    ]);
   }
 
-  const serverScript = Object.entries(scripts).some(([name, command]) =>
-    /^(?:start|serve|dev)$/.test(name) && /(?:node|tsx|ts-node|express|fastify|nest)(?:\s|$)/.test(command),
+  const serverScript = Object.entries(scripts).some(
+    ([name, command]) =>
+      /^(?:start|serve|dev)$/.test(name) && /(?:node|tsx|ts-node|express|fastify|nest)(?:\s|$)/.test(command),
   );
   if (serverScript) addRole("node-app", "medium", ["Node server script"]);
 
   if (!evidence.length) {
-    if (isMonorepo && scopePath === "." && classified.production.length === 0) addRole("tooling", "high", ["workspace root without application source"]);
+    if (isMonorepo && scopePath === "." && classified.production.length === 0)
+      addRole("tooling", "high", ["workspace root without application source"]);
     else addRole("node-app", "medium", ["JavaScript/TypeScript executable project"]);
   }
 
-  const frameworks = [
-    next ? "Next.js" : null,
-    dependencies.react !== undefined ? "React" : null,
-  ].filter((item): item is string => Boolean(item));
-  const hasTypeScript = dependencies.typescript !== undefined || classified.production.some((file) => /\.[cm]?tsx?$/.test(file));
+  const frameworks = [next ? "Next.js" : null, dependencies.react !== undefined ? "React" : null].filter(
+    (item): item is string => Boolean(item),
+  );
+  const hasTypeScript =
+    dependencies.typescript !== undefined || classified.production.some((file) => /\.[cm]?tsx?$/.test(file));
   const hasJavaScript = classified.production.some((file) => /\.[cm]?jsx?$/.test(file));
   return {
     path: scopePath,
@@ -260,7 +282,9 @@ function inferScope(
     roles: evidence.map((entry) => entry.role),
     roleEvidence: evidence,
     frameworks,
-    languages: [hasTypeScript ? "TypeScript" : null, hasJavaScript ? "JavaScript" : null].filter((item): item is string => Boolean(item)),
+    languages: [hasTypeScript ? "TypeScript" : null, hasJavaScript ? "JavaScript" : null].filter(
+      (item): item is string => Boolean(item),
+    ),
     sourceFiles,
     productionSourceFiles: classified.production,
     testFiles: classified.tests,
@@ -291,15 +315,10 @@ export async function detectRepository(start = process.cwd()): Promise<Repositor
     }
   }
   const patterns = workspacePatterns(packageJson, pnpmWorkspace);
-  if (
-    patterns.length === 0 &&
-    ["turbo.json", "nx.json", "lerna.json"].some((file) => files.has(file))
-  ) {
+  if (patterns.length === 0 && ["turbo.json", "nx.json", "lerna.json"].some((file) => files.has(file))) {
     patterns.push("packages/*/package.json", "apps/*/package.json");
   }
-  const manifestPaths = patterns.length
-    ? await fg(patterns, { cwd: root, ignore: IGNORES, onlyFiles: true })
-    : [];
+  const manifestPaths = patterns.length ? await fg(patterns, { cwd: root, ignore: IGNORES, onlyFiles: true }) : [];
   const manifests: WorkspaceManifest[] = [{ path: "package.json", packageJson }];
   for (const manifestPath of [...new Set(manifestPaths)].sort()) {
     if (manifestPath === "package.json") continue;
@@ -314,22 +333,23 @@ export async function detectRepository(start = process.cwd()): Promise<Repositor
   for (const manifest of manifests) {
     for (const [name, version] of Object.entries(allDependencies(manifest.packageJson))) {
       installedPackages.set(name, version);
-      installedPackageOrigins.set(name, [
-        ...(installedPackageOrigins.get(name) ?? []),
-        manifest.path,
-      ]);
+      installedPackageOrigins.set(name, [...(installedPackageOrigins.get(name) ?? []), manifest.path]);
     }
   }
 
-  const sourceFiles = (await fg(SOURCE_PATTERN, {
-    cwd: root,
-    ignore: IGNORES,
-    onlyFiles: true,
-  })).sort();
+  const sourceFiles = (
+    await fg(SOURCE_PATTERN, {
+      cwd: root,
+      ignore: IGNORES,
+      onlyFiles: true,
+    })
+  ).sort();
   const classifiedSourceFiles = classifySourceFiles(sourceFiles);
   const hasTsConfig = [...files].some((file) => /(^|\/)tsconfig(?:\.[^/]+)?\.json$/.test(file));
   const hasTypeScript =
-    installedPackages.has("typescript") || hasTsConfig || classifiedSourceFiles.production.some((file) => /\.[cm]?tsx?$/.test(file));
+    installedPackages.has("typescript") ||
+    hasTsConfig ||
+    classifiedSourceFiles.production.some((file) => /\.[cm]?tsx?$/.test(file));
   const hasJavaScript = classifiedSourceFiles.production.some((file) => /\.[cm]?jsx?$/.test(file));
   const frameworks = [
     installedPackages.has("next") ? "Next.js" : null,
@@ -379,7 +399,12 @@ export async function detectRepository(start = process.cwd()): Promise<Repositor
     files,
     sourceFiles,
     productionSourceFiles: classifiedSourceFiles.production,
-    sourceRoots: detectSourceRoots(sourceFiles.filter((file) => !TEST_FILE_PATTERN.test(file) && !FIXTURE_FILE_PATTERN.test(file) && !GENERATED_FILE_PATTERN.test(file))),
+    sourceRoots: detectSourceRoots(
+      sourceFiles.filter(
+        (file) =>
+          !TEST_FILE_PATTERN.test(file) && !FIXTURE_FILE_PATTERN.test(file) && !GENERATED_FILE_PATTERN.test(file),
+      ),
+    ),
     workspaceRoots: detectedWorkspaceRoots,
     workspaceSourceFiles: sourceFilesByWorkspace(sourceFiles, detectedWorkspaceRoots),
     scopes,

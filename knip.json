@@ -1,12 +1,7 @@
 {
   "$schema": "https://unpkg.com/knip@5/schemas/jsonconfig.json",
-  "entry": [
-    "src/cli.ts",
-    "src/providers/sdk.ts",
-    "scripts/*.mjs"
-  ],
-  "project": [
-    "src/**/*.{ts,tsx}"
-  ],
-  "ignoreExportsUsedInFile": true
+  "entry": ["src/cli.ts", "src/providers/sdk.ts", "scripts/*.mjs"],
+  "project": ["src/**/*.{ts,tsx}"],
+  "ignoreExportsUsedInFile": true,
+  "ignoreBinaries": ["osv-scanner", "gitleaks", "actionlint"]
 }

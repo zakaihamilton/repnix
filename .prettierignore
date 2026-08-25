@@ -1,0 +1,7 @@
+dist/
+coverage/
+fixtures/
+.changeset/
+pnpm-lock.yaml
+*.min.js
+*.svg

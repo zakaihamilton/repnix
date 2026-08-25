@@ -1,10 +1,22 @@
 import type { Recommendation } from "../recommendations/recommendation-engine.js";
 
-export type SetupScreen = "loading" | "audit" | "manual" | "empty" | "select" | "planning" | "review" | "details" | "confirm" | "applying" | "success" | "checking" | "check-details" | "error";
+export type SetupScreen =
+  | "loading"
+  | "audit"
+  | "manual"
+  | "empty"
+  | "select"
+  | "planning"
+  | "review"
+  | "details"
+  | "confirm"
+  | "applying"
+  | "success"
+  | "checking"
+  | "check-details"
+  | "error";
 
-export type SetupSelectionItem =
-  | { kind: "provider"; provider: string; name: string }
-  | { kind: "ci"; name: string };
+export type SetupSelectionItem = { kind: "provider"; provider: string; name: string } | { kind: "ci"; name: string };
 
 export interface SetupTuiModel {
   screen: SetupScreen;
@@ -78,7 +90,11 @@ function selectedProvidersFrom(recommendations: Recommendation[]): string[] {
 export function selectionItems(recommendations: Recommendation[], hasCi: boolean): SetupSelectionItem[] {
   const items: SetupSelectionItem[] = recommendations
     .filter((recommendation) => recommendation.actionable)
-    .map((recommendation) => ({ kind: "provider" as const, provider: recommendation.provider, name: recommendation.name }));
+    .map((recommendation) => ({
+      kind: "provider" as const,
+      provider: recommendation.provider,
+      name: recommendation.name,
+    }));
   if (hasCi) items.push({ kind: "ci", name: "GitHub Actions health step" });
   return items;
 }
@@ -102,26 +118,31 @@ export function setupTuiReducer(model: SetupTuiModel, action: SetupTuiAction): S
   switch (action.type) {
     case "move":
       return { ...model, cursor: moveCursor(model.cursor, action.direction, action.itemCount) };
-    case "toggle":
-      {
-        const item = action.item;
-        if (!item) return model;
-        if (item.kind === "ci") return { ...model, includeCi: !model.includeCi };
-        return {
-          ...model,
-          selectedProviders: model.selectedProviders.includes(item.provider)
-            ? model.selectedProviders.filter((provider) => provider !== item.provider)
-            : [...model.selectedProviders, item.provider],
-        };
-      }
+    case "toggle": {
+      const item = action.item;
+      if (!item) return model;
+      if (item.kind === "ci") return { ...model, includeCi: !model.includeCi };
+      return {
+        ...model,
+        selectedProviders: model.selectedProviders.includes(item.provider)
+          ? model.selectedProviders.filter((provider) => provider !== item.provider)
+          : [...model.selectedProviders, item.provider],
+      };
+    }
     case "toggle-sidebar":
       return { ...model, sidebarCollapsed: !model.sidebarCollapsed };
     case "move-audit":
-      return { ...model, auditScroll: moveScroll(model.auditScroll, action.direction, action.lineCount, action.viewport) };
+      return {
+        ...model,
+        auditScroll: moveScroll(model.auditScroll, action.direction, action.lineCount, action.viewport),
+      };
     case "begin-manual":
       return { ...model, screen: "manual", manualScroll: 0 };
     case "move-manual":
-      return { ...model, manualScroll: moveScroll(model.manualScroll, action.direction, action.lineCount, action.viewport) };
+      return {
+        ...model,
+        manualScroll: moveScroll(model.manualScroll, action.direction, action.lineCount, action.viewport),
+      };
     case "begin-selection":
       return { ...model, screen: "select", cursor: 0, sidebarCollapsed: false };
     case "show-empty":
@@ -141,7 +162,10 @@ export function setupTuiReducer(model: SetupTuiModel, action: SetupTuiAction): S
     case "close-details":
       return { ...model, screen: "review" };
     case "move-detail":
-      return { ...model, detailScroll: moveScroll(model.detailScroll, action.direction, action.lineCount, action.viewport) };
+      return {
+        ...model,
+        detailScroll: moveScroll(model.detailScroll, action.direction, action.lineCount, action.viewport),
+      };
     case "move-confirm":
       return { ...model, confirmFocus: action.direction === "right" ? "apply" : "cancel" };
     case "begin-confirm":
@@ -151,17 +175,39 @@ export function setupTuiReducer(model: SetupTuiModel, action: SetupTuiAction): S
     case "begin-applying":
       return { ...model, screen: "applying", progress: "Starting safe apply…", progressLog: ["Starting safe apply…"] };
     case "progress":
-      return { ...model, progress: action.message, progressLog: [...(model.progressLog ?? []), action.message].slice(-6) };
+      return {
+        ...model,
+        progress: action.message,
+        progressLog: [...(model.progressLog ?? []), action.message].slice(-6),
+      };
     case "complete":
       return { ...model, screen: "success" };
     case "begin-check":
-      return { ...model, screen: "checking", checkOutput: "", checkExitCode: null, checkScroll: 0, checkProgress: ["Preparing configured checks…"] };
+      return {
+        ...model,
+        screen: "checking",
+        checkOutput: "",
+        checkExitCode: null,
+        checkScroll: 0,
+        checkProgress: ["Preparing configured checks…"],
+      };
     case "check-progress":
       return { ...model, checkProgress: [...(model.checkProgress ?? []), action.message].slice(-6) };
     case "check-complete":
-      return { ...model, screen: "check-details", checkOutput: action.output, checkExitCode: action.exitCode, checkScroll: 0, ...(action.reportPath ? { checkReportPath: action.reportPath } : {}), ...(action.summaryPath ? { checkSummaryPath: action.summaryPath } : {}) };
+      return {
+        ...model,
+        screen: "check-details",
+        checkOutput: action.output,
+        checkExitCode: action.exitCode,
+        checkScroll: 0,
+        ...(action.reportPath ? { checkReportPath: action.reportPath } : {}),
+        ...(action.summaryPath ? { checkSummaryPath: action.summaryPath } : {}),
+      };
     case "move-check":
-      return { ...model, checkScroll: moveScroll(model.checkScroll ?? 0, action.direction, action.lineCount, action.viewport) };
+      return {
+        ...model,
+        checkScroll: moveScroll(model.checkScroll ?? 0, action.direction, action.lineCount, action.viewport),
+      };
     case "back-to-success":
       return { ...model, screen: "success", checkScroll: 0 };
     case "fail":

@@ -17,12 +17,12 @@ export function normalizePublint(report: unknown): HealthFinding[] {
     if (typeof item.code !== "string" || typeof item.type !== "string" || !SEVERITIES[item.type]) {
       throw new Error("Publint JSON report contains a malformed message.");
     }
-    const messagePath = Array.isArray(item.path) && item.path.every((part) => typeof part === "string")
-      ? item.path as string[]
-      : [];
-    const rendered = typeof item.formatted === "string" && item.formatted.length > 0
-      ? item.formatted
-      : `Publint reported ${item.code}.`;
+    const messagePath =
+      Array.isArray(item.path) && item.path.every((part) => typeof part === "string") ? (item.path as string[]) : [];
+    const rendered =
+      typeof item.formatted === "string" && item.formatted.length > 0
+        ? item.formatted
+        : `Publint reported ${item.code}.`;
     return createFinding({
       provider: "Publint",
       category: "package-health",

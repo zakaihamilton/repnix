@@ -1,9 +1,5 @@
 import { HEALTH_CATEGORIES, type HealthCategory } from "../core/health-category.js";
-import type {
-  ProviderDetection,
-  ProviderRecommendation,
-  RepositoryContext,
-} from "../core/types.js";
+import type { ProviderDetection, ProviderRecommendation, RepositoryContext } from "../core/types.js";
 import { categoryModeFor, type RepnixConfig } from "../config/repo-health-config.js";
 import { createBuiltinRegistry, type ProviderRegistry } from "../providers/registry.js";
 import { hasPublishedTypes } from "../providers/recommend.js";
@@ -29,7 +25,11 @@ export interface Recommendation extends ProviderRecommendation {
   category: HealthCategory;
 }
 
-function requirementsFor(category: HealthCategory, context: RepositoryContext, registry: ProviderRegistry): Capability[] {
+function requirementsFor(
+  category: HealthCategory,
+  context: RepositoryContext,
+  registry: ProviderRegistry,
+): Capability[] {
   if (category === "package-health" && hasPublishedTypes(context)) {
     return ["packagePublishing", "typesCompatibility"];
   }
@@ -54,10 +54,26 @@ function coverageFor(
   const applicability = categoryDefinition(category, registry.categoryRegistry).applicable(context);
   const enabledScopes = applicability.scopes.filter((scope) => categoryModeFor(config, category, scope) !== "off");
   if (categoryModeFor(config, category) === "off" || (applicability.applicable && enabledScopes.length === 0)) {
-    return { category, status: "off", providers: [], capabilities: [], missingCapabilities: [], scopes: applicability.scopes, evidence: ["disabled in repnix.config.json"] };
+    return {
+      category,
+      status: "off",
+      providers: [],
+      capabilities: [],
+      missingCapabilities: [],
+      scopes: applicability.scopes,
+      evidence: ["disabled in repnix.config.json"],
+    };
   }
   if (!applicability.applicable) {
-    return { category, status: "not-applicable", providers: [], capabilities: [], missingCapabilities: [], scopes: [], evidence: [] };
+    return {
+      category,
+      status: "not-applicable",
+      providers: [],
+      capabilities: [],
+      missingCapabilities: [],
+      scopes: [],
+      evidence: [],
+    };
   }
   const required = requirementsFor(category, context, registry);
   if (required.length === 0) {
@@ -86,8 +102,7 @@ function coverageFor(
   const missingCapabilities = required.filter((capability) => !active.has(capability));
   return {
     category,
-    status:
-      missingCapabilities.length === 0 ? "covered" : active.size > 0 ? "partial" : "missing",
+    status: missingCapabilities.length === 0 ? "covered" : active.size > 0 ? "partial" : "missing",
     providers,
     capabilities: [...active],
     missingCapabilities,
@@ -125,7 +140,12 @@ function buildRecommendations(
     if (alreadyContributing(provider, context, detections, registry)) continue;
     const recommendation = provider.recommend(context, { detections, coverageStatus: coverageEntry.status });
     if (!recommendation?.recommended) continue;
-    recommendations.push({ provider: provider.id, name: provider.name, category: provider.category, ...recommendation });
+    recommendations.push({
+      provider: provider.id,
+      name: provider.name,
+      category: provider.category,
+      ...recommendation,
+    });
   }
   return recommendations;
 }
@@ -138,5 +158,11 @@ export function buildAuditModel(
 ): AuditModel {
   const categories = [...new Set([...HEALTH_CATEGORIES, ...registry.categories.map((category) => category.id)])];
   const coverage = categories.map((category) => coverageFor(category, context, detections, config, registry));
-  return { context, detections, coverage, recommendations: buildRecommendations(context, detections, coverage, registry), registry };
+  return {
+    context,
+    detections,
+    coverage,
+    recommendations: buildRecommendations(context, detections, coverage, registry),
+    registry,
+  };
 }

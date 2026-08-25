@@ -33,7 +33,16 @@ const pilots = [
     id: "react-eslint",
     packageManager: "npm",
     scopes: [{ path: ".", roles: ["node-app"], frameworks: ["React"] }],
-    recommendations: ["knip", "jscpd", "osv-scanner", "eslint-boundaries", "c8", "stryker", "gitleaks", "license-checker"],
+    recommendations: [
+      "knip",
+      "jscpd",
+      "osv-scanner",
+      "eslint-boundaries",
+      "c8",
+      "stryker",
+      "gitleaks",
+      "license-checker",
+    ],
     packages: ["repnix", "knip", "jscpd", "c8"],
     files: ["package.json", ".gitignore", "repnix.config.json", ".jscpd.json"],
   },
@@ -113,15 +122,31 @@ async function runPilot(pilot, cli) {
     pilot.scopes,
     `${pilot.id}: wrong detected repository scopes.`,
   );
-  assertEqual(audit.recommendations.map((recommendation) => recommendation.provider), pilot.recommendations, `${pilot.id}: unexpected recommendations.`);
+  assertEqual(
+    audit.recommendations.map((recommendation) => recommendation.provider),
+    pilot.recommendations,
+    `${pilot.id}: unexpected recommendations.`,
+  );
 
   const plan = await execute(["setup", "--plan", "--format", "json", "--quiet"]);
-  assertEqual(plan.packages.map((item) => item.name), pilot.packages, `${pilot.id}: unexpected setup packages.`);
-  assertEqual(plan.files.map((item) => item.path), pilot.files, `${pilot.id}: unexpected setup files.`);
+  assertEqual(
+    plan.packages.map((item) => item.name),
+    pilot.packages,
+    `${pilot.id}: unexpected setup packages.`,
+  );
+  assertEqual(
+    plan.files.map((item) => item.path),
+    pilot.files,
+    `${pilot.id}: unexpected setup files.`,
+  );
   assertEqual(plan.warnings, [], `${pilot.id}: setup plan emitted warnings.`);
   assertEqual(plan.conflicts, [], `${pilot.id}: setup plan reported conflicts.`);
 
-  assertEqual([...await snapshotDirectory(root)], [...before], `${pilot.id}: read-only commands changed the fixture.`);
+  assertEqual(
+    [...(await snapshotDirectory(root))],
+    [...before],
+    `${pilot.id}: read-only commands changed the fixture.`,
+  );
   process.stdout.write(`Compatibility pilot passed: ${pilot.id}\n`);
 }
 

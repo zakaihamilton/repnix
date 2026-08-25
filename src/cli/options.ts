@@ -58,7 +58,12 @@ export function parseTimeout(value: string): number {
   return seconds;
 }
 
-function renderText(level: Exclude<LogLevel, "silent">, event: string, message: string, context: Record<string, unknown>): string {
+function renderText(
+  level: Exclude<LogLevel, "silent">,
+  event: string,
+  message: string,
+  context: Record<string, unknown>,
+): string {
   const details = Object.entries(context)
     .map(([key, value]) => `${key}=${typeof value === "string" ? JSON.stringify(value) : JSON.stringify(value)}`)
     .join(" ");
@@ -67,7 +72,7 @@ function renderText(level: Exclude<LogLevel, "silent">, event: string, message: 
 }
 
 export function createDiagnosticLogger(options: DiagnosticOptions = {}): DiagnosticLogger {
-  const level = options.quiet ? "silent" : options.logLevel ?? (options.verbose ? "debug" : "error");
+  const level = options.quiet ? "silent" : (options.logLevel ?? (options.verbose ? "debug" : "error"));
   const format = options.logFormat ?? "text";
 
   const logger: DiagnosticLogger = {
@@ -81,7 +86,9 @@ export function createDiagnosticLogger(options: DiagnosticOptions = {}): Diagnos
       const safeMessage = redactSensitiveText(message);
       const safeContext = redactDiagnosticValue(context) as Record<string, unknown>;
       if (format === "json") {
-        process.stderr.write(`${JSON.stringify({ timestamp: new Date().toISOString(), level: candidate, event, message: safeMessage, ...safeContext })}\n`);
+        process.stderr.write(
+          `${JSON.stringify({ timestamp: new Date().toISOString(), level: candidate, event, message: safeMessage, ...safeContext })}\n`,
+        );
         return;
       }
       process.stderr.write(renderText(candidate, event, safeMessage, safeContext));
@@ -111,7 +118,9 @@ export function createDiagnosticLogger(options: DiagnosticOptions = {}): Diagnos
   return logger;
 }
 
-export function resolveDiagnosticLogger(options: DiagnosticOptions | DiagnosticLogger | boolean = {}): DiagnosticLogger {
+export function resolveDiagnosticLogger(
+  options: DiagnosticOptions | DiagnosticLogger | boolean = {},
+): DiagnosticLogger {
   if (isLogger(options)) return options;
   if (typeof options === "boolean") return createDiagnosticLogger({ verbose: options });
   return options.logger ?? createDiagnosticLogger(options);

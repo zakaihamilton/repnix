@@ -42,8 +42,12 @@ export async function run(command, args, options = {}) {
       child.kill("SIGTERM");
       reject(new Error(`Timed out after ${timeoutMs}ms: ${command} ${args.join(" ")}`));
     }, timeoutMs);
-    child.stdout.on("data", (chunk) => { stdout += chunk.toString(); });
-    child.stderr.on("data", (chunk) => { stderr += chunk.toString(); });
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
     child.on("error", (error) => {
       clearTimeout(timer);
       reject(error);
@@ -57,11 +61,11 @@ export async function run(command, args, options = {}) {
   });
 
   if (!allowExitCodes.includes(result.code)) {
-    throw new Error([
-      `Command failed (${String(result.code)}): ${command} ${args.join(" ")}`,
-      result.stdout,
-      result.stderr,
-    ].filter(Boolean).join("\n"));
+    throw new Error(
+      [`Command failed (${String(result.code)}): ${command} ${args.join(" ")}`, result.stdout, result.stderr]
+        .filter(Boolean)
+        .join("\n"),
+    );
   }
   return result;
 }
@@ -72,7 +76,12 @@ export async function packProject(destination) {
   });
   const report = JSON.parse(result.stdout);
   const packageReport = Array.isArray(report) ? report[0] : report;
-  if (!packageReport || typeof packageReport !== "object" || Array.isArray(packageReport) || typeof packageReport.filename !== "string") {
+  if (
+    !packageReport ||
+    typeof packageReport !== "object" ||
+    Array.isArray(packageReport) ||
+    typeof packageReport.filename !== "string"
+  ) {
     throw new Error(`npm pack returned an unexpected result: ${result.stdout}`);
   }
   return path.join(destination, packageReport.filename);
