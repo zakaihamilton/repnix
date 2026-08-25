@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.0
+
+### Major Changes
+
+- 454079e: Remove the external provider-plugin API. RepNix now loads only built-in providers; consumers importing `repnix/provider-sdk` or publishing `repnix-provider-*` integrations must remove those integrations.
+
+### Patch Changes
+
+- 74b0d33: Add Prettier as a format health check, a local installer for standalone scanners, and CI SARIF uploads to GitHub code scanning.
+- 2b79d59: Stop the setup TUI check-results screen from overlaying wrapped text in narrow terminals.
+
 ## 0.3.14
 
 ### Patch Changes
