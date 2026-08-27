@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.1
+
+### Patch Changes
+
+- Preserve repository JSON formatting when writing baselines and enabling baseline configuration.
+
 ## 1.0.0
 
 ### Major Changes

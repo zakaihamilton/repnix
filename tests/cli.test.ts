@@ -327,6 +327,58 @@ describe("CLI", () => {
     });
   });
 
+  it("keeps a Biome-tabbed repository formatter-clean after refreshing its baseline", async () => {
+    const root = await copyFixture("minimal-js");
+    temporary.push(root);
+    const manifestPath = path.join(root, "package.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
+      scripts: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    };
+    manifest.devDependencies = { ...(manifest.devDependencies ?? {}), "@biomejs/biome": "^2.0.0" };
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    await writeFile(path.join(root, "biome.json"), '{\n\t"formatter": { "enabled": true }\n}\n');
+    await writeFile(
+      path.join(root, "repnix.config.json"),
+      '{\n\t"schemaVersion": 1,\n\t"severityThreshold": "warning",\n\t"baseline": {\n\t\t"path": ".repnix-baseline.json",\n\t\t"failOn": "new"\n\t}\n}\n',
+    );
+    await writeFile(
+      path.join(root, ".repnix-baseline.json"),
+      '{\n\t"schemaVersion": 1,\n\t"generatedAt": "old",\n\t"entries": []\n}\n',
+    );
+    await fakeBinary(
+      root,
+      "biome",
+      `const fs = require("node:fs");
+const path = require("node:path");
+if (process.argv[2] !== "format") process.exit(0);
+for (const file of ["repnix.config.json", ".repnix-baseline.json"]) {
+  const filePath = path.join(process.cwd(), file);
+  if (!fs.existsSync(filePath)) continue;
+  const raw = fs.readFileSync(filePath, "utf8");
+  const expected = JSON.stringify(JSON.parse(raw), null, "\\t") + (raw.endsWith("\\n") ? "\\n" : "");
+  if (raw !== expected) {
+    process.stderr.write(file + " is not formatted with tabs\\n");
+    process.exitCode = 1;
+  }
+}`,
+    );
+
+    const write = await runCli(root, ["check", "--write-baseline"]);
+    expect(write.code).toBe(0);
+
+    const check = await runCli(root, ["check", "--format", "json"]);
+    const report = JSON.parse(check.stdout) as {
+      summary: { exitCode: number };
+      results: Array<{ provider: string; status: string; findings: unknown[] }>;
+    };
+    expect(check.code).toBe(0);
+    expect(report.summary.exitCode).toBe(0);
+    expect(report.results).toContainEqual(
+      expect.objectContaining({ provider: "biome-format", status: "pass", findings: [] }),
+    );
+  });
+
   it("emits SARIF and a serializable non-interactive setup plan", async () => {
     const root = await copyFixture("minimal-js");
     temporary.push(root);
