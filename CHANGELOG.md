@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.2
+
+### Patch Changes
+
+- Declare automated fixes on built-in providers, including Oxfmt, preview the fix plan, and re-run check afterward. Schedule specialist health checks from catalog `run` hooks and close health categories to the built-in union.
+
 ## 1.0.1
 
 ### Patch Changes

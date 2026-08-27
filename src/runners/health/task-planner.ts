@@ -5,7 +5,6 @@ import type { AuditModel } from "../../recommendations/recommendation-engine.js"
 import type { DiagnosticLogger } from "../../cli/options.js";
 import type { ProviderModule } from "../../providers/sdk.js";
 import { PROVIDERS } from "../../providers/catalog.js";
-import { BUILTIN_RUNNERS } from "./builtin-providers.js";
 import { basicCommands } from "./basic-commands.js";
 import { runGenericProvider, runProviderModule, runRunnableCommand, type RunnableCommand } from "./task-executor.js";
 
@@ -110,7 +109,6 @@ function scheduleProvider(
     add(derivedLintTask(descriptor.id, descriptor.name, descriptor.category, parent));
     return;
   }
-  const runner = BUILTIN_RUNNERS[descriptor.id];
   const dependsOn = descriptor.dependsOnCategory
     ? tasks.find((task) => task.category === descriptor.dependsOnCategory && task.scope === undefined)?.id
     : undefined;
@@ -121,18 +119,7 @@ function scheduleProvider(
       name: descriptor.name,
       category: descriptor.category,
       ...(dependsOn ? { dependsOn } : {}),
-      run: () => runProviderModule(audit.context, descriptor, options.logger, options.timeoutMs),
-    });
-    return;
-  }
-  if (runner) {
-    add({
-      id: descriptor.id,
-      provider: descriptor.id,
-      name: descriptor.name,
-      category: descriptor.category,
-      ...(dependsOn ? { dependsOn } : {}),
-      run: () => runner(audit.context, config, options.logger, options.timeoutMs),
+      run: () => runProviderModule(audit.context, descriptor, options.logger, options.timeoutMs, config),
     });
     return;
   }
@@ -163,7 +150,12 @@ export async function planHealthTasks(
     scheduled.add(task.provider);
     tasks.push(task);
   };
-  for (const command of await basicCommands(context, detections, options.timeoutMs)) {
+  for (const command of await basicCommands(
+    context,
+    detections,
+    options.timeoutMs,
+    audit.registry?.providers ?? PROVIDERS,
+  )) {
     if (selected(command.category, options) && enabledCategory(audit, config, command.category, command.scope ?? "."))
       add(commandTask(command, audit, options));
   }

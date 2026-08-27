@@ -137,7 +137,7 @@ export function addDiagnosticOptions(command: Command): Command {
 
 export function assertValidCategory(
   category: string | undefined,
-  availableCategories: string[],
+  availableCategories: readonly string[],
   categoryLabels: Record<string, string>,
 ): void {
   if (category && !availableCategories.includes(category)) {

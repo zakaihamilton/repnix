@@ -1,6 +1,6 @@
 import React from "react";
 import { Box, Newline, Text } from "ink";
-import { CATEGORY_LABELS } from "../core/health-category.js";
+import { CATEGORY_LABELS, categoryLabel } from "../core/health-category.js";
 import type { HealthResult, HealthRun, InstallPlan } from "../core/types.js";
 import type { AuditModel } from "../recommendations/recommendation-engine.js";
 import { renderFileDiff } from "../setup/file-plan.js";
@@ -296,7 +296,7 @@ export function SelectView({
       width="100%"
       title={
         recommendation
-          ? `${recommendation.name} · ${CATEGORY_LABELS[recommendation.category] ?? recommendation.category}`
+          ? `${recommendation.name} · ${CATEGORY_LABELS[recommendation.category]}`
           : (selected?.name ?? "Setup overview")
       }
       flexGrow={1}
@@ -566,7 +566,7 @@ export function setupCheckRows(output: string): SetupCheckRow[] {
     const findings = results.reduce((total, item) => total + item.findings.length, 0);
     return {
       category:
-        run.repository.categories?.find((item) => item.id === category)?.label ?? CATEGORY_LABELS[category] ?? category,
+        run.repository.categories?.find((item) => item.id === category)?.label ?? categoryLabel(category),
       status,
       result:
         status === "pass"
@@ -626,8 +626,7 @@ export function setupCheckActions(output: string): SetupCheckAction[] {
       const primary = group.results.find((result) => result.status === group.status) ?? group.results[0]!;
       const label =
         run.repository.categories?.find((item) => item.id === group.category)?.label ??
-        CATEGORY_LABELS[group.category] ??
-        group.category;
+        categoryLabel(group.category);
       if (group.status === "error") {
         return {
           kind: "setup",

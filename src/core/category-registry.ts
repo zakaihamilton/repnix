@@ -184,8 +184,8 @@ const builtinDefinitions: Omit<CategoryDefinition, "label" | "description">[] = 
 
 export const BUILTIN_CATEGORY_DEFINITIONS: CategoryDefinition[] = builtinDefinitions.map((definition) => ({
   ...definition,
-  label: CATEGORY_LABELS[definition.id] ?? definition.id,
-  description: CATEGORY_DESCRIPTIONS[definition.id] ?? `Checks the repository's ${definition.id} health category.`,
+  label: CATEGORY_LABELS[definition.id],
+  description: CATEGORY_DESCRIPTIONS[definition.id],
 }));
 
 export function createCategoryRegistry(extra: CategoryDefinition[] = []): Map<string, CategoryDefinition> {

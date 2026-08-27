@@ -112,11 +112,11 @@ describe("recommendation engine", () => {
     const provider = defineProvider({
       id: "synthetic-recommend",
       name: "Synthetic Recommend",
-      category: "synthetic-health",
+      category: "dead-code",
       packages: [],
       configPatterns: [],
       scriptPattern: /synthetic-recommend/,
-      capabilities: { syntheticCheck: true },
+      capabilities: { unusedFiles: true },
       recommendOrder: 5,
       recommend: () => ({
         recommended: true,
@@ -125,24 +125,12 @@ describe("recommendation engine", () => {
         reason: "Synthetic coverage is missing from this repository on purpose for the registry hook test.",
       }),
     });
-    const registry = new ProviderRegistry(
-      [...builtin.providers, provider],
-      [
-        ...builtin.categories,
-        {
-          id: "synthetic-health",
-          label: "Synthetic health",
-          description: "Test-only category",
-          requiredCapabilities: ["syntheticCheck"],
-          applicable: () => ({ applicable: true, scopes: ["."], evidence: ["test"] }),
-        },
-      ],
-    );
+    const registry = new ProviderRegistry([...builtin.providers, provider], builtin.categories);
     const model = buildAuditModel(context, await detectAllProviders(context, registry.providers), config, registry);
     expect(model.recommendations[0]).toMatchObject({
       provider: "synthetic-recommend",
       name: "Synthetic Recommend",
-      category: "synthetic-health",
+      category: "dead-code",
       priority: "baseline",
       actionable: true,
     });

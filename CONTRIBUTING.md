@@ -47,7 +47,7 @@ When correcting a compatibility issue, update the smallest representative pilot 
 
 ## Provider changes
 
-A provider module should keep its detection, support level, setup metadata, execution, normalization, remediation, and documentation together in the built-in provider catalog. It should:
+A provider module should keep its detection, support level, setup metadata, execution, normalization, remediation, automated fixes, and documentation together in the built-in provider catalog. It should:
 
 1. Declare its category and available capabilities.
 2. Credit only capabilities that are actively configured.

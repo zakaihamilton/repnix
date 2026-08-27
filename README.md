@@ -152,7 +152,7 @@ pnpm install
 pnpm verify
 ```
 
-The package uses Node.js ESM, strict TypeScript, and Vitest. See [CONTRIBUTING.md](CONTRIBUTING.md) for the provider-adapter workflow and pull-request guidelines.
+The package uses Node.js ESM, strict TypeScript, and Vitest. See [CONTRIBUTING.md](CONTRIBUTING.md) for the built-in provider catalog workflow and pull-request guidelines.
 
 Run the packaged smoke test locally after building:
 

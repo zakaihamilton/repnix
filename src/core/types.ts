@@ -249,13 +249,3 @@ export interface BaselineFile {
   entries: BaselineEntry[];
 }
 
-export interface HealthProvider {
-  id: string;
-  name: string;
-  category: HealthCategory;
-  capabilities: ProviderCapabilities;
-  detect(context: RepositoryContext): Promise<ProviderDetection>;
-  recommend(context: RepositoryContext): Promise<ProviderRecommendation | null>;
-  planInstall(context: RepositoryContext): Promise<InstallPlan>;
-  run(context: RepositoryContext): Promise<HealthResult>;
-}
