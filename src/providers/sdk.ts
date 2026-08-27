@@ -1,5 +1,6 @@
 /** Internal-only provider descriptor types. This module is not part of the published package API. */
 import type { DiagnosticLogger } from "../cli/options.js";
+import type { RepnixConfig } from "../config/repo-health-config.js";
 import type {
   HealthFinding,
   HealthResult,
@@ -49,8 +50,19 @@ export interface ProviderRuntime {
   }>;
 }
 
+export interface ProviderFix {
+  category: HealthCategory;
+  description: string;
+  scriptNames?: string[];
+  binary: string;
+  args: string[];
+  /** Lower values are preferred when several active providers can fix the same category. */
+  order?: number;
+}
+
 export interface ProviderHookContext {
   context: RepositoryContext;
+  config: RepnixConfig;
   runtime: ProviderRuntime;
 }
 
@@ -81,6 +93,8 @@ export interface ProviderModule {
   documentationUrl?: string;
   nextStep?: string;
   setup?: ProviderSetup;
+  /** Automated remediation used by `repnix fix`. */
+  fix?: ProviderFix[];
   /** Schedule after the root task in this category, when one exists. */
   dependsOnCategory?: HealthCategory;
   /** Reuse an already-scheduled task in this category instead of running a second command. */
@@ -99,7 +113,7 @@ export interface ProviderModule {
 }
 
 export interface CategoryModule {
-  id: string;
+  id: HealthCategory;
   label: string;
   description: string;
   requiredCapabilities: string[];

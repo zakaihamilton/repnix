@@ -10,16 +10,25 @@ import { defineProvider } from "../src/providers/sdk.js";
 import { detectRepository } from "../src/repository/detect-repository.js";
 import { readConfig } from "../src/config/repo-health-config.js";
 import { buildAuditModel } from "../src/recommendations/recommendation-engine.js";
-import { detectAllProviders } from "../src/providers/catalog.js";
+import { detectAllProviders, PROVIDERS } from "../src/providers/catalog.js";
 import { runHealth } from "../src/runners/health-runner.js";
 import { resolveDiagnosticLogger } from "../src/cli/options.js";
 
 describe("provider registry contract", () => {
-  it("derives installability from setup metadata and keeps recommend on the module", () => {
+  it("derives installability from setup metadata and keeps recommend and run on the module", () => {
     expect(builtinProvider("knip")?.support).toEqual(["detectable", "runnable", "installable"]);
     expect(builtinProvider("eslint")?.support).toEqual(["detectable"]);
     expect(builtinProvider("knip")?.recommend).toEqual(expect.any(Function));
+    expect(builtinProvider("knip")?.run).toEqual(expect.any(Function));
+    expect(builtinProvider("c8")?.run).toEqual(expect.any(Function));
+    expect(builtinProvider("c8")?.support).toEqual(["detectable", "runnable", "installable"]);
     expect(builtinProvider("knip")?.documentationUrl).toBe("https://knip.dev/");
+  });
+
+  it("keeps specialist runners off the detection catalog", () => {
+    expect(PROVIDERS.find((provider) => provider.id === "knip")?.run).toBeUndefined();
+    expect(PROVIDERS.find((provider) => provider.id === "c8")?.run).toBeUndefined();
+    expect(builtinProvider("knip")?.run).toEqual(expect.any(Function));
   });
 
   it("uses only built-in providers", () => {
@@ -45,67 +54,49 @@ describe("provider registry contract", () => {
     );
     expect(registry.get("synthetic-tool")?.name).toBe("Synthetic Tool");
     expect(() => new ProviderRegistry([provider, provider])).toThrow("Duplicate provider id 'synthetic-tool'");
-    const category = {
-      id: "synthetic-health",
-      label: "Synthetic",
-      description: "Synthetic",
-      requiredCapabilities: ["documentation"],
-      applicable: () => ({ applicable: true, scopes: ["."], evidence: [] }),
-    };
+    const category = createBuiltinRegistry().categories[0]!;
     expect(() => new ProviderRegistry([provider], [category, category])).toThrow(
-      "Duplicate category id 'synthetic-health'",
+      `Duplicate category id '${category.id}'`,
     );
   });
 
-  it("runs a custom provider hook in a custom category", async () => {
+  it("runs a custom provider hook", async () => {
     const context = await detectRepository(path.resolve("fixtures/minimal-js"));
     const builtin = createBuiltinRegistry();
     const provider = defineProvider({
       id: "synthetic-runner",
       name: "Synthetic runner",
-      category: "synthetic-health",
+      category: "dead-code",
       packages: [],
       configPatterns: [],
       scriptPattern: /synthetic-runner/,
-      capabilities: { syntheticCheck: true },
+      capabilities: { unusedFiles: true },
       detect: async () => ({
         installed: true,
         configured: true,
         configFiles: [],
         evidence: ["test"],
-        availableCapabilities: { syntheticCheck: true },
-        activeCapabilities: { syntheticCheck: true },
+        availableCapabilities: { unusedFiles: true },
+        activeCapabilities: { unusedFiles: true },
       }),
       run: async ({ context: providerContext }) => ({
         provider: "synthetic-runner",
         name: "Synthetic runner",
-        category: "synthetic-health",
+        category: "dead-code",
         status: "pass",
         findings: [],
         durationMs: providerContext.root.length,
       }),
     });
-    const registry = new ProviderRegistry(
-      [...builtin.providers, provider],
-      [
-        ...builtin.categories,
-        {
-          id: "synthetic-health",
-          label: "Synthetic health",
-          description: "Test-only category",
-          requiredCapabilities: ["syntheticCheck"],
-          applicable: () => ({ applicable: true, scopes: ["."], evidence: ["test"] }),
-        },
-      ],
-    );
+    const registry = new ProviderRegistry([...builtin.providers, provider], builtin.categories);
     const { config } = await readConfig(context.root);
     const audit = buildAuditModel(context, await detectAllProviders(context, registry.providers), config, registry);
     const result = await runHealth(audit, config, {
-      category: "synthetic-health",
+      category: "dead-code",
       logger: resolveDiagnosticLogger({ quiet: true }),
     });
     expect(result.results).toContainEqual(
-      expect.objectContaining({ provider: "synthetic-runner", category: "synthetic-health", status: "pass" }),
+      expect.objectContaining({ provider: "synthetic-runner", category: "dead-code", status: "pass" }),
     );
   });
 });

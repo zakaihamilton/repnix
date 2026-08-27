@@ -1,6 +1,6 @@
 import { stripVTControlCharacters } from "node:util";
 import pc from "picocolors";
-import { CATEGORY_DESCRIPTIONS, CATEGORY_LABELS } from "../core/health-category.js";
+import { categoryDescription, categoryLabel } from "../core/health-category.js";
 import type { HealthFinding, HealthRun } from "../core/types.js";
 import type { AuditModel, CoverageStatus } from "../recommendations/recommendation-engine.js";
 import { builtinProvider, builtinProviderByName } from "../providers/registry.js";
@@ -138,7 +138,7 @@ export function renderAudit(model: AuditModel, options: { details?: boolean } = 
           ? entry.providers.join(", ")
           : (entry.reason ?? "Missing");
     const category = model.registry?.categoryRegistry.get(entry.category);
-    const prefix = `${(category?.label ?? CATEGORY_LABELS[entry.category] ?? entry.category).padEnd(27)} ${mark(entry.status)}`;
+    const prefix = `${(category?.label ?? categoryLabel(entry.category)).padEnd(27)} ${mark(entry.status)}`;
     if (detail) {
       addWrapped(lines, detail, width, `${prefix} `, `${" ".repeat(visibleLength(prefix))} `);
     } else {
@@ -242,13 +242,13 @@ export function renderHealth(run: HealthRun): string {
       `${statusColumn.padEnd(8)} ${categoryColumn.padEnd(categoryWidth)} ${resultColumn.padEnd(resultWidth)} PROVIDER`,
     ),
   );
-  const grouped = new Map<keyof typeof CATEGORY_LABELS, typeof run.results>();
+  const grouped = new Map<string, typeof run.results>();
   for (const result of run.results) {
     grouped.set(result.category, [...(grouped.get(result.category) ?? []), result]);
   }
   const statusRank = { skipped: 0, pass: 1, warn: 2, fail: 3, error: 4 } as const;
-  const categoryLabel = (category: string) =>
-    run.repository.categories?.find((entry) => entry.id === category)?.label ?? CATEGORY_LABELS[category] ?? category;
+  const labelFor = (category: string) =>
+    run.repository.categories?.find((entry) => entry.id === category)?.label ?? categoryLabel(category);
   for (const [category, results] of grouped) {
     const status = results.reduce(
       (current, result) => (statusRank[result.status] > statusRank[current] ? result.status : current),
@@ -256,7 +256,7 @@ export function renderHealth(run: HealthRun): string {
     );
     const findings = results.reduce((total, result) => total + result.findings.length, 0);
     const providers = results.map((result) => result.name).join(", ");
-    const prefix = `${status.padEnd(8)} ${categoryLabel(category).padEnd(categoryWidth)} ${healthResultLabel(status, findings).padEnd(resultWidth)} `;
+    const prefix = `${status.padEnd(8)} ${labelFor(category).padEnd(categoryWidth)} ${healthResultLabel(status, findings).padEnd(resultWidth)} `;
     addWrapped(
       lines,
       providers,
@@ -328,18 +328,16 @@ export function renderHealthDetails(run: HealthRun): string {
   );
   lines.push("");
   const groups = new Map<string, HealthFinding[]>();
-  const categoryLabel = (category: string) =>
-    run.repository.categories?.find((entry) => entry.id === category)?.label ?? CATEGORY_LABELS[category] ?? category;
-  const categoryDescription = (category: string) =>
-    run.repository.categories?.find((entry) => entry.id === category)?.description ??
-    CATEGORY_DESCRIPTIONS[category] ??
-    "This category has no additional description.";
+  const labelFor = (category: string) =>
+    run.repository.categories?.find((entry) => entry.id === category)?.label ?? categoryLabel(category);
+  const descriptionFor = (category: string) =>
+    run.repository.categories?.find((entry) => entry.id === category)?.description ?? categoryDescription(category);
   for (const result of run.results) {
     for (const finding of result.findings) {
       groups.set(finding.category, [...(groups.get(finding.category) ?? []), finding]);
     }
     if (result.status === "error" && result.message) {
-      lines.push(pc.bold(categoryLabel(result.category)), rule(width));
+      lines.push(pc.bold(labelFor(result.category)), rule(width));
       addWrapped(lines, `${result.name} needs attention: ${result.message}`, width);
       addWrapped(
         lines,
@@ -350,8 +348,8 @@ export function renderHealthDetails(run: HealthRun): string {
     }
   }
   for (const [category, findings] of groups) {
-    lines.push(pc.bold(categoryLabel(category)), rule(width));
-    addWrapped(lines, categoryDescription(category), width);
+    lines.push(pc.bold(labelFor(category)), rule(width));
+    addWrapped(lines, descriptionFor(category), width);
     lines.push("");
     const visibleFindings = findings.slice(0, 5);
     for (const finding of visibleFindings) {

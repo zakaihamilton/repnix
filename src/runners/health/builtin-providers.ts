@@ -27,14 +27,7 @@ import {
   type RunnableCommand,
 } from "./task-executor.js";
 
-export type BuiltinRunner = (
-  context: RepositoryContext,
-  config: RepnixConfig,
-  logger: DiagnosticLogger,
-  timeoutMs?: number,
-) => Promise<HealthResult>;
-
-async function runCoveragePolicy(
+export async function runCoveragePolicy(
   context: RepositoryContext,
   config: RepnixConfig,
   logger: DiagnosticLogger,
@@ -75,7 +68,7 @@ async function runCoveragePolicy(
   return commandResult(runnable, result, context);
 }
 
-async function runLicensePolicy(
+export async function runLicensePolicy(
   context: RepositoryContext,
   config: RepnixConfig,
   logger: DiagnosticLogger,
@@ -426,7 +419,7 @@ export async function runDependencyCruiser(
   }
 }
 
-async function runEslintBoundaries(
+export async function runEslintBoundaries(
   context: RepositoryContext,
   _config: RepnixConfig,
   logger: DiagnosticLogger,
@@ -717,16 +710,3 @@ export async function runAttw(
     await rm(temporary, { recursive: true, force: true });
   }
 }
-
-export const BUILTIN_RUNNERS: Record<string, BuiltinRunner> = {
-  c8: runCoveragePolicy,
-  knip: (context, _config, logger, timeout) => runKnip(context, logger, timeout),
-  jscpd: (context, _config, logger, timeout) => runJscpd(context, logger, timeout),
-  "osv-scanner": (context, _config, logger, timeout) => runOsvScanner(context, logger, timeout),
-  "dependency-cruiser": (context, _config, logger, timeout) => runDependencyCruiser(context, logger, timeout),
-  "eslint-boundaries": runEslintBoundaries,
-  "size-limit": (context, _config, logger, timeout) => runSizeLimit(context, logger, timeout),
-  "license-checker": runLicensePolicy,
-  publint: (context, _config, logger, timeout) => runPublint(context, logger, timeout),
-  attw: (context, _config, logger, timeout) => runAttw(context, logger, timeout),
-};

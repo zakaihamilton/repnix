@@ -7,6 +7,7 @@ import {
   matchesScriptPattern,
   safeTestScript,
 } from "../repository/script-detection.js";
+import { executableOnPath } from "../runners/health/task-executor.js";
 import { MARKDOWNLINT_CLI_ARGS, markdownlintScriptCommand } from "./markdownlint/command.js";
 import { normalizeMarkdownlintResult } from "./markdownlint/normalizer.js";
 import { planChangesetsInstall, planJsxA11yInstall } from "./plan-install.js";
@@ -31,7 +32,6 @@ import {
   recommendSyncpack,
 } from "./recommend.js";
 import type { ProviderModule } from "./sdk.js";
-import { executableOnPath } from "../runners/health/task-executor.js";
 
 export type ProviderDescriptor = ProviderModule;
 
@@ -66,6 +66,16 @@ export const PROVIDERS: ProviderDescriptor[] = [
     capabilities: { linting: true },
     description: "Looks for bugs and risky or inconsistent coding patterns.",
     documentationUrl: "https://eslint.org/docs/latest/",
+    fix: [
+      {
+        category: "lint",
+        description: "Auto-fix lint issues with ESLint",
+        scriptNames: ["lint:fix", "fix:lint"],
+        binary: "eslint",
+        args: [".", "--fix"],
+        order: 20,
+      },
+    ],
   },
   {
     id: "oxlint",
@@ -78,6 +88,16 @@ export const PROVIDERS: ProviderDescriptor[] = [
     zeroConfig: true,
     description: "Looks for common JavaScript and TypeScript problems.",
     documentationUrl: "https://oxc.rs/docs/guide/usage/linter.html",
+    fix: [
+      {
+        category: "lint",
+        description: "Auto-fix lint issues with Oxlint",
+        scriptNames: ["lint:fix", "fix:lint"],
+        binary: "oxlint",
+        args: ["--fix", "."],
+        order: 30,
+      },
+    ],
   },
   {
     id: "biome",
@@ -89,6 +109,24 @@ export const PROVIDERS: ProviderDescriptor[] = [
     capabilities: { linting: true, formatting: true },
     description: "Checks code quality and can enforce a consistent style.",
     documentationUrl: "https://biomejs.dev/guides/getting-started/",
+    fix: [
+      {
+        category: "format",
+        description: "Format files with Biome",
+        scriptNames: ["format"],
+        binary: "biome",
+        args: ["format", "--write", "."],
+        order: 30,
+      },
+      {
+        category: "lint",
+        description: "Auto-fix lint issues with Biome",
+        scriptNames: ["lint:fix", "fix:lint"],
+        binary: "biome",
+        args: ["lint", "--write", "."],
+        order: 10,
+      },
+    ],
   },
   {
     id: "prettier",
@@ -108,6 +146,16 @@ export const PROVIDERS: ProviderDescriptor[] = [
       scriptCommand: () => "prettier --check .",
       checks: ["Consistent file formatting across repository files."],
     },
+    fix: [
+      {
+        category: "format",
+        description: "Format files with Prettier",
+        scriptNames: ["format"],
+        binary: "prettier",
+        args: ["--write", "."],
+        order: 10,
+      },
+    ],
   },
   {
     id: "oxfmt",
@@ -120,6 +168,16 @@ export const PROVIDERS: ProviderDescriptor[] = [
     zeroConfig: true,
     description: "Checks that files follow one consistent formatting style.",
     documentationUrl: "https://oxc.rs/docs/guide/usage/formatter.html",
+    fix: [
+      {
+        category: "format",
+        description: "Format files with Oxfmt",
+        scriptNames: ["format"],
+        binary: "oxfmt",
+        args: ["."],
+        order: 20,
+      },
+    ],
   },
   {
     id: "jest",
@@ -426,6 +484,16 @@ export const PROVIDERS: ProviderDescriptor[] = [
       scriptCommand: () => markdownlintScriptCommand(),
       checks: ["Markdown structure and style consistency."],
     },
+    fix: [
+      {
+        category: "documentation",
+        description: "Auto-fix Markdown formatting with markdownlint",
+        scriptNames: ["docs:fix", "documentation:fix"],
+        binary: "markdownlint-cli2",
+        args: ["--fix", ...MARKDOWNLINT_CLI_ARGS],
+        order: 10,
+      },
+    ],
   },
   {
     id: "lhci",

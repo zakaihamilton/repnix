@@ -9,6 +9,7 @@ import { resolveDiagnosticLogger, type DiagnosticLogger } from "../../cli/option
 import { runCommand, type CommandResult } from "../command-runner.js";
 import type { ProviderModule } from "../../providers/sdk.js";
 import type { ProviderDescriptor } from "../../providers/catalog.js";
+import type { RepnixConfig } from "../../config/repo-health-config.js";
 
 export interface RunnableCommand {
   provider: string;
@@ -312,11 +313,13 @@ export async function runProviderModule(
   context: RepositoryContext,
   descriptor: ProviderModule,
   logger: DiagnosticLogger,
-  timeoutMs?: number,
+  timeoutMs: number | undefined,
+  config: RepnixConfig,
 ): Promise<HealthResult> {
   if (!descriptor.run) throw new Error(`Provider '${descriptor.id}' does not implement a runner.`);
   return descriptor.run({
     context,
+    config,
     runtime: {
       logger,
       ...(timeoutMs === undefined ? {} : { timeoutMs }),

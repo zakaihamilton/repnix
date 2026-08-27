@@ -26,6 +26,19 @@ describe("health task planner", () => {
     expect(new Set(tasks.map((task) => task.provider)).size).toBe(tasks.length);
   });
 
+  it("filters to several categories when requested", async () => {
+    const context = await detectRepository(fixturePath("minimal-js"));
+    const { config } = await readConfig(context.root);
+    const audit = buildAuditModel(context, await detectAllProviders(context), config);
+    const tasks = await planHealthTasks(audit, config, {
+      categories: ["tests", "format"],
+      timeoutMs: 1_000,
+      logger: createDiagnosticLogger({ quiet: true }),
+    });
+
+    expect(tasks.map((task) => task.category)).toEqual(["tests"]);
+  });
+
   it("serializes root coverage after the test command it wraps", async () => {
     const root = await copyFixture("minimal-js");
     const manifestPath = `${root}/package.json`;

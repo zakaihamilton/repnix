@@ -59,6 +59,8 @@ For detailed findings and remediation, use:
 npx repnix check --details
 ```
 
+`repnix fix [category]` applies catalog-declared auto-fixes for active format, lint, and documentation providers. It prefers an existing repository script such as `format` or `lint:fix`, otherwise runs Prettier, Oxfmt, Biome, ESLint, Oxlint, or markdownlint. It prints the commands first, then re-runs `repnix check` only for the categories that were applied. Pass `--no-check` to skip that verification.
+
 The full-screen setup check also saves an AI-ready handoff at `.repnix/health-report.md`. Attach or drop that file into an AI coding assistant while it is working in the repository, then ask it to inspect the referenced files, make the smallest safe fixes, and run the verification commands included in the report. Review the proposed changes and run `npx repnix check` yourself afterward. The companion `.repnix/check-results.md` file is a short human-readable runbook.
 
 You can use this prompt as-is:

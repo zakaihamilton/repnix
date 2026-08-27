@@ -1,8 +1,8 @@
 import path from "node:path";
 import type { HealthCategory } from "../../core/health-category.js";
 import type { ProviderDetection, RepositoryContext } from "../../core/types.js";
+import type { ProviderModule } from "../../providers/sdk.js";
 import { isNonMutatingQualityCommand, isNonMutatingTestCommand } from "../../repository/script-detection.js";
-import { PROVIDERS } from "../../providers/catalog.js";
 import { expectedLocalBinary, type RunnableCommand } from "./task-executor.js";
 
 type ScriptKind = "general" | "format" | "test";
@@ -73,6 +73,7 @@ export async function basicCommands(
   context: RepositoryContext,
   detections: Map<string, ProviderDetection>,
   timeoutMs?: number,
+  providers: readonly ProviderModule[] = [],
 ): Promise<RunnableCommand[]> {
   if (!context.packageManager) return [];
   const commands: RunnableCommand[] = [];
@@ -166,7 +167,7 @@ export async function basicCommands(
         });
     }
   }
-  for (const provider of PROVIDERS) {
+  for (const provider of providers) {
     if (
       provider.id === "c8" ||
       provider.id === "markdownlint" ||

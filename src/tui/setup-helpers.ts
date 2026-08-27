@@ -185,7 +185,7 @@ export function manualRecommendationLines(audit: AuditModel, width: number): str
     const provider = audit.registry?.get(recommendation.provider) ?? builtinProvider(recommendation.provider);
     lines.push(
       "",
-      `${index + 1}. ${recommendation.name} · ${CATEGORY_LABELS[recommendation.category] ?? recommendation.category} · ${recommendation.priority}`,
+      `${index + 1}. ${recommendation.name} · ${CATEGORY_LABELS[recommendation.category]} · ${recommendation.priority}`,
     );
     lines.push(...wrapTerminalText(`Why: ${recommendation.reason}`, wrapWidth, "  ", "  "));
     lines.push("  HOW TO DO IT");

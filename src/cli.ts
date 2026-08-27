@@ -71,7 +71,8 @@ const fix = program
   .command("fix")
   .description("Automatically apply available fixes for active providers (e.g. format, lint:fix, docs:fix)")
   .argument("[category]", "optional category name, for example format, lint, or documentation")
-  .action(async (category: string | undefined, options: DiagnosticOptions) => {
+  .option("--no-check", "do not re-run health checks after applying fixes")
+  .action(async (category: string | undefined, options: DiagnosticOptions & { check?: boolean }) => {
     process.exitCode = await fixCommand(category, options);
   });
 addDiagnosticOptions(fix);

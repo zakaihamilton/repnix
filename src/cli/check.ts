@@ -1,6 +1,6 @@
 import { readConfig } from "../config/repo-health-config.js";
 import { enableBaselineConfig, readBaseline, writeBaseline } from "../config/baseline.js";
-import { CATEGORY_LABELS, HEALTH_CATEGORIES, type HealthCategory } from "../core/health-category.js";
+import { CATEGORY_LABELS, HEALTH_CATEGORIES, isHealthCategory } from "../core/health-category.js";
 import { renderHealth, renderHealthDetails, renderSarif } from "../reporting/console-reporter.js";
 import { runHealth } from "../runners/health-runner.js";
 import { auditRepository } from "./audit.js";
@@ -25,7 +25,7 @@ export async function checkCommand(category: string | undefined, options: CheckO
       ? await readBaseline(audit.context.root, config.baseline.path)
       : undefined;
   const run = await runHealth(audit, config, {
-    ...(category ? { category: category as HealthCategory } : {}),
+    ...(category && isHealthCategory(category) ? { category } : {}),
     ...options,
     ...(baseline ? { baseline, baselineFailOn: config.baseline?.failOn ?? "new" } : {}),
     logger,

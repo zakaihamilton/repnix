@@ -1,15 +1,22 @@
 import pc from "picocolors";
 import { auditRepository } from "./audit.js";
 import { assertValidCategory, resolveDiagnosticLogger, type DiagnosticOptions } from "./options.js";
+import { readConfig } from "../config/repo-health-config.js";
 import { runCommand } from "../runners/command-runner.js";
 import { execCommand, runScriptCommand } from "../package-manager/package-manager.js";
-import { CATEGORY_LABELS, HEALTH_CATEGORIES, type HealthCategory } from "../core/health-category.js";
+import { CATEGORY_LABELS, HEALTH_CATEGORIES, isHealthCategory, type HealthCategory } from "../core/health-category.js";
+import { PROVIDERS } from "../providers/catalog.js";
+import type { ProviderFix, ProviderModule } from "../providers/sdk.js";
+import { renderHealth } from "../reporting/console-reporter.js";
+import { runHealth } from "../runners/health-runner.js";
+import type { AuditModel } from "../recommendations/recommendation-engine.js";
 
 export interface FixOptions extends DiagnosticOptions {
   category?: string;
+  check?: boolean;
 }
 
-interface FixTask {
+export interface FixTask {
   name: string;
   category: HealthCategory;
   description: string;
@@ -17,107 +24,93 @@ interface FixTask {
   args: string[];
 }
 
-export function resolveFixTasks(
-  audit: Awaited<ReturnType<typeof auditRepository>>,
-  targetCategory?: string,
-): FixTask[] {
-  const { context, detections } = audit;
-  const tasks: FixTask[] = [];
+function capabilityFor(category: HealthCategory): string | undefined {
+  if (category === "format") return "formatting";
+  if (category === "lint") return "linting";
+  if (category === "documentation") return "documentation";
+  return undefined;
+}
+
+function providerCanFix(provider: ProviderModule, audit: AuditModel, spec: ProviderFix): boolean {
+  const detection = audit.detections.get(provider.id);
+  const capability = capabilityFor(spec.category);
+  if (!capability) return Object.keys(detection?.activeCapabilities ?? {}).length > 0;
+  return detection?.activeCapabilities[capability] === true;
+}
+
+function specsFor(provider: ProviderModule): ProviderFix[] {
+  return provider.fix ?? [];
+}
+
+export function resolveFixTasks(audit: AuditModel, targetCategory?: HealthCategory): FixTask[] {
+  const { context } = audit;
   const pm = context.packageManager ?? "npm";
-
-  // Check category filter
+  const providers = audit.registry?.providers ?? PROVIDERS;
+  const tasks: FixTask[] = [];
   const applies = (category: HealthCategory) => !targetCategory || targetCategory === category;
+  const categories = [...new Set<HealthCategory>(["format", "lint", "documentation", ...HEALTH_CATEGORIES])];
 
-  // 1. Formatting
-  if (applies("format")) {
-    if (context.scripts["format"]) {
-      const { command, args } = runScriptCommand(pm, "format");
-      tasks.push({
-        name: "format",
-        category: "format",
-        description: "Run repository format script",
-        command,
-        args,
-      });
-    } else if (detections.get("biome")?.activeCapabilities.formatting) {
-      const { command, args } = execCommand(pm, "biome", ["format", "--write", "."]);
-      tasks.push({
-        name: "biome-format",
-        category: "format",
-        description: "Format files with Biome",
-        command,
-        args,
-      });
-    } else if (detections.get("prettier")?.activeCapabilities.formatting) {
-      const { command, args } = execCommand(pm, "prettier", ["--write", "."]);
-      tasks.push({
-        name: "prettier-format",
-        category: "format",
-        description: "Format files with Prettier",
-        command,
-        args,
-      });
-    }
-  }
+  for (const category of categories) {
+    if (!applies(category)) continue;
+    const specs = providers.flatMap((provider) =>
+      specsFor(provider)
+        .filter((spec) => spec.category === category)
+        .map((spec) => ({ provider, spec })),
+    );
+    if (!specs.length) continue;
+    specs.sort((left, right) => (left.spec.order ?? 100) - (right.spec.order ?? 100));
 
-  // 2. Linting
-  if (applies("lint")) {
-    if (context.scripts["lint:fix"] || context.scripts["fix:lint"]) {
-      const scriptName = context.scripts["lint:fix"] ? "lint:fix" : "fix:lint";
+    let task: FixTask | undefined;
+    for (const { spec } of specs) {
+      const scriptName = spec.scriptNames?.find((name) => context.scripts[name]);
+      if (!scriptName) continue;
       const { command, args } = runScriptCommand(pm, scriptName);
-      tasks.push({
-        name: "lint-fix",
-        category: "lint",
+      task = {
+        name: scriptName,
+        category,
         description: `Run repository ${scriptName} script`,
         command,
         args,
-      });
-    } else if (detections.get("biome")?.activeCapabilities.linting) {
-      const { command, args } = execCommand(pm, "biome", ["lint", "--write", "."]);
-      tasks.push({
-        name: "biome-lint-fix",
-        category: "lint",
-        description: "Auto-fix lint issues with Biome",
-        command,
-        args,
-      });
-    } else if (detections.get("eslint")?.activeCapabilities.linting) {
-      const { command, args } = execCommand(pm, "eslint", [".", "--fix"]);
-      tasks.push({
-        name: "eslint-fix",
-        category: "lint",
-        description: "Auto-fix lint issues with ESLint",
-        command,
-        args,
-      });
+      };
+      break;
     }
-  }
-
-  // 3. Documentation
-  if (applies("documentation")) {
-    if (context.scripts["docs:fix"] || context.scripts["documentation:fix"]) {
-      const scriptName = context.scripts["docs:fix"] ? "docs:fix" : "documentation:fix";
-      const { command, args } = runScriptCommand(pm, scriptName);
-      tasks.push({
-        name: "docs-fix",
-        category: "documentation",
-        description: `Run repository ${scriptName} script`,
+    if (!task) {
+      const active = specs.filter(({ provider, spec }) => providerCanFix(provider, audit, spec));
+      const spec = active[0]?.spec;
+      if (!spec) continue;
+      const { command, args } = execCommand(pm, spec.binary, spec.args);
+      task = {
+        name: spec.binary,
+        category,
+        description: spec.description,
         command,
         args,
-      });
-    } else if (detections.get("markdownlint")?.activeCapabilities.documentation) {
-      const { command, args } = execCommand(pm, "markdownlint-cli2", ["--fix", "**/*.md", "#node_modules"]);
-      tasks.push({
-        name: "markdownlint-fix",
-        category: "documentation",
-        description: "Auto-fix Markdown formatting with markdownlint",
-        command,
-        args,
-      });
+      };
     }
+    tasks.push(task);
   }
 
   return tasks;
+}
+
+export function categoriesToVerify(tasks: FixTask[]): HealthCategory[] {
+  const categories: HealthCategory[] = [];
+  const seen = new Set<HealthCategory>();
+  for (const task of tasks) {
+    if (seen.has(task.category)) continue;
+    seen.add(task.category);
+    categories.push(task.category);
+  }
+  return categories;
+}
+
+export function formatFixPlan(tasks: FixTask[]): string {
+  const lines = [`Applying ${tasks.length} automated fix${tasks.length === 1 ? "" : "es"}:`, ""];
+  for (const task of tasks) {
+    lines.push(`  ${task.description}`);
+    lines.push(`    ${task.command} ${task.args.join(" ")}`);
+  }
+  return `${lines.join("\n")}\n`;
 }
 
 export async function fixCommand(category: string | undefined, options: FixOptions = {}): Promise<number> {
@@ -126,8 +119,9 @@ export async function fixCommand(category: string | undefined, options: FixOptio
 
   const availableCategories = audit.registry?.categories.map((entry) => entry.id) ?? HEALTH_CATEGORIES;
   assertValidCategory(category, availableCategories, CATEGORY_LABELS);
+  const target = category && isHealthCategory(category) ? category : undefined;
 
-  const tasks = resolveFixTasks(audit, category);
+  const tasks = resolveFixTasks(audit, target);
 
   if (tasks.length === 0) {
     if (category) {
@@ -138,9 +132,7 @@ export async function fixCommand(category: string | undefined, options: FixOptio
     return 0;
   }
 
-  process.stdout.write(
-    pc.bold(`Running ${tasks.length} automated remediation task${tasks.length === 1 ? "" : "s"}...\n\n`),
-  );
+  process.stdout.write(`${pc.bold(formatFixPlan(tasks).trimEnd())}\n\n`);
 
   let failureCount = 0;
 
@@ -172,5 +164,17 @@ export async function fixCommand(category: string | undefined, options: FixOptio
   }
 
   process.stdout.write(pc.green("All remediation tasks completed successfully.\n"));
-  return 0;
+  if (options.check === false) return 0;
+
+  const categories = categoriesToVerify(tasks);
+  const after = await auditRepository(audit.context.root, { ...options, logger });
+  const { config } = await readConfig(after.context.root);
+  process.stdout.write(`\n${pc.bold(`Verifying ${categories.join(", ")} with repnix check...`)}\n`);
+  const verified = await runHealth(after, config, {
+    logger,
+    categories,
+    ...(options.timeout === undefined ? {} : { timeout: options.timeout }),
+  });
+  process.stdout.write(`${renderHealth(verified)}\n`);
+  return verified.summary.exitCode;
 }
