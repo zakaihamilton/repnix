@@ -7,10 +7,11 @@ import { resolveDiagnosticLogger, type DiagnosticLogger } from "../cli/options.j
 import { builtinProvider, builtinProviderByName } from "../providers/registry.js";
 import { normalizeJscpd, normalizeKnip } from "./health/normalizers.js";
 import { executeTaskPlan } from "./health/task-executor.js";
-import { planHealthTasks } from "./health/task-planner.js";
+import { categorySelected, planHealthTasks } from "./health/task-planner.js";
 
 export interface RunHealthOptions {
   category?: HealthCategory;
+  categories?: readonly HealthCategory[];
   verbose?: boolean;
   quiet?: boolean;
   logLevel?: "silent" | "error" | "warn" | "info" | "debug";
@@ -140,7 +141,7 @@ export async function runHealth(
     results.push({
       provider: "repnix",
       name: "RepNix configuration",
-      category: options.category ?? "types",
+      category: options.category ?? options.categories?.[0] ?? "types",
       status: "error",
       findings: [],
       durationMs: 0,
@@ -151,7 +152,7 @@ export async function runHealth(
   }
   for (const coverage of audit.coverage) {
     if (
-      (!options.category || options.category === coverage.category) &&
+      categorySelected(coverage.category, options) &&
       (categoryModeFor(config, coverage.category) === "required" ||
         coverage.scopes.some((scope) => categoryModeFor(config, coverage.category, scope) === "required")) &&
       coverage.status !== "covered"
@@ -169,6 +170,7 @@ export async function runHealth(
   }
   const tasks = await planHealthTasks(audit, config, {
     ...(options.category ? { category: options.category } : {}),
+    ...(options.categories ? { categories: options.categories } : {}),
     timeoutMs,
     logger,
   });

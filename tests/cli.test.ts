@@ -446,4 +446,35 @@ for (const file of ["repnix.config.json", ".repnix-baseline.json"]) {
       expect.objectContaining({ file: "packages/a/src/index.ts" }),
     );
   });
+
+  it("re-checks only the categories that were fixed, not the rest of the suite", async () => {
+    const root = await copyFixture("minimal-js");
+    temporary.push(root);
+    const manifestPath = path.join(root, "package.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as { scripts: Record<string, string> };
+    manifest.scripts.format = 'node -e "process.exit(0)"';
+    manifest.scripts.test = 'node -e "process.exit(1)"';
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    await fakeBinary(root, "prettier", "process.exit(0);");
+
+    const result = await runCli(root, ["fix"]);
+    expect(result.stdout).toContain("Verifying format with repnix check");
+    expect(result.stdout).toContain("Prettier");
+    expect(result.stdout).not.toContain("script:test");
+    expect(result.code).toBe(0);
+  });
+
+  it("skips verification when --no-check is passed", async () => {
+    const root = await copyFixture("minimal-js");
+    temporary.push(root);
+    const manifestPath = path.join(root, "package.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as { scripts: Record<string, string> };
+    manifest.scripts.format = 'node -e "process.exit(0)"';
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+
+    const result = await runCli(root, ["fix", "--no-check"]);
+    expect(result.stdout).toContain("All remediation tasks completed successfully.");
+    expect(result.stdout).not.toContain("Verifying");
+    expect(result.code).toBe(0);
+  });
 });

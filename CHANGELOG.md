@@ -4,7 +4,7 @@
 
 ### Patch Changes
 
-- Declare automated fixes on built-in providers, including Oxfmt, preview the fix plan, and re-run check afterward. Schedule specialist health checks from catalog `run` hooks and close health categories to the built-in union.
+- Declare automated fixes on built-in providers, including Oxfmt, preview the fix plan, and re-check only the categories that were applied (`--no-check` skips verification). Attach specialist runners in the provider registry so the detection catalog does not import execution code, and close health categories to the built-in union.
 
 ## 1.0.1
 

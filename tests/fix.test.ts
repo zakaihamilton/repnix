@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatFixPlan, resolveFixTasks } from "../src/cli/fix.js";
+import { formatFixPlan, resolveFixTasks, categoriesToVerify } from "../src/cli/fix.js";
 import type { AuditModel } from "../src/recommendations/recommendation-engine.js";
 import type { RepositoryContext } from "../src/core/types.js";
 import { createBuiltinRegistry } from "../src/providers/registry.js";
@@ -141,5 +141,15 @@ describe("resolveFixTasks", () => {
     const tasks = resolveFixTasks(mockAudit(mockContext({ scripts: { format: "prettier --write ." } })));
     expect(formatFixPlan(tasks)).toContain("Applying 1 automated fix:");
     expect(formatFixPlan(tasks)).toContain("pnpm run format");
+  });
+
+  it("collects unique categories from applied tasks in order", () => {
+    expect(
+      categoriesToVerify([
+        { name: "format", category: "format", description: "", command: "pnpm", args: ["run", "format"] },
+        { name: "eslint", category: "lint", description: "", command: "pnpm", args: ["exec", "eslint"] },
+        { name: "prettier", category: "format", description: "", command: "pnpm", args: ["exec", "prettier"] },
+      ]),
+    ).toEqual(["format", "lint"]);
   });
 });

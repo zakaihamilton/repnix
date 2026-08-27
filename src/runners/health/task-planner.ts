@@ -3,8 +3,8 @@ import type { HealthCategory } from "../../core/health-category.js";
 import type { HealthResult } from "../../core/types.js";
 import type { AuditModel } from "../../recommendations/recommendation-engine.js";
 import type { DiagnosticLogger } from "../../cli/options.js";
+import { BUILTIN_PROVIDERS } from "../../providers/registry.js";
 import type { ProviderModule } from "../../providers/sdk.js";
-import { PROVIDERS } from "../../providers/catalog.js";
 import { basicCommands } from "./basic-commands.js";
 import { runGenericProvider, runProviderModule, runRunnableCommand, type RunnableCommand } from "./task-executor.js";
 
@@ -20,17 +20,22 @@ export interface HealthTask {
 
 export interface TaskPlannerOptions {
   category?: HealthCategory;
+  categories?: readonly HealthCategory[];
   timeoutMs: number;
   logger: DiagnosticLogger;
+}
+
+export function categorySelected(
+  category: HealthCategory,
+  options: { category?: HealthCategory; categories?: readonly HealthCategory[] },
+): boolean {
+  if (options.categories !== undefined) return options.categories.includes(category);
+  return options.category === undefined || options.category === category;
 }
 
 function enabledCategory(audit: AuditModel, config: RepnixConfig, category: HealthCategory, scope?: string): boolean {
   if (scope !== undefined) return categoryModeFor(config, category, scope) !== "off";
   return audit.coverage.find((entry) => entry.category === category)?.status !== "off";
-}
-
-function selected(category: HealthCategory, options: TaskPlannerOptions): boolean {
-  return !options.category || options.category === category;
 }
 
 function commandTask(command: RunnableCommand, audit: AuditModel, options: TaskPlannerOptions): HealthTask {
@@ -98,7 +103,7 @@ function scheduleProvider(
   add: (task: HealthTask) => void,
 ): void {
   if (
-    !selected(descriptor.category, options) ||
+    !categorySelected(descriptor.category, options) ||
     !enabledCategory(audit, config, descriptor.category) ||
     !hasActiveCapabilities(audit, descriptor.id)
   )
@@ -150,16 +155,15 @@ export async function planHealthTasks(
     scheduled.add(task.provider);
     tasks.push(task);
   };
-  for (const command of await basicCommands(
-    context,
-    detections,
-    options.timeoutMs,
-    audit.registry?.providers ?? PROVIDERS,
-  )) {
-    if (selected(command.category, options) && enabledCategory(audit, config, command.category, command.scope ?? "."))
+  const providers = audit.registry?.providers ?? BUILTIN_PROVIDERS;
+  for (const command of await basicCommands(context, detections, options.timeoutMs, providers)) {
+    if (
+      categorySelected(command.category, options) &&
+      enabledCategory(audit, config, command.category, command.scope ?? ".")
+    )
       add(commandTask(command, audit, options));
   }
-  for (const descriptor of audit.registry?.providers ?? PROVIDERS) {
+  for (const descriptor of providers) {
     scheduleProvider(descriptor, audit, config, options, tasks, add);
   }
   return tasks;

@@ -1,26 +1,12 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import type { DiagnosticLogger } from "../cli/options.js";
-import type { RepnixConfig } from "../config/repo-health-config.js";
-import type { HealthResult, ProviderDetection, RepositoryContext } from "../core/types.js";
+import type { ProviderDetection, RepositoryContext } from "../core/types.js";
 import {
   isNonMutatingQualityCommand,
   isNonMutatingTestCommand,
   matchesScriptPattern,
   safeTestScript,
 } from "../repository/script-detection.js";
-import {
-  runAttw,
-  runCoveragePolicy,
-  runDependencyCruiser,
-  runEslintBoundaries,
-  runJscpd,
-  runKnip,
-  runLicensePolicy,
-  runOsvScanner,
-  runPublint,
-  runSizeLimit,
-} from "../runners/health/builtin-providers.js";
 import { executableOnPath } from "../runners/health/task-executor.js";
 import { MARKDOWNLINT_CLI_ARGS, markdownlintScriptCommand } from "./markdownlint/command.js";
 import { normalizeMarkdownlintResult } from "./markdownlint/normalizer.js";
@@ -45,7 +31,7 @@ import {
   recommendStryker,
   recommendSyncpack,
 } from "./recommend.js";
-import type { ProviderHookContext, ProviderModule } from "./sdk.js";
+import type { ProviderModule } from "./sdk.js";
 
 export type ProviderDescriptor = ProviderModule;
 
@@ -56,24 +42,6 @@ function packageManagerRun(context: RepositoryContext, script: string): string {
   return context.packageManager === "yarn"
     ? `${context.packageManager} ${script}`
     : `${context.packageManager} run ${script}`;
-}
-
-function bindRun(
-  run: (
-    context: RepositoryContext,
-    config: RepnixConfig,
-    logger: DiagnosticLogger,
-    timeoutMs?: number,
-  ) => Promise<HealthResult>,
-) {
-  return ({ context, runtime, config }: ProviderHookContext) =>
-    run(context, config, runtime.logger, runtime.timeoutMs);
-}
-
-function bindSimpleRun(
-  run: (context: RepositoryContext, logger: DiagnosticLogger, timeoutMs?: number) => Promise<HealthResult>,
-) {
-  return ({ context, runtime }: ProviderHookContext) => run(context, runtime.logger, runtime.timeoutMs);
 }
 
 export const PROVIDERS: ProviderDescriptor[] = [
@@ -268,7 +236,6 @@ export const PROVIDERS: ProviderDescriptor[] = [
         `c8 --all --reporter=text ${packageManagerRun(context, safeTestScript(context.scripts) ?? "test")}`,
       checks: ["Test coverage reported for the repository's safe test command."],
     },
-    run: bindRun(runCoveragePolicy),
   },
   {
     id: "stryker",
@@ -311,7 +278,6 @@ export const PROVIDERS: ProviderDescriptor[] = [
       scriptCommand: () => "knip",
       checks: ["Unused files, exports, and dependencies not reachable from project entry points."],
     },
-    run: bindSimpleRun(runKnip),
   },
   {
     id: "jscpd",
@@ -333,7 +299,6 @@ export const PROVIDERS: ProviderDescriptor[] = [
       scriptCommand: (context) => `jscpd ${context.sourceRoots.map(quoteScriptArg).join(" ")}`,
       checks: ["Repeated code blocks across detected source roots."],
     },
-    run: bindSimpleRun(runJscpd),
   },
   {
     id: "osv-scanner",
@@ -352,7 +317,6 @@ export const PROVIDERS: ProviderDescriptor[] = [
     nextStep: "Next step: install the OSV-Scanner binary and prepare its local vulnerability database.",
     recommendOrder: 30,
     recommend: recommendOsv,
-    run: bindSimpleRun(runOsvScanner),
   },
   {
     id: "jsx-a11y",
@@ -390,7 +354,6 @@ export const PROVIDERS: ProviderDescriptor[] = [
     deriveFromCategory: "lint",
     recommendOrder: 40,
     recommend: recommendEslintBoundaries,
-    run: bindRun(runEslintBoundaries),
   },
   {
     id: "dependency-cruiser",
@@ -414,7 +377,6 @@ export const PROVIDERS: ProviderDescriptor[] = [
         `depcruise --output-type json --config -- ${context.sourceRoots.map(quoteScriptArg).join(" ")}`,
       checks: ["Circular dependencies and configured module-boundary violations."],
     },
-    run: bindSimpleRun(runDependencyCruiser),
   },
   {
     id: "size-limit",
@@ -433,7 +395,6 @@ export const PROVIDERS: ProviderDescriptor[] = [
     nextStep: "Next step: choose a build artifact and set an explicit size budget.",
     recommendOrder: 60,
     recommend: recommendSizeLimit,
-    run: bindSimpleRun(runSizeLimit),
   },
   {
     id: "syncpack",
@@ -500,7 +461,6 @@ export const PROVIDERS: ProviderDescriptor[] = [
       scriptCommand: () => "license-checker --json",
       checks: ["Declared dependency licenses against repository policy."],
     },
-    run: bindRun(runLicensePolicy),
   },
   {
     id: "markdownlint",
@@ -610,7 +570,6 @@ export const PROVIDERS: ProviderDescriptor[] = [
       scriptCommand: () => "publint",
       checks: ["Published package exports, entry points, metadata, and files."],
     },
-    run: bindSimpleRun(runPublint),
   },
   {
     id: "attw",
@@ -632,7 +591,6 @@ export const PROVIDERS: ProviderDescriptor[] = [
       scriptCommand: () => "attw --pack .",
       checks: ["TypeScript consumer resolution across Node and bundler modes."],
     },
-    run: bindSimpleRun(runAttw),
   },
 ];
 

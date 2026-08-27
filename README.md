@@ -107,7 +107,7 @@ RepNix gives you a clear inventory and a deliberate next step:
 | `repnix check --details`            | Show findings, locations, remediation, and baseline state.                     |           No            |
 | `repnix check --format json\|sarif` | Emit machine-readable output to stdout.                                        |           No            |
 | `repnix check --write-baseline`     | Record reviewed current findings for gradual CI adoption.                      |           Yes           |
-| `repnix fix [category]`             | Automatically apply available fixes for active providers (format, lint, docs). |           Yes           |
+| `repnix fix [category]`             | Apply fixes, then re-check only those categories (`--no-check` skips).         |           Yes           |
 
 Examples:
 

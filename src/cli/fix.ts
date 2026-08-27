@@ -13,6 +13,7 @@ import type { AuditModel } from "../recommendations/recommendation-engine.js";
 
 export interface FixOptions extends DiagnosticOptions {
   category?: string;
+  check?: boolean;
 }
 
 export interface FixTask {
@@ -92,6 +93,17 @@ export function resolveFixTasks(audit: AuditModel, targetCategory?: HealthCatego
   return tasks;
 }
 
+export function categoriesToVerify(tasks: FixTask[]): HealthCategory[] {
+  const categories: HealthCategory[] = [];
+  const seen = new Set<HealthCategory>();
+  for (const task of tasks) {
+    if (seen.has(task.category)) continue;
+    seen.add(task.category);
+    categories.push(task.category);
+  }
+  return categories;
+}
+
 export function formatFixPlan(tasks: FixTask[]): string {
   const lines = [`Applying ${tasks.length} automated fix${tasks.length === 1 ? "" : "es"}:`, ""];
   for (const task of tasks) {
@@ -152,11 +164,15 @@ export async function fixCommand(category: string | undefined, options: FixOptio
   }
 
   process.stdout.write(pc.green("All remediation tasks completed successfully.\n"));
-  const { config } = await readConfig(audit.context.root);
-  process.stdout.write(`\n${pc.bold("Verifying with repnix check...")}\n`);
-  const verified = await runHealth(audit, config, {
+  if (options.check === false) return 0;
+
+  const categories = categoriesToVerify(tasks);
+  const after = await auditRepository(audit.context.root, { ...options, logger });
+  const { config } = await readConfig(after.context.root);
+  process.stdout.write(`\n${pc.bold(`Verifying ${categories.join(", ")} with repnix check...`)}\n`);
+  const verified = await runHealth(after, config, {
     logger,
-    ...(target ? { category: target } : {}),
+    categories,
     ...(options.timeout === undefined ? {} : { timeout: options.timeout }),
   });
   process.stdout.write(`${renderHealth(verified)}\n`);

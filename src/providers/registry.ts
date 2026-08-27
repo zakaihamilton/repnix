@@ -3,6 +3,7 @@ import {
   createCategoryRegistry,
   type CategoryDefinition,
 } from "../core/category-registry.js";
+import { applyBuiltinRuns } from "./builtin-runs.js";
 import { PROVIDERS } from "./catalog.js";
 import type { CategoryModule, ProviderModule } from "./sdk.js";
 
@@ -23,7 +24,7 @@ function providerSupport(descriptor: ProviderModule): ProviderSupport[] {
   ];
 }
 
-export const BUILTIN_PROVIDERS: BuiltinProviderDefinition[] = PROVIDERS.map((descriptor) => ({
+export const BUILTIN_PROVIDERS: BuiltinProviderDefinition[] = applyBuiltinRuns(PROVIDERS).map((descriptor) => ({
   ...descriptor,
   description: descriptor.description ?? `Runs ${descriptor.name} as a repository health check.`,
   support: providerSupport(descriptor),

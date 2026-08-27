@@ -10,7 +10,7 @@ import { defineProvider } from "../src/providers/sdk.js";
 import { detectRepository } from "../src/repository/detect-repository.js";
 import { readConfig } from "../src/config/repo-health-config.js";
 import { buildAuditModel } from "../src/recommendations/recommendation-engine.js";
-import { detectAllProviders } from "../src/providers/catalog.js";
+import { detectAllProviders, PROVIDERS } from "../src/providers/catalog.js";
 import { runHealth } from "../src/runners/health-runner.js";
 import { resolveDiagnosticLogger } from "../src/cli/options.js";
 
@@ -23,6 +23,12 @@ describe("provider registry contract", () => {
     expect(builtinProvider("c8")?.run).toEqual(expect.any(Function));
     expect(builtinProvider("c8")?.support).toEqual(["detectable", "runnable", "installable"]);
     expect(builtinProvider("knip")?.documentationUrl).toBe("https://knip.dev/");
+  });
+
+  it("keeps specialist runners off the detection catalog", () => {
+    expect(PROVIDERS.find((provider) => provider.id === "knip")?.run).toBeUndefined();
+    expect(PROVIDERS.find((provider) => provider.id === "c8")?.run).toBeUndefined();
+    expect(builtinProvider("knip")?.run).toEqual(expect.any(Function));
   });
 
   it("uses only built-in providers", () => {
