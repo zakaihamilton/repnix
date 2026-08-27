@@ -565,8 +565,7 @@ export function setupCheckRows(output: string): SetupCheckRow[] {
     );
     const findings = results.reduce((total, item) => total + item.findings.length, 0);
     return {
-      category:
-        run.repository.categories?.find((item) => item.id === category)?.label ?? categoryLabel(category),
+      category: run.repository.categories?.find((item) => item.id === category)?.label ?? categoryLabel(category),
       status,
       result:
         status === "pass"
@@ -625,8 +624,7 @@ export function setupCheckActions(output: string): SetupCheckAction[] {
     .map((group) => {
       const primary = group.results.find((result) => result.status === group.status) ?? group.results[0]!;
       const label =
-        run.repository.categories?.find((item) => item.id === group.category)?.label ??
-        categoryLabel(group.category);
+        run.repository.categories?.find((item) => item.id === group.category)?.label ?? categoryLabel(group.category);
       if (group.status === "error") {
         return {
           kind: "setup",

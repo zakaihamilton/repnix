@@ -710,4 +710,3 @@ export async function runAttw(
     await rm(temporary, { recursive: true, force: true });
   }
 }
-

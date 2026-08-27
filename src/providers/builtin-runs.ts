@@ -23,8 +23,7 @@ function bindRun(
     timeoutMs?: number,
   ) => Promise<HealthResult>,
 ) {
-  return ({ context, runtime, config }: ProviderHookContext) =>
-    run(context, config, runtime.logger, runtime.timeoutMs);
+  return ({ context, runtime, config }: ProviderHookContext) => run(context, config, runtime.logger, runtime.timeoutMs);
 }
 
 function bindSimpleRun(

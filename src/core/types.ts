@@ -248,4 +248,3 @@ export interface BaselineFile {
   generatedAt: string;
   entries: BaselineEntry[];
 }
-
