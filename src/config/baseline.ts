@@ -3,6 +3,7 @@ import path from "node:path";
 import { z } from "zod";
 import type { BaselineFile, HealthRun } from "../core/types.js";
 import { HEALTH_CATEGORIES } from "../core/health-category.js";
+import { formatJson } from "./json-format.js";
 
 const entrySchema = z
   .object({
@@ -64,18 +65,26 @@ export async function writeBaseline(root: string, file: string, run: HealthRun):
   const baselinePath = path.resolve(root, file);
   if (path.relative(root, baselinePath).startsWith(".."))
     throw new Error("Baseline path must stay inside the repository.");
-  await writeFile(baselinePath, `${JSON.stringify(baselineFromRun(run), null, 2)}\n`, "utf8");
+  let existingRaw: string | undefined;
+  try {
+    existingRaw = await readFile(baselinePath, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  await writeFile(baselinePath, formatJson(baselineFromRun(run), existingRaw), "utf8");
 }
 
 export async function enableBaselineConfig(root: string, file: string): Promise<void> {
   const configPath = path.join(root, "repnix.config.json");
   let config: Record<string, unknown> = {};
+  let existingRaw: string | undefined;
   try {
-    config = JSON.parse(await readFile(configPath, "utf8")) as Record<string, unknown>;
+    existingRaw = await readFile(configPath, "utf8");
+    config = JSON.parse(existingRaw) as Record<string, unknown>;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   }
   config.schemaVersion = 1;
   config.baseline = { path: file, failOn: "new" };
-  await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+  await writeFile(configPath, formatJson(config, existingRaw), "utf8");
 }
