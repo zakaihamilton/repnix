@@ -94,7 +94,9 @@ async function readPackageJson(file: string): Promise<PackageJson> {
     }
     return parsed as PackageJson;
   } catch (error) {
-    throw new Error(`Invalid package.json at ${file}: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(`Invalid package.json at ${file}: ${error instanceof Error ? error.message : String(error)}`, {
+      cause: error,
+    });
   }
 }
 

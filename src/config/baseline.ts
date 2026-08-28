@@ -33,11 +33,13 @@ export async function readBaseline(root: string, file: string): Promise<Baseline
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       throw new Error(
         `Configured RepNix baseline does not exist: ${file}. Run 'repnix check --write-baseline' after reviewing current findings.`,
+        { cause: error },
       );
     }
     if (error instanceof SyntaxError || error instanceof z.ZodError) {
       throw new Error(
         `Invalid RepNix baseline at ${file}: ${error instanceof z.ZodError ? z.prettifyError(error) : error.message}`,
+        { cause: error },
       );
     }
     throw error;

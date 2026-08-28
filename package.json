@@ -1,6 +1,6 @@
 {
   "name": "repnix",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Local-first repository health orchestration for JavaScript and TypeScript projects",
   "repository": {
     "type": "git",
@@ -103,7 +103,7 @@
   ],
   "license": "MIT",
   "dependencies": {
-    "@clack/prompts": "^0.11.0",
+    "@clack/prompts": "^1.7.0",
     "commander": "^14.0.0",
     "fast-glob": "^3.3.3",
     "ink": "^6.8.0",
@@ -116,11 +116,11 @@
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
     "@changesets/cli": "^3.0.0",
-    "@eslint/js": "^9.34.0",
+    "@eslint/js": "^10.0.1",
     "@types/node": "^20.19.11",
     "@types/react": "^19.2.13",
     "c8": "^12.0.0",
-    "eslint": "^9.34.0",
+    "eslint": "^10.9.1",
     "jscpd": "^5.0.14",
     "knip": "^6.32.2",
     "license-checker": "^25.0.1",
@@ -130,6 +130,6 @@
     "publint": "^0.3.23",
     "typescript": "^5.9.2",
     "typescript-eslint": "^8.41.0",
-    "vitest": "^3.2.4"
+    "vitest": "^4.1.11"
   }
 }

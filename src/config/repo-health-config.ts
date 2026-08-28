@@ -121,11 +121,13 @@ export async function readConfig(root: string): Promise<ConfigResult> {
     if (error instanceof SyntaxError) {
       throw new Error(
         `Invalid repnix.config.json: ${error.message}\nConfiguration tip: use valid JSON, then run 'repnix audit' to check the file without changing it.`,
+        { cause: error },
       );
     }
     if (error instanceof z.ZodError) {
       throw new Error(
         `Invalid repnix.config.json: ${z.prettifyError(error)}\nConfiguration tip: category entries use { "mode": "required" | "optional" | "off" }; severityThreshold is 'info', 'warning', or 'error'.`,
+        { cause: error },
       );
     }
     throw error;

@@ -103,7 +103,7 @@ export async function applyInstallPlan(
     } catch (rollbackError) {
       throw new Error(
         `Package installation failed and setup rollback also failed: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`,
-        { cause: error },
+        { cause: rollbackError },
       );
     }
     throw new Error(

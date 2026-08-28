@@ -9,6 +9,17 @@ updates:
       npm-dependencies:
         patterns:
           - "*"
+    ignore:
+      - dependency-name: commander
+        update-types: ["version-update:semver-major"]
+      - dependency-name: ink
+        update-types: ["version-update:semver-major"]
+      - dependency-name: dependency-cruiser
+        update-types: ["version-update:semver-major"]
+      - dependency-name: typescript
+        versions: [">=7"]
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule:

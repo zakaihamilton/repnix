@@ -111,7 +111,7 @@ export async function writeChanges(
     } catch (rollbackError) {
       throw new Error(
         `Could not apply setup changes and rollback also failed: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`,
-        { cause: error },
+        { cause: rollbackError },
       );
     }
     throw error;
