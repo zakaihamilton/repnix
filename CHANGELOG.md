@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.3
+
+### Patch Changes
+
+- dbecd26: Upgrade compatible npm dependencies while keeping Node 20 support, and preserve original errors with `Error.cause`.
+
 ## 1.0.2
 
 ### Patch Changes
