@@ -104,9 +104,9 @@
   "license": "MIT",
   "dependencies": {
     "@clack/prompts": "^1.7.0",
-    "commander": "^15.0.0",
+    "commander": "^14.0.0",
     "fast-glob": "^3.3.3",
-    "ink": "^7.1.1",
+    "ink": "^6.8.0",
     "jsonc-parser": "^3.3.1",
     "picocolors": "^1.1.1",
     "react": "^19.2.4",
@@ -117,7 +117,7 @@
     "@arethetypeswrong/cli": "^0.18.5",
     "@changesets/cli": "^3.0.0",
     "@eslint/js": "^10.0.1",
-    "@types/node": "^26.3.0",
+    "@types/node": "^20.19.11",
     "@types/react": "^19.2.13",
     "c8": "^12.0.0",
     "eslint": "^10.9.1",
@@ -125,10 +125,10 @@
     "knip": "^6.32.2",
     "license-checker": "^25.0.1",
     "markdownlint-cli2": "^0.23.2",
-    "dependency-cruiser": "^18.2.0",
+    "dependency-cruiser": "^17.2.0",
     "prettier": "^3.5.3",
     "publint": "^0.3.23",
-    "typescript": "^7.0.2",
+    "typescript": "^5.9.2",
     "typescript-eslint": "^8.41.0",
     "vitest": "^4.1.11"
   }
