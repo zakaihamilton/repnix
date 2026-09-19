@@ -70,6 +70,11 @@
     "access": "public"
   },
   "packageManager": "pnpm@10.15.0",
+  "pnpm": {
+    "overrides": {
+      "smol-toml": "1.8.0"
+    }
+  },
   "keywords": [
     "repository",
     "health",
