@@ -639,12 +639,20 @@ export async function detectProvider(
   const installedAtRoot = packageName
     ? context.installedPackageOrigins.get(packageName)?.includes("package.json") === true
     : false;
+  const installedAtLibraryScope =
+    descriptor.category === "package-health" &&
+    packageName !== undefined &&
+    context.scopes.some(
+      (scope) =>
+        scope.roles.includes("library") &&
+        context.installedPackageOrigins.get(packageName)?.includes(scope.manifestPath) === true,
+    );
   const configured = configFiles.length > 0 || scriptEntries.length > 0 || packageJsonConfigActive;
   const pathBinaryConfigured = Boolean(pathBinary) && configured;
   const active = descriptor.requiresConfiguration
     ? installed && (configFiles.length > 0 || packageJsonConfigActive)
     : scriptEntries.length > 0 ||
-      ((installedAtRoot || pathBinaryConfigured) &&
+      ((installedAtRoot || installedAtLibraryScope || pathBinaryConfigured) &&
         (configFiles.length > 0 || packageJsonConfigActive || descriptor.zeroConfig === true));
   const evidence: string[] = [];
   if (packageName) evidence.push(`${packageName} ${context.installedPackages.get(packageName)}`);

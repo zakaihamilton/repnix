@@ -4,13 +4,25 @@ import type { RecommendHelpers } from "./sdk.js";
 
 const LOCKFILES = ["package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock", "bun.lockb"];
 
-export function hasPublishedTypes(context: RepositoryContext): boolean {
-  if (typeof context.packageJson.types === "string" || typeof context.packageJson.typings === "string") return true;
+export function scopePublishesTypes(scope: RepositoryContext["scopes"][number]): boolean {
   const visit = (value: unknown): boolean => {
     if (!value || typeof value !== "object") return false;
     return Object.entries(value as Record<string, unknown>).some(([key, child]) => key === "types" || visit(child));
   };
-  return visit(context.packageJson.exports);
+  return (
+    scope.roles.includes("library") &&
+    (typeof scope.packageJson.types === "string" ||
+      typeof scope.packageJson.typings === "string" ||
+      visit(scope.packageJson.exports))
+  );
+}
+
+export function publishedTypesScope(context: RepositoryContext): RepositoryContext["scopes"][number] | undefined {
+  return context.scopes.find(scopePublishesTypes);
+}
+
+export function hasPublishedTypes(context: RepositoryContext): boolean {
+  return publishedTypesScope(context) !== undefined;
 }
 
 function coveredOrOff(helpers?: RecommendHelpers): boolean {
@@ -124,14 +136,15 @@ export function recommendPublint(
 
 export function recommendAttw(context: RepositoryContext, helpers?: RecommendHelpers): ProviderRecommendation | null {
   if (helpers?.coverageStatus === "off" || helpers?.coverageStatus === "not-applicable") return null;
-  if (!hasPublishedTypes(context) || helpers?.detections.get("attw")?.activeCapabilities.typesCompatibility)
-    return null;
+  const scope = publishedTypesScope(context);
+  if (!scope || helpers?.detections.get("attw")?.activeCapabilities.typesCompatibility) return null;
+  const packageJsonPath = scope.path === "." ? "package.json" : `${scope.path}/package.json`;
   const evidence =
-    typeof context.packageJson.types === "string"
-      ? `package.json#types points to ${context.packageJson.types}`
-      : typeof context.packageJson.typings === "string"
-        ? `package.json#typings points to ${context.packageJson.typings}`
-        : "package.json exports contains a types condition";
+    typeof scope.packageJson.types === "string"
+      ? `${packageJsonPath}#types points to ${scope.packageJson.types}`
+      : typeof scope.packageJson.typings === "string"
+        ? `${packageJsonPath}#typings points to ${scope.packageJson.typings}`
+        : `${packageJsonPath} exports contains a types condition`;
   return {
     recommended: true,
     priority: "baseline",

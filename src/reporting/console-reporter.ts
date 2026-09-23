@@ -146,6 +146,8 @@ export function renderAudit(model: AuditModel, options: { details?: boolean } = 
     }
     if (options.details && entry.evidence.length)
       addWrapped(lines, `Applies because: ${entry.evidence.join("; ")}`, width, "  ", "    ");
+    if (options.details && entry.missingScopes?.length)
+      addWrapped(lines, `Coverage missing in: ${entry.missingScopes.join(", ")}`, width, "  ", "    ");
   }
   if (context.diagnostics.length) {
     lines.push("", pc.bold("Diagnostics"), rule(width));

@@ -154,6 +154,7 @@ export function commandResult(
       findings: [],
       durationMs: result.durationMs,
       message: `${runnable.name} exceeded its ${runnable.timeoutMs ?? 300_000}ms command timeout.`,
+      ...(runnable.scope ? { scope: runnable.scope } : {}),
     };
   if (result.spawnError) {
     const missingLocalBinary = /node_modules[\\/]+\.bin[\\/].+\bENOENT\b/i.test(result.spawnError);
@@ -167,6 +168,7 @@ export function commandResult(
       message: missingLocalBinary
         ? `${runnable.name} is configured, but its local executable is unavailable. Install this project's dependencies, then try again.`
         : `${runnable.name} could not start. ${result.spawnError}`,
+      ...(runnable.scope ? { scope: runnable.scope } : {}),
     };
   }
   if (result.exitCode === 0)
@@ -177,6 +179,7 @@ export function commandResult(
       status: "pass",
       findings: [],
       durationMs: result.durationMs,
+      ...(runnable.scope ? { scope: runnable.scope } : {}),
     };
   const excerpt = outputExcerpt(result);
   if (
@@ -194,6 +197,7 @@ export function commandResult(
       findings: [],
       durationMs: result.durationMs,
       message: `${runnable.name} is configured but its executable is unavailable: ${runnable.command}. Install repository dependencies first.`,
+      ...(runnable.scope ? { scope: runnable.scope } : {}),
     };
   }
   const findings =
@@ -208,6 +212,7 @@ export function commandResult(
       status: statusForFindings(findings),
       findings,
       durationMs: result.durationMs,
+      ...(runnable.scope ? { scope: runnable.scope } : {}),
     };
   return {
     provider: runnable.provider,
@@ -230,6 +235,7 @@ export function commandResult(
       }),
     ],
     durationMs: result.durationMs,
+    ...(runnable.scope ? { scope: runnable.scope } : {}),
   };
 }
 

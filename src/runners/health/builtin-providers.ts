@@ -9,6 +9,7 @@ import { normalizeDependencyCruiser } from "../../providers/dependency-cruiser/n
 import { normalizeOsv } from "../../providers/osv/normalizer.js";
 import { normalizePublint } from "../../providers/publint/normalizer.js";
 import { normalizeAttw } from "../../providers/attw/normalizer.js";
+import { scopePublishesTypes } from "../../providers/recommend.js";
 import { safeTestScript } from "../../repository/script-detection.js";
 import type { DiagnosticLogger } from "../../cli/options.js";
 import { runCommand, type CommandResult } from "../command-runner.js";
@@ -534,6 +535,7 @@ function packageHealthErrorResult(
   error: unknown,
   result: CommandResult,
   durationMs: number,
+  scope?: string,
 ): HealthResult {
   return {
     provider,
@@ -543,7 +545,91 @@ function packageHealthErrorResult(
     findings: [],
     durationMs,
     message: `${error instanceof Error ? error.message : String(error)} ${outputExcerpt(result)}`.trim(),
+    ...(scope === undefined ? {} : { scope }),
   };
+}
+
+function packageHealthScopes(context: RepositoryContext, withTypes = false): RepositoryContext["scopes"] {
+  return context.scopes.filter(
+    (scope) => scope.roles.includes("library") && (!withTypes || scopePublishesTypes(scope)),
+  );
+}
+
+function scopePackageFinding(finding: HealthFinding, scope: string): HealthFinding {
+  const file = scope === "." ? finding.file : path.posix.join(scope, finding.file ?? "package.json");
+  return createFinding({
+    provider: finding.provider,
+    category: finding.category,
+    type: finding.type,
+    severity: finding.severity,
+    message: finding.message,
+    ...(finding.ruleId === undefined ? {} : { ruleId: finding.ruleId }),
+    ...(finding.title === undefined ? {} : { title: finding.title }),
+    ...(file === undefined ? {} : { file }),
+    ...(finding.line === undefined ? {} : { line: finding.line }),
+    ...(finding.column === undefined ? {} : { column: finding.column }),
+    ...(finding.remediation === undefined ? {} : { remediation: finding.remediation }),
+    ...(finding.documentationUrl === undefined ? {} : { documentationUrl: finding.documentationUrl }),
+    ...(finding.metadata === undefined ? {} : { metadata: finding.metadata }),
+    scope,
+  });
+}
+
+function combinePackageHealthResults(provider: string, name: string, results: HealthResult[]): HealthResult {
+  const findings = results.flatMap((result) => result.findings);
+  const errors = results.filter((result) => result.status === "error");
+  return {
+    provider,
+    name,
+    category: "package-health",
+    status: errors.length ? "error" : statusForFindings(findings),
+    findings,
+    durationMs: results.reduce((duration, result) => duration + result.durationMs, 0),
+    ...(errors.length
+      ? { message: errors.map((result) => `${result.scope ?? "."}: ${result.message ?? "check failed"}`).join(" ") }
+      : {}),
+  };
+}
+
+function packageScopeRoot(context: RepositoryContext, scope: string): string {
+  return path.resolve(context.root, scope);
+}
+
+async function packageHealthTool(
+  context: RepositoryContext,
+  scopes: RepositoryContext["scopes"],
+  binary: string,
+): Promise<{ binary: string; root: string } | null> {
+  for (const scope of scopes) {
+    const root = packageScopeRoot(context, scope.path);
+    const local = await localBinary(root, binary);
+    if (local) return { binary: local, root };
+  }
+  const local = await localBinary(context.root, binary);
+  return local ? { binary: local, root: context.root } : null;
+}
+
+type AttwOptions = { ignoreRules?: string[]; profile?: "strict" | "node16" | "esm-only" };
+
+async function readAttwOptions(scopeRoot: string, repositoryRoot: string): Promise<AttwOptions> {
+  const options: AttwOptions = {};
+  const configPaths = [...new Set([path.join(scopeRoot, ".attw.json"), path.join(repositoryRoot, ".attw.json")])];
+  for (const configPath of configPaths) {
+    try {
+      const raw = JSON.parse(await readFile(configPath, "utf8")) as Record<string, unknown>;
+      if (Array.isArray(raw.ignoreRules) && raw.ignoreRules.every((rule) => typeof rule === "string"))
+        options.ignoreRules = raw.ignoreRules as string[];
+      if (raw.profile === "strict" || raw.profile === "node16" || raw.profile === "esm-only")
+        options.profile = raw.profile;
+      break;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        /* Malformed optional ATTW config is ignored, matching the existing provider behavior. */
+        break;
+      }
+    }
+  }
+  return options;
 }
 
 export async function runPublint(
@@ -552,7 +638,19 @@ export async function runPublint(
   timeoutMs?: number,
 ): Promise<HealthResult> {
   const logger = resolveLogger(diagnostics);
-  if (!(await localBinary(context.root, "publint")))
+  const scopes = packageHealthScopes(context);
+  if (!scopes.length)
+    return {
+      provider: "publint",
+      name: "Publint",
+      category: "package-health",
+      status: "skipped",
+      findings: [],
+      durationMs: 0,
+      message: "No published library package scopes were detected.",
+    };
+  const tool = await packageHealthTool(context, packageHealthScopes(context), "publint");
+  if (!tool)
     return {
       provider: "publint",
       name: "Publint",
@@ -564,57 +662,83 @@ export async function runPublint(
     };
   const temporary = await mkdtemp(path.join(os.tmpdir(), "repnix-publint-"));
   try {
-    const packed = await packLocalPackage(context, temporary, logger, timeoutMs);
-    if (!packed.tarball)
-      return {
-        provider: "publint",
-        name: "Publint",
-        category: "package-health",
-        status: "error",
-        findings: [],
-        durationMs: packed.durationMs,
-        message: packed.error ?? "The package could not be packed locally.",
-      };
-    const result = await runCommand(process.execPath, ["--input-type=module", "--eval", PUBLINT_EVAL, packed.tarball], {
-      cwd: context.root,
-      logger,
-      env: HEALTH_OFFLINE_ENV,
-      ...(timeoutMs === undefined ? {} : { timeoutMs }),
-    });
-    const durationMs = packed.durationMs + result.durationMs;
-    if (result.spawnError)
-      return {
-        provider: "publint",
-        name: "Publint",
-        category: "package-health",
-        status: "error",
-        findings: [],
-        durationMs,
-        message: result.spawnError,
-      };
-    try {
-      const findings = normalizePublint(parseJsonOutput(result.stdout));
-      if (result.exitCode !== 0 && !findings.length)
-        return {
-          provider: "publint",
-          name: "Publint",
-          category: "package-health",
-          status: "error",
-          findings: [],
-          durationMs,
-          message: `Publint could not complete its analysis. ${outputExcerpt(result)}`.trim(),
-        };
-      return {
-        provider: "publint",
-        name: "Publint",
-        category: "package-health",
-        status: statusForFindings(findings),
-        findings,
-        durationMs,
-      };
-    } catch (error) {
-      return packageHealthErrorResult("publint", "Publint", error, result, durationMs);
+    const results: HealthResult[] = [];
+    for (const scope of scopes) {
+      const scopeRoot = packageScopeRoot(context, scope.path);
+      const scopeTemporary = await mkdtemp(path.join(temporary, "scope-"));
+      try {
+        const packed = await packLocalPackage(context, scopeTemporary, logger, timeoutMs, scopeRoot);
+        if (!packed.tarball) {
+          results.push({
+            provider: "publint",
+            name: "Publint",
+            category: "package-health",
+            status: "error",
+            findings: [],
+            durationMs: packed.durationMs,
+            message: packed.error ?? "The package could not be packed locally.",
+            scope: scope.path,
+          });
+          continue;
+        }
+        const result = await runCommand(
+          process.execPath,
+          ["--input-type=module", "--eval", PUBLINT_EVAL, packed.tarball],
+          {
+            cwd: tool.root,
+            logger,
+            env: HEALTH_OFFLINE_ENV,
+            ...(timeoutMs === undefined ? {} : { timeoutMs }),
+          },
+        );
+        const durationMs = packed.durationMs + result.durationMs;
+        if (result.spawnError) {
+          results.push({
+            provider: "publint",
+            name: "Publint",
+            category: "package-health",
+            status: "error",
+            findings: [],
+            durationMs,
+            message: result.spawnError,
+            scope: scope.path,
+          });
+          continue;
+        }
+        try {
+          const findings = normalizePublint(parseJsonOutput(result.stdout)).map((finding) =>
+            scopePackageFinding(finding, scope.path),
+          );
+          if (result.exitCode !== 0 && !findings.length) {
+            results.push({
+              provider: "publint",
+              name: "Publint",
+              category: "package-health",
+              status: "error",
+              findings: [],
+              durationMs,
+              message: `Publint could not complete its analysis. ${outputExcerpt(result)}`.trim(),
+              scope: scope.path,
+            });
+          } else {
+            results.push({
+              provider: "publint",
+              name: "Publint",
+              category: "package-health",
+              status: statusForFindings(findings),
+              findings,
+              durationMs,
+              scope: scope.path,
+            });
+          }
+        } catch (error) {
+          results.push(packageHealthErrorResult("publint", "Publint", error, result, durationMs, scope.path));
+        }
+      } finally {
+        await rm(scopeTemporary, { recursive: true, force: true });
+      }
     }
+    return combinePackageHealthResults("publint", "Publint", results);
   } finally {
     await rm(temporary, { recursive: true, force: true });
   }
@@ -626,8 +750,19 @@ export async function runAttw(
   timeoutMs?: number,
 ): Promise<HealthResult> {
   const logger = resolveLogger(diagnostics);
-  const binary = await localBinary(context.root, "attw");
-  if (!binary)
+  const scopes = packageHealthScopes(context, true);
+  if (!scopes.length)
+    return {
+      provider: "attw",
+      name: "Are The Types Wrong?",
+      category: "package-health",
+      status: "skipped",
+      findings: [],
+      durationMs: 0,
+      message: "No published library package scopes with TypeScript declarations were detected.",
+    };
+  const tool = await packageHealthTool(context, packageHealthScopes(context), "attw");
+  if (!tool)
     return {
       provider: "attw",
       name: "Are The Types Wrong?",
@@ -639,73 +774,81 @@ export async function runAttw(
     };
   const temporary = await mkdtemp(path.join(os.tmpdir(), "repnix-attw-"));
   try {
-    const packed = await packLocalPackage(context, temporary, logger, timeoutMs);
-    if (!packed.tarball)
-      return {
-        provider: "attw",
-        name: "Are The Types Wrong?",
-        category: "package-health",
-        status: "error",
-        findings: [],
-        durationMs: packed.durationMs,
-        message: packed.error ?? "The package could not be packed locally.",
-      };
-    const result = await runCommand(binary, [packed.tarball, "--format", "json", "--no-definitely-typed"], {
-      cwd: context.root,
-      logger,
-      env: HEALTH_OFFLINE_ENV,
-      maxOutputBytes: 50 * 1024 * 1024,
-      ...(timeoutMs === undefined ? {} : { timeoutMs }),
-    });
-    const durationMs = packed.durationMs + result.durationMs;
-    if (result.spawnError)
-      return {
-        provider: "attw",
-        name: "Are The Types Wrong?",
-        category: "package-health",
-        status: "error",
-        findings: [],
-        durationMs,
-        message: result.spawnError,
-      };
-    try {
-      const options: { ignoreRules?: string[]; profile?: "strict" | "node16" | "esm-only" } = {};
+    const results: HealthResult[] = [];
+    for (const scope of scopes) {
+      const scopeRoot = packageScopeRoot(context, scope.path);
+      const scopeTemporary = await mkdtemp(path.join(temporary, "scope-"));
       try {
-        const raw = JSON.parse(await readFile(path.join(context.root, ".attw.json"), "utf8")) as Record<
-          string,
-          unknown
-        >;
-        if (Array.isArray(raw.ignoreRules) && raw.ignoreRules.every((rule) => typeof rule === "string"))
-          options.ignoreRules = raw.ignoreRules as string[];
-        if (raw.profile === "strict" || raw.profile === "node16" || raw.profile === "esm-only")
-          options.profile = raw.profile;
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-          /* ATTW reports malformed config. */
+        const packed = await packLocalPackage(context, scopeTemporary, logger, timeoutMs, scopeRoot);
+        if (!packed.tarball) {
+          results.push({
+            provider: "attw",
+            name: "Are The Types Wrong?",
+            category: "package-health",
+            status: "error",
+            findings: [],
+            durationMs: packed.durationMs,
+            message: packed.error ?? "The package could not be packed locally.",
+            scope: scope.path,
+          });
+          continue;
         }
+        const result = await runCommand(tool.binary, [packed.tarball, "--format", "json", "--no-definitely-typed"], {
+          cwd: scopeRoot,
+          logger,
+          env: HEALTH_OFFLINE_ENV,
+          maxOutputBytes: 50 * 1024 * 1024,
+          ...(timeoutMs === undefined ? {} : { timeoutMs }),
+        });
+        const durationMs = packed.durationMs + result.durationMs;
+        if (result.spawnError) {
+          results.push({
+            provider: "attw",
+            name: "Are The Types Wrong?",
+            category: "package-health",
+            status: "error",
+            findings: [],
+            durationMs,
+            message: result.spawnError,
+            scope: scope.path,
+          });
+          continue;
+        }
+        try {
+          const findings = normalizeAttw(
+            parseJsonOutput(result.stdout),
+            await readAttwOptions(scopeRoot, context.root),
+          ).map((finding) => scopePackageFinding(finding, scope.path));
+          if (result.exitCode !== 0 && !findings.length) {
+            results.push({
+              provider: "attw",
+              name: "Are The Types Wrong?",
+              category: "package-health",
+              status: "error",
+              findings: [],
+              durationMs,
+              message: `Are The Types Wrong? could not complete its analysis. ${outputExcerpt(result)}`.trim(),
+              scope: scope.path,
+            });
+          } else {
+            results.push({
+              provider: "attw",
+              name: "Are The Types Wrong?",
+              category: "package-health",
+              status: statusForFindings(findings),
+              findings,
+              durationMs,
+              scope: scope.path,
+            });
+          }
+        } catch (error) {
+          results.push(packageHealthErrorResult("attw", "Are The Types Wrong?", error, result, durationMs, scope.path));
+        }
+      } finally {
+        await rm(scopeTemporary, { recursive: true, force: true });
       }
-      const findings = normalizeAttw(parseJsonOutput(result.stdout), options);
-      if (result.exitCode !== 0 && !findings.length)
-        return {
-          provider: "attw",
-          name: "Are The Types Wrong?",
-          category: "package-health",
-          status: "error",
-          findings: [],
-          durationMs,
-          message: `Are The Types Wrong? could not complete its analysis. ${outputExcerpt(result)}`.trim(),
-        };
-      return {
-        provider: "attw",
-        name: "Are The Types Wrong?",
-        category: "package-health",
-        status: statusForFindings(findings),
-        findings,
-        durationMs,
-      };
-    } catch (error) {
-      return packageHealthErrorResult("attw", "Are The Types Wrong?", error, result, durationMs);
     }
+    return combinePackageHealthResults("attw", "Are The Types Wrong?", results);
   } finally {
     await rm(temporary, { recursive: true, force: true });
   }

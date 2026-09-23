@@ -72,7 +72,14 @@ const builtinDefinitions: Omit<CategoryDefinition, "label" | "description">[] = 
         (scope) => `${scope.path} contains multiple production source files`,
       ),
   },
-  { id: "security", requiredCapabilities: ["vulnerabilities"], applicable: sourceScopes },
+  {
+    id: "security",
+    requiredCapabilities: ["vulnerabilities"],
+    applicable: (context) => {
+      const sources = sourceScopes(context);
+      return { applicable: sources.applicable, scopes: sources.applicable ? ["."] : [], evidence: sources.evidence };
+    },
+  },
   {
     id: "architecture",
     requiredCapabilities: ["architectureRules"],
@@ -110,7 +117,7 @@ const builtinDefinitions: Omit<CategoryDefinition, "label" | "description">[] = 
     requiredCapabilities: ["workspaceConsistency"],
     applicable: (context) => ({
       applicable: context.isMonorepo,
-      scopes: context.isMonorepo ? context.scopes.map((scope) => scope.path) : [],
+      scopes: context.isMonorepo ? ["."] : [],
       evidence: context.isMonorepo ? [`${context.packageCount} package scopes detected`] : [],
     }),
   },
@@ -154,12 +161,14 @@ const builtinDefinitions: Omit<CategoryDefinition, "label" | "description">[] = 
   {
     id: "release",
     requiredCapabilities: ["release"],
-    applicable: (context) =>
-      matchingScopes(
-        context,
-        (scope) => scope.roles.includes("library"),
-        (scope) => `${scope.path} is a published library`,
-      ),
+    applicable: (context) => {
+      const libraries = context.scopes.filter((scope) => scope.roles.includes("library"));
+      return {
+        applicable: libraries.length > 0,
+        scopes: libraries.length > 0 ? ["."] : [],
+        evidence: libraries.map((scope) => `${scope.path} is a published library`),
+      };
+    },
   },
   {
     id: "ci",

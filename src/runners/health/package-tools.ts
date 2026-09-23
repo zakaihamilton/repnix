@@ -52,12 +52,13 @@ export async function packLocalPackage(
   temporary: string,
   logger: DiagnosticLogger,
   timeoutMs?: number,
+  packageRoot = context.root,
 ): Promise<PackedPackage> {
   const result = await runCommand(
     process.platform === "win32" ? "npm.cmd" : "npm",
     ["pack", "--json", "--ignore-scripts", "--pack-destination", temporary, "."],
     {
-      cwd: context.root,
+      cwd: packageRoot,
       logger,
       env: {
         ...HEALTH_OFFLINE_ENV,

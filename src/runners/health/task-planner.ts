@@ -34,8 +34,11 @@ export function categorySelected(
 }
 
 function enabledCategory(audit: AuditModel, config: RepnixConfig, category: HealthCategory, scope?: string): boolean {
-  if (scope !== undefined) return categoryModeFor(config, category, scope) !== "off";
-  return audit.coverage.find((entry) => entry.category === category)?.status !== "off";
+  const coverage = audit.coverage.find((entry) => entry.category === category);
+  if (scope !== undefined)
+    return coverage?.scopes.includes(scope) === true && categoryModeFor(config, category, scope) !== "off";
+  const status = coverage?.status;
+  return status !== "off" && status !== "not-applicable";
 }
 
 function commandTask(command: RunnableCommand, audit: AuditModel, options: TaskPlannerOptions): HealthTask {
@@ -159,7 +162,7 @@ export async function planHealthTasks(
   for (const command of await basicCommands(context, detections, options.timeoutMs, providers)) {
     if (
       categorySelected(command.category, options) &&
-      enabledCategory(audit, config, command.category, command.scope ?? ".")
+      enabledCategory(audit, config, command.category, command.scope)
     )
       add(commandTask(command, audit, options));
   }

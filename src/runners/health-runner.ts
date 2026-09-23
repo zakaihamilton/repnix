@@ -2,6 +2,7 @@ import { categoryModeFor, type RepnixConfig } from "../config/repo-health-config
 import { HEALTH_CATEGORIES, type HealthCategory } from "../core/health-category.js";
 import { redactDiagnosticValue, redactSensitiveText } from "../core/redaction.js";
 import type { BaselineFile, FindingSeverity, HealthResult, HealthRun } from "../core/types.js";
+import { withFindingScope } from "../core/finding.js";
 import type { AuditModel } from "../recommendations/recommendation-engine.js";
 import { resolveDiagnosticLogger, type DiagnosticLogger } from "../cli/options.js";
 import { builtinProvider, builtinProviderByName } from "../providers/registry.js";
@@ -50,13 +51,13 @@ function finalizeResults(
   );
   for (const result of results) {
     if (result.message) result.message = redactSensitiveText(result.message);
-    if (!result.scope && result.provider.startsWith("workspace:"))
-      result.scope = result.provider.split(":").slice(1, -1).join(":");
     const definition = builtinProvider(result.provider) ?? builtinProviderByName(result.name);
     for (const finding of result.findings) {
+      const scope = finding.scope ?? result.scope ?? ".";
+      if (finding.scope !== scope && scope !== ".") Object.assign(finding, withFindingScope(finding, scope));
       finding.ruleId ??= `${result.provider}/${finding.type}`;
       finding.title ??= finding.type.replaceAll("-", " ");
-      finding.scope ??= result.scope ?? ".";
+      finding.scope = scope;
       finding.remediation ??=
         definition?.nextStep ??
         `Review the ${result.name} output and correct the reported ${finding.type.replaceAll("-", " ")}.`;
@@ -151,12 +152,13 @@ export async function runHealth(
     return finalizeResults(results, audit, config, options, logger);
   }
   for (const coverage of audit.coverage) {
-    if (
-      categorySelected(coverage.category, options) &&
-      (categoryModeFor(config, coverage.category) === "required" ||
-        coverage.scopes.some((scope) => categoryModeFor(config, coverage.category, scope) === "required")) &&
-      coverage.status !== "covered"
-    ) {
+    const requiredScopes = coverage.scopes.filter(
+      (scope) => categoryModeFor(config, coverage.category, scope) === "required",
+    );
+    const uncoveredRequiredScopes = requiredScopes.filter(
+      (scope) => (coverage.scopeStatuses?.[scope] ?? coverage.status) !== "covered",
+    );
+    if (categorySelected(coverage.category, options) && uncoveredRequiredScopes.length > 0) {
       results.push({
         provider: "repnix",
         name: "Required coverage",
@@ -164,7 +166,9 @@ export async function runHealth(
         status: "error",
         findings: [],
         durationMs: 0,
-        message: `Required category '${coverage.category}' has no active provider.`,
+        message:
+          `Required category '${coverage.category}' has no active provider for scope${uncoveredRequiredScopes.length === 1 ? "" : "s"} ` +
+          `${uncoveredRequiredScopes.join(", ")}.`,
       });
     }
   }

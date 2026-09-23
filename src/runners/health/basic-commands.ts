@@ -3,6 +3,7 @@ import type { HealthCategory } from "../../core/health-category.js";
 import type { ProviderDetection, RepositoryContext } from "../../core/types.js";
 import type { ProviderModule } from "../../providers/sdk.js";
 import { isNonMutatingQualityCommand, isNonMutatingTestCommand } from "../../repository/script-detection.js";
+import { workspaceCheckCategories, workspaceCheckScript } from "../../repository/workspace-checks.js";
 import { expectedLocalBinary, type RunnableCommand } from "./task-executor.js";
 
 type ScriptKind = "general" | "format" | "test";
@@ -188,20 +189,16 @@ export async function basicCommands(
   for (const manifest of context.manifests) {
     const workspace = path.posix.dirname(manifest.path.replaceAll(path.sep, "/"));
     if (workspace === ".") continue;
-    for (const check of [
-      { category: "types", names: ["typecheck", "type-check", "check:types"], kind: "general" },
-      { category: "lint", names: ["lint", "check:lint", "lint:check"], kind: "general" },
-      { category: "format", names: ["format:check", "check:format", "format-check"], kind: "general" },
-      { category: "tests", names: ["test", "test:run", "check:test"], kind: "test" },
-    ] as Array<{ category: HealthCategory; names: string[]; kind: "general" | "test" }>) {
-      const script = safeScriptFrom(manifest.packageJson.scripts ?? {}, check.names, check.kind);
+    const scripts = manifest.packageJson.scripts ?? {};
+    for (const category of workspaceCheckCategories(providers)) {
+      const script = workspaceCheckScript(category, scripts, providers);
       if (script)
         commands.push({
-          provider: `workspace:${workspace}:${script}`,
-          name: `${workspace} ${script}`,
-          category: check.category,
+          provider: `workspace:${workspace}:${script.name}`,
+          name: `${workspace} ${script.name}`,
+          category,
           scope: workspace,
-          ...workspaceScriptCommand(context, workspace, script),
+          ...workspaceScriptCommand(context, workspace, script.name),
           ...withTimeout,
         });
     }

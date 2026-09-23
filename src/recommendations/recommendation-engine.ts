@@ -2,9 +2,10 @@ import { HEALTH_CATEGORIES, type HealthCategory } from "../core/health-category.
 import type { ProviderDetection, ProviderRecommendation, RepositoryContext } from "../core/types.js";
 import { categoryModeFor, type RepnixConfig } from "../config/repo-health-config.js";
 import { createBuiltinRegistry, type ProviderRegistry } from "../providers/registry.js";
-import { hasPublishedTypes } from "../providers/recommend.js";
+import { hasPublishedTypes, scopePublishesTypes } from "../providers/recommend.js";
 import type { ProviderModule } from "../providers/sdk.js";
 import { categoryDefinition, type Capability } from "../core/category-registry.js";
+import { workspaceCheckScript } from "../repository/workspace-checks.js";
 
 export type CoverageStatus = "covered" | "partial" | "missing" | "not-applicable" | "off";
 
@@ -15,8 +16,15 @@ export interface CategoryCoverage {
   capabilities: Capability[];
   missingCapabilities: Capability[];
   scopes: string[];
+  scopeStatuses?: Record<string, CoverageStatus>;
+  missingScopes?: string[];
   evidence: string[];
   reason?: string;
+}
+
+function statusesByScope(scopes: string[], status: CoverageStatus): Record<string, CoverageStatus> {
+  const entries: Array<[string, CoverageStatus]> = scopes.map((scope) => [scope, status]);
+  return Object.fromEntries(entries);
 }
 
 export interface Recommendation extends ProviderRecommendation {
@@ -29,11 +37,47 @@ function requirementsFor(
   category: HealthCategory,
   context: RepositoryContext,
   registry: ProviderRegistry,
+  scopePath?: string,
 ): Capability[] {
-  if (category === "package-health" && hasPublishedTypes(context)) {
+  const scope = scopePath === undefined ? undefined : context.scopes.find((candidate) => candidate.path === scopePath);
+  if (
+    category === "package-health" &&
+    (scope ? scopePublishesTypes(scope) : hasPublishedTypes(context))
+  ) {
     return ["packagePublishing", "typesCompatibility"];
   }
   return categoryDefinition(category, registry.categoryRegistry).requiredCapabilities;
+}
+
+function workspaceScriptCoverage(
+  category: HealthCategory,
+  scopePath: string,
+  context: RepositoryContext,
+  registry: ProviderRegistry,
+): { capabilities: Capability[]; providers: string[] } {
+  const scope = context.scopes.find((candidate) => candidate.path === scopePath);
+  if (!scope) return { capabilities: [], providers: [] };
+  const match = workspaceCheckScript(category, scope.packageJson.scripts ?? {}, registry.providers);
+  if (!match) return { capabilities: [], providers: [] };
+
+  const required = categoryDefinition(category, registry.categoryRegistry).requiredCapabilities;
+  const capabilities = new Set<Capability>();
+  const providers = new Set<string>();
+  if (match.generic) {
+    required.forEach((capability) => capabilities.add(capability));
+    if (match.providers.length) match.providers.forEach((provider) => providers.add(provider.name));
+    else providers.add("Workspace check script");
+  } else {
+    for (const provider of match.providers) {
+      for (const capability of required) {
+        if (provider.capabilities[capability]) {
+          capabilities.add(capability);
+          providers.add(provider.name);
+        }
+      }
+    }
+  }
+  return { capabilities: [...capabilities], providers: [...providers] };
 }
 
 export interface AuditModel {
@@ -53,7 +97,10 @@ function coverageFor(
 ): CategoryCoverage {
   const applicability = categoryDefinition(category, registry.categoryRegistry).applicable(context);
   const enabledScopes = applicability.scopes.filter((scope) => categoryModeFor(config, category, scope) !== "off");
-  if (categoryModeFor(config, category) === "off" || (applicability.applicable && enabledScopes.length === 0)) {
+  if (
+    enabledScopes.length === 0 &&
+    (categoryModeFor(config, category) === "off" || applicability.applicable)
+  ) {
     return {
       category,
       status: "off",
@@ -61,6 +108,8 @@ function coverageFor(
       capabilities: [],
       missingCapabilities: [],
       scopes: applicability.scopes,
+      scopeStatuses: statusesByScope(applicability.scopes, "off"),
+      missingScopes: [],
       evidence: ["disabled in repnix.config.json"],
     };
   }
@@ -72,6 +121,8 @@ function coverageFor(
       capabilities: [],
       missingCapabilities: [],
       scopes: [],
+      scopeStatuses: {},
+      missingScopes: [],
       evidence: [],
     };
   }
@@ -84,29 +135,52 @@ function coverageFor(
       capabilities: [],
       missingCapabilities: [],
       scopes: enabledScopes,
+      scopeStatuses: statusesByScope(enabledScopes, "missing"),
+      missingScopes: enabledScopes,
       evidence: applicability.evidence,
       reason: "No installable provider is available for this category in the MVP.",
     };
   }
-  const providers: string[] = [];
+  const providers = new Set<string>();
   const active = new Set<Capability>();
-  for (const descriptor of registry.providers) {
-    const detection = detections.get(descriptor.id);
-    if (!detection) continue;
-    const matching = required.filter((capability) => detection.activeCapabilities[capability]);
-    if (matching.length > 0) {
-      providers.push(descriptor.name);
-      matching.forEach((capability) => active.add(capability));
+  const missing = new Set<Capability>();
+  const scopeStatuses: Record<string, CoverageStatus> = {};
+  for (const scope of enabledScopes) {
+    const scopedRequired = requirementsFor(category, context, registry, scope);
+    const scopedRequirement = categoryModeFor(config, category, scope) === "required";
+    const scopeActive = new Set<Capability>();
+    if (scope !== ".") {
+      const scopedCoverage = workspaceScriptCoverage(category, scope, context, registry);
+      scopedCoverage.capabilities.forEach((capability) => {
+        scopeActive.add(capability);
+      });
+      scopedCoverage.providers.forEach((provider) => providers.add(provider));
     }
+    for (const descriptor of registry.providers) {
+      const detection = detections.get(descriptor.id);
+      if (scopedRequirement && scope !== "." && category !== "package-health") continue;
+      const matching = scopedRequired.filter((capability) => detection?.activeCapabilities[capability]);
+      if (matching.length > 0) {
+        providers.add(descriptor.name);
+        matching.forEach((capability) => scopeActive.add(capability));
+      }
+    }
+    scopeActive.forEach((capability) => active.add(capability));
+    const missingForScope = scopedRequired.filter((capability) => !scopeActive.has(capability));
+    missingForScope.forEach((capability) => missing.add(capability));
+    scopeStatuses[scope] = missingForScope.length === 0 ? "covered" : scopeActive.size > 0 ? "partial" : "missing";
   }
-  const missingCapabilities = required.filter((capability) => !active.has(capability));
+  const missingCapabilities = [...missing];
+  const missingScopes = enabledScopes.filter((scope) => scopeStatuses[scope] !== "covered");
   return {
     category,
-    status: missingCapabilities.length === 0 ? "covered" : active.size > 0 ? "partial" : "missing",
-    providers,
+    status: missingScopes.length === 0 ? "covered" : active.size > 0 ? "partial" : "missing",
+    providers: [...providers],
     capabilities: [...active],
     missingCapabilities,
     scopes: enabledScopes,
+    scopeStatuses,
+    missingScopes,
     evidence: applicability.evidence,
   };
 }

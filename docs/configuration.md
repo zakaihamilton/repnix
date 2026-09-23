@@ -56,6 +56,8 @@ Category modes are:
 - `optional` — run the category when a provider is active, but do not require setup.
 - `off` — skip the category intentionally.
 
+Every child scope whose effective category mode is `required` needs its own safe check script; a root-only script or provider does not prove that package is covered. For types, lint, formatting, and tests, use a conventional script such as `typecheck`, `lint`, `format:check`, or `test`. For other package-scoped categories, use `health:<category>` or a recognized provider script name. RepNix runs those commands in the workspace and attributes their results to that package. Package publishing checks pack and inspect each library scope; type compatibility runs for library scopes that publish TypeScript declarations. Repository-wide checks such as security scanning, monorepo consistency, release readiness, secret scanning, license policy, documentation, and CI run once at the root scope.
+
 Severity thresholds are `info`, `warning`, and `error`. A finding at or above the threshold produces exit code `1`. Configuration is strict, so misspelled category names fail with a correction tip.
 
 Policies are optional and provider-aware. License `allow` and `deny` lists are enforced by license-checker; coverage thresholds are used when RepNix runs c8 around the configured test command. Performance values document the budgets expected by a configured Lighthouse CI provider; RepNix does not invent a URL or build command.
