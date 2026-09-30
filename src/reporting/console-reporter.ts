@@ -146,6 +146,16 @@ export function renderAudit(model: AuditModel, options: { details?: boolean } = 
     }
     if (options.details && entry.evidence.length)
       addWrapped(lines, `Applies because: ${entry.evidence.join("; ")}`, width, "  ", "    ");
+    for (const scope of entry.scopeCoverage ?? []) {
+      if (scope.status === "missing" || scope.status === "partial")
+        addWrapped(
+          lines,
+          `${scope.scope}: missing ${scope.missingCapabilities.join(", ")}; add a workspace check script.`,
+          width,
+          "  ",
+          "    ",
+        );
+    }
   }
   if (context.diagnostics.length) {
     lines.push("", pc.bold("Diagnostics"), rule(width));

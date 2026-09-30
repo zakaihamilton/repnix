@@ -6,7 +6,7 @@ RepNix is a local-first orchestrator. Contributions should preserve existing rep
 
 Requirements:
 
-- Node.js 20 or newer
+- Node.js 22.20 or newer on the 22.x line, or Node.js 24.12 or newer on the 24.x line (recommended), for the development toolchain. Published CLI consumers still support Node.js 20+.
 - pnpm 10.15.0
 
 ```bash

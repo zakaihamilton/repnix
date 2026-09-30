@@ -16,7 +16,7 @@ try {
     cwd: projectRoot,
     env: process.env,
   });
-  alreadyPublished = stdout.trim() === packageJson.version;
+  alreadyPublished = JSON.parse(stdout) === packageJson.version;
 } catch (error) {
   const output = `${error.stdout ?? ""}\n${error.stderr ?? ""}`;
   if (!/\b(?:E404|404|not found|is not in this registry)\b/i.test(output)) throw error;

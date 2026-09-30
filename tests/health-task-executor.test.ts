@@ -4,6 +4,52 @@ import type { RepositoryContext } from "../src/core/types.js";
 import { commandResult, executeTaskPlan } from "../src/runners/health/task-executor.js";
 
 describe("health task executor", () => {
+  it("preserves warnings from successful commands, including output longer than the diagnostic excerpt", () => {
+    const result = commandResult(
+      { provider: "eslint", name: "ESLint", category: "lint", command: "eslint", args: ["."] },
+      {
+        command: "eslint",
+        args: ["."],
+        exitCode: 0,
+        signal: null,
+        stdout: `/repo/src/index.ts\n  1:1  warning  Unused variable  no-unused-vars\n${"Summary output\n".repeat(400)}`,
+        stderr: "",
+        durationMs: 1,
+      },
+      { root: "/repo" } as RepositoryContext,
+    );
+    expect(result.status).toBe("warn");
+    expect(result.findings).toEqual([
+      expect.objectContaining({ severity: "warning", ruleId: "no-unused-vars", file: "src/index.ts", line: 1 }),
+    ]);
+  });
+
+  it("normalizes successful output through provider hooks before declaring a pass", () => {
+    const markdownlint = PROVIDERS.find((provider) => provider.id === "markdownlint")!;
+    const result = commandResult(
+      {
+        provider: "markdownlint",
+        name: "markdownlint",
+        category: "documentation",
+        command: "markdownlint-cli2",
+        args: [],
+      },
+      {
+        command: "markdownlint-cli2",
+        args: [],
+        exitCode: 0,
+        signal: null,
+        stdout: "README.md:8:81 error MD013/line-length Line length [Expected: 80; Actual: 286]",
+        stderr: "",
+        durationMs: 1,
+      },
+      { root: "/repo" } as RepositoryContext,
+      markdownlint.normalize,
+    );
+    expect(result.status).toBe("fail");
+    expect(result.findings[0]).toMatchObject({ ruleId: "MD013/line-length" });
+  });
+
   it("honors dependencies while using the configured concurrency", async () => {
     let active = 0;
     let peak = 0;

@@ -64,6 +64,8 @@ Use `required` for coverage that must exist and `off` for categories that do not
 
 Scope roles normally come from repository evidence such as `package.json#bin`, publishable exports, framework configuration, source layout, and scripts. Add a scope override only when the repository intentionally differs from those signals.
 
+In monorepos, type, lint, format, and test coverage is tracked per scope. A root command does not prove that every workspace is checked: tool configuration can exclude a workspace even when the command succeeds. Add conventional, non-mutating scripts such as `typecheck`, `lint`, `format:check`, and `test:run` to each workspace you require. RepNix schedules those workspace scripts and includes their coverage in `audit --format json`; `audit --details` lists missing workspace coverage. A `required` workspace fails with exit code `2` when its own check is missing, even if another scope is covered. Scope category settings override the repository default, including `off`.
+
 ## Baseline existing findings
 
 For a repository with existing debt, review the current detailed report and then run:
