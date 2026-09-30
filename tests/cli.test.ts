@@ -42,30 +42,35 @@ afterEach(async () => {
 });
 
 describe("CLI", () => {
-  it("applies severity thresholds and baselines to warnings from successful lint commands", async () => {
-    const root = await copyFixture("react-eslint");
-    temporary.push(root);
-    await fakeBinary(root, "eslint", "console.log('src/App.tsx\\n  1:1  warning  Unused variable  no-unused-vars');");
-    const warning = await runCli(root, ["check", "lint", "--format", "json"]);
-    const report = JSON.parse(warning.stdout) as HealthRun;
-    expect(warning.code).toBe(1);
-    expect(report.summary).toMatchObject({ findings: 1, newFindings: 1, exitCode: 1 });
-    expect(report.results[0]?.findings[0]).toMatchObject({ severity: "warning", ruleId: "no-unused-vars" });
+  // Four CLI launches need headroom when health checks share a CI runner.
+  it(
+    "applies severity thresholds and baselines to warnings from successful lint commands",
+    { timeout: 15_000 },
+    async () => {
+      const root = await copyFixture("react-eslint");
+      temporary.push(root);
+      await fakeBinary(root, "eslint", "console.log('src/App.tsx\\n  1:1  warning  Unused variable  no-unused-vars');");
+      const warning = await runCli(root, ["check", "lint", "--format", "json"]);
+      const report = JSON.parse(warning.stdout) as HealthRun;
+      expect(warning.code).toBe(1);
+      expect(report.summary).toMatchObject({ findings: 1, newFindings: 1, exitCode: 1 });
+      expect(report.results[0]?.findings[0]).toMatchObject({ severity: "warning", ruleId: "no-unused-vars" });
 
-    await writeFile(path.join(root, "repnix.config.json"), JSON.stringify({ severityThreshold: "error" }));
-    const belowThreshold = await runCli(root, ["check", "lint", "--format", "json"]);
-    expect(belowThreshold.code).toBe(0);
-    expect(JSON.parse(belowThreshold.stdout)).toMatchObject({ summary: { findings: 1, exitCode: 0 } });
+      await writeFile(path.join(root, "repnix.config.json"), JSON.stringify({ severityThreshold: "error" }));
+      const belowThreshold = await runCli(root, ["check", "lint", "--format", "json"]);
+      expect(belowThreshold.code).toBe(0);
+      expect(JSON.parse(belowThreshold.stdout)).toMatchObject({ summary: { findings: 1, exitCode: 0 } });
 
-    await writeFile(path.join(root, "repnix.config.json"), JSON.stringify({ severityThreshold: "warning" }));
-    const baseline = await runCli(root, ["check", "lint", "--write-baseline", "--format", "json"]);
-    expect(baseline.code).toBe(0);
-    const baselined = await runCli(root, ["check", "lint", "--format", "json"]);
-    expect(baselined.code).toBe(0);
-    expect(JSON.parse(baselined.stdout)).toMatchObject({
-      summary: { findings: 1, newFindings: 0, existingFindings: 1, exitCode: 0 },
-    });
-  });
+      await writeFile(path.join(root, "repnix.config.json"), JSON.stringify({ severityThreshold: "warning" }));
+      const baseline = await runCli(root, ["check", "lint", "--write-baseline", "--format", "json"]);
+      expect(baseline.code).toBe(0);
+      const baselined = await runCli(root, ["check", "lint", "--format", "json"]);
+      expect(baselined.code).toBe(0);
+      expect(JSON.parse(baselined.stdout)).toMatchObject({
+        summary: { findings: 1, newFindings: 0, existingFindings: 1, exitCode: 0 },
+      });
+    },
+  );
 
   it("emits JSON-only health output and a successful exit code", async () => {
     const root = await copyFixture("minimal-js");
