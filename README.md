@@ -147,6 +147,8 @@ npx repnix check --write-baseline
 
 ## Development
 
+Use Node.js 24.12+ on the 24.x line (recommended) or Node.js 22.20+ on the 22.x line for the development toolchain. The published CLI supports Node.js 20+; packaged CI tests exercise that runtime separately.
+
 ```bash
 pnpm install
 pnpm verify

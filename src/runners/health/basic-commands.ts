@@ -2,22 +2,8 @@ import path from "node:path";
 import type { HealthCategory } from "../../core/health-category.js";
 import type { ProviderDetection, RepositoryContext } from "../../core/types.js";
 import type { ProviderModule } from "../../providers/sdk.js";
-import { isNonMutatingQualityCommand, isNonMutatingTestCommand } from "../../repository/script-detection.js";
+import { QUALITY_SCRIPT_CHECKS, safeScriptFrom, type ScriptKind } from "../../repository/quality-scripts.js";
 import { expectedLocalBinary, type RunnableCommand } from "./task-executor.js";
-
-type ScriptKind = "general" | "format" | "test";
-
-export function safeScriptFrom(scripts: Record<string, string>, names: string[], kind: ScriptKind): string | null {
-  for (const name of names) {
-    const command = scripts[name];
-    if (!command || /--fix(?:\s|$)|--write(?:\s|$)|\bwatch\b|--watch/.test(command)) continue;
-    if (kind === "test" && !isNonMutatingTestCommand(command)) continue;
-    if (kind !== "test" && !isNonMutatingQualityCommand(command)) continue;
-    if (kind === "format" && name === "format") continue;
-    return name;
-  }
-  return null;
-}
 
 export function safeScript(context: RepositoryContext, names: string[], kind: ScriptKind): string | null {
   return safeScriptFrom(context.scripts, names, kind);
@@ -188,12 +174,7 @@ export async function basicCommands(
   for (const manifest of context.manifests) {
     const workspace = path.posix.dirname(manifest.path.replaceAll(path.sep, "/"));
     if (workspace === ".") continue;
-    for (const check of [
-      { category: "types", names: ["typecheck", "type-check", "check:types"], kind: "general" },
-      { category: "lint", names: ["lint", "check:lint", "lint:check"], kind: "general" },
-      { category: "format", names: ["format:check", "check:format", "format-check"], kind: "general" },
-      { category: "tests", names: ["test", "test:run", "check:test"], kind: "test" },
-    ] as Array<{ category: HealthCategory; names: string[]; kind: "general" | "test" }>) {
+    for (const check of QUALITY_SCRIPT_CHECKS) {
       const script = safeScriptFrom(manifest.packageJson.scripts ?? {}, check.names, check.kind);
       if (script)
         commands.push({

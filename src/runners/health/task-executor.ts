@@ -169,22 +169,14 @@ export function commandResult(
         : `${runnable.name} could not start. ${result.spawnError}`,
     };
   }
-  if (result.exitCode === 0)
-    return {
-      provider: runnable.provider,
-      name: runnable.name,
-      category: runnable.category,
-      status: "pass",
-      findings: [],
-      durationMs: result.durationMs,
-    };
   const excerpt = outputExcerpt(result);
   if (
-    result.exitCode === 126 ||
-    result.exitCode === 127 ||
-    /(?:command not found|not recognized as an internal|could not determine executable|network access disabled|cannot find matching keyid)/i.test(
-      excerpt,
-    )
+    result.exitCode !== 0 &&
+    (result.exitCode === 126 ||
+      result.exitCode === 127 ||
+      /(?:command not found|not recognized as an internal|could not determine executable|network access disabled|cannot find matching keyid)/i.test(
+        excerpt,
+      ))
   ) {
     return {
       provider: runnable.provider,
@@ -198,8 +190,8 @@ export function commandResult(
   }
   const findings =
     normalize && context
-      ? normalize({ output: excerpt, result, context })
-      : normalizeCommandOutput(runnable, excerpt, context?.root);
+      ? normalize({ output: `${result.stdout}\n${result.stderr}`.trim(), result, context })
+      : normalizeCommandOutput(runnable, `${result.stdout}\n${result.stderr}`.trim(), context?.root);
   if (findings.length)
     return {
       provider: runnable.provider,
@@ -207,6 +199,15 @@ export function commandResult(
       category: runnable.category,
       status: statusForFindings(findings),
       findings,
+      durationMs: result.durationMs,
+    };
+  if (result.exitCode === 0)
+    return {
+      provider: runnable.provider,
+      name: runnable.name,
+      category: runnable.category,
+      status: "pass",
+      findings: [],
       durationMs: result.durationMs,
     };
   return {

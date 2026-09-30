@@ -151,6 +151,28 @@ export async function runHealth(
     return finalizeResults(results, audit, config, options, logger);
   }
   for (const coverage of audit.coverage) {
+    if (!categorySelected(coverage.category, options) || coverage.status === "off") continue;
+    if (coverage.scopeCoverage) {
+      for (const scope of coverage.scopeCoverage) {
+        if (
+          categoryModeFor(config, coverage.category, scope.scope) !== "required" ||
+          scope.status === "covered" ||
+          scope.status === "not-applicable"
+        )
+          continue;
+        results.push({
+          provider: "repnix",
+          name: "Required coverage",
+          category: coverage.category,
+          scope: scope.scope,
+          status: "error",
+          findings: [],
+          durationMs: 0,
+          message: `Required category '${coverage.category}' has no active provider for scope '${scope.scope}'. Add a check script in that workspace's package.json.`,
+        });
+      }
+      continue;
+    }
     if (
       categorySelected(coverage.category, options) &&
       (categoryModeFor(config, coverage.category) === "required" ||

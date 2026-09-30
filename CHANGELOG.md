@@ -54,7 +54,11 @@ All notable changes to RepNix are documented here. The project follows semantic 
 
 ## Unreleased
 
-_No unreleased changes._
+- Track monorepo type, lint, format, and test coverage per scope so a root check cannot hide missing required workspace checks.
+- Preserve warning findings from commands that exit successfully.
+- Show captured command failure output in detailed health reports with credentials redacted.
+- Parse published version responses correctly so release retries skip existing versions.
+- Run development CI on supported Node versions and test Node 20 consumers separately.
 
 ## 0.3.12 - 2026-08-14
 

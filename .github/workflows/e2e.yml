@@ -22,7 +22,7 @@ jobs:
           version: 10.15.0
       - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
@@ -39,7 +39,7 @@ jobs:
           version: 10.15.0
       - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
@@ -60,7 +60,7 @@ jobs:
           version: 10.15.0
       - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
       - if: matrix.package-manager == 'yarn'
         run: npm install --global yarn@1.22.22
@@ -68,16 +68,22 @@ jobs:
         uses: oven-sh/setup-bun@v2
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
+      - name: Use the minimum supported consumer runtime
+        uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          package-manager-cache: false
       - run: node scripts/e2e-consumer.mjs ${{ matrix.package-manager }}
 
   package:
-    name: Packaged CLI (${{ matrix.os }})
+    name: ${{ matrix.node == 20 && format('Packaged CLI ({0})', matrix.os) || format('Packaged CLI ({0}, Node {1})', matrix.os, matrix.node) }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
+        node: [20, 22, 24]
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -85,8 +91,13 @@ jobs:
           version: 10.15.0
       - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
+      - name: Use the consumer runtime
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+          package-manager-cache: false
       - run: node scripts/package-smoke.mjs

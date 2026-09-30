@@ -5,6 +5,29 @@ on:
   pull_request:
 
 jobs:
+  consumer-node20:
+    name: test (20)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.15.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          package-manager-cache: false
+      - run: node scripts/package-smoke.mjs
+
   test:
     runs-on: ubuntu-latest
     permissions:
@@ -12,7 +35,7 @@ jobs:
       security-events: write
     strategy:
       matrix:
-        node: [20, 22]
+        node: [22, 24]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -43,7 +66,7 @@ jobs:
         if: matrix.node == 22 && !startsWith(github.head_ref || github.ref_name, 'changeset-release/')
         continue-on-error: true
         run: osv-scanner scan source --offline-vulnerabilities --download-offline-databases --format=json --recursive .
-      - run: pnpm health
+      - run: pnpm health --details
         if: matrix.node == 22 && !startsWith(github.head_ref || github.ref_name, 'changeset-release/')
       - name: Generate RepNix SARIF report
         if: matrix.node == 22 && !startsWith(github.head_ref || github.ref_name, 'changeset-release/')

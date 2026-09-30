@@ -277,6 +277,34 @@ describe("console reporting", () => {
     expect(renderExplain(run)).toContain("No health findings. All configured checks passed.");
   });
 
+  it("shows redacted command failure output in detailed reports", () => {
+    const run = {
+      repository: { root: "/tmp/project", kinds: [], frameworks: [], languages: [] },
+      summary: { findings: 1, errors: 0 },
+      results: [
+        {
+          category: "tests",
+          status: "fail",
+          findings: [
+            {
+              type: "command-failure",
+              provider: "script:test",
+              category: "tests",
+              severity: "error",
+              message: "Tests exited with code 1.",
+              metadata: { output: "FAIL regression.test.ts\nAPI_TOKEN=example-secret" },
+            },
+          ],
+        },
+      ],
+    } as unknown as HealthRun;
+    const output = renderExplain(run);
+    expect(output).toContain("Command output:");
+    expect(output).toContain("FAIL regression.test.ts");
+    expect(output).toContain("API_TOKEN=[REDACTED]");
+    expect(output).not.toContain("example-secret");
+  });
+
   it("keeps repeated findings focused while preserving a path to every location", () => {
     const findings = Array.from({ length: 7 }, (_, index) => ({
       id: `duplicate-${index}`,

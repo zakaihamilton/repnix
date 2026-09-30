@@ -1,6 +1,7 @@
 import { stripVTControlCharacters } from "node:util";
 import pc from "picocolors";
 import { categoryDescription, categoryLabel } from "../core/health-category.js";
+import { redactSensitiveText } from "../core/redaction.js";
 import type { HealthFinding, HealthRun } from "../core/types.js";
 import type { AuditModel, CoverageStatus } from "../recommendations/recommendation-engine.js";
 import { builtinProvider, builtinProviderByName } from "../providers/registry.js";
@@ -146,6 +147,16 @@ export function renderAudit(model: AuditModel, options: { details?: boolean } = 
     }
     if (options.details && entry.evidence.length)
       addWrapped(lines, `Applies because: ${entry.evidence.join("; ")}`, width, "  ", "    ");
+    for (const scope of entry.scopeCoverage ?? []) {
+      if (scope.status === "missing" || scope.status === "partial")
+        addWrapped(
+          lines,
+          `${scope.scope}: missing ${scope.missingCapabilities.join(", ")}; add a workspace check script.`,
+          width,
+          "  ",
+          "    ",
+        );
+    }
   }
   if (context.diagnostics.length) {
     lines.push("", pc.bold("Diagnostics"), rule(width));
@@ -372,6 +383,12 @@ export function renderHealthDetails(run: HealthRun): string {
       if (finding.baselineState) addWrapped(lines, `Baseline: ${finding.baselineState}`, width);
       if (finding.remediation) addWrapped(lines, `How to fix: ${finding.remediation}`, width);
       if (finding.documentationUrl) addWrapped(lines, `Documentation: ${finding.documentationUrl}`, width);
+      if (finding.type === "command-failure" && typeof finding.metadata?.output === "string") {
+        addWrapped(lines, "Command output:", width);
+        for (const line of redactSensitiveText(stripVTControlCharacters(finding.metadata.output)).split("\n")) {
+          addWrapped(lines, line, width, "  ", "  ");
+        }
+      }
       lines.push("");
     }
     if (findings.length > visibleFindings.length) {
