@@ -72,7 +72,8 @@
   "packageManager": "pnpm@10.15.0",
   "pnpm": {
     "overrides": {
-      "smol-toml": "1.8.0"
+      "shell-quote": "1.11.0",
+      "smol-toml": "1.9.0"
     }
   },
   "keywords": [
