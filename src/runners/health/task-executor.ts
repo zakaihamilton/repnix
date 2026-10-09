@@ -20,6 +20,7 @@ export interface RunnableCommand {
   env?: NodeJS.ProcessEnv;
   timeoutMs?: number;
   scope?: string;
+  normalize?: ProviderModule["normalize"];
 }
 
 export const HEALTH_OFFLINE_ENV: NodeJS.ProcessEnv = {

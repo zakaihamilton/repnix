@@ -122,6 +122,32 @@ const MANUAL_GUIDANCE: Record<string, string[]> = {
     "Enable its recommended rules in the existing ESLint configuration.",
     "Review any existing violations and tune only rules that do not match the project’s UI patterns.",
   ],
+  "axe-playwright": [
+    "Install @playwright/test and @axe-core/playwright as development dependencies that match the repository's supported Node version.",
+    "Add AxeBuilder scans to representative page tests after each page has rendered; choose routes and any authentication setup explicitly.",
+    "Add a dedicated health:a11y script that runs those tests, then run it locally and in CI.",
+  ],
+  "storybook-a11y": [
+    "Install @storybook/addon-a11y as a development dependency compatible with the project's Storybook version.",
+    "Enable the addon in .storybook/main and run stories through the Storybook Vitest addon or test-runner.",
+    "Set parameters.a11y.test to 'error' in .storybook/preview so violations fail the accessibility check.",
+    "Add a health:storybook-a11y script for that test command, then review violations and any checks marked incomplete.",
+  ],
+  "lhci-accessibility": [
+    "In the existing Lighthouse CI configuration, add an assertion for categories:accessibility with a score threshold your team accepts.",
+    "Run Lighthouse CI against the same representative pages and stable build used by the performance check.",
+    "Use repnix check runtime-accessibility in CI to enforce the accessibility assertion.",
+  ],
+  "playwright-visual": [
+    "Install @playwright/test and choose the user journeys, page states, and viewports that matter to the product.",
+    "Add toHaveScreenshot assertions for those states and review the generated reference images before committing them.",
+    "Add a dedicated health:visual script that runs the screenshot tests in the same browser and operating system used to create the baselines.",
+  ],
+  "testing-library-user-event": [
+    "Install @testing-library/user-event as a development dependency.",
+    "Use userEvent.setup() in component tests to exercise important keyboard and pointer flows, including focus, validation, and menu behavior.",
+    "Add a health:interactions script that runs those tests, then run it locally and in CI.",
+  ],
   c8: [
     "Choose the test command that should produce coverage and install c8 as a development dependency.",
     "Add a coverage script around that test command and set line, function, branch, and statement thresholds that reflect the project’s expectations.",
@@ -293,6 +319,53 @@ export function setupCheckDetails(
           "Add the plugin and its recommended preset to .eslintrc.json without changing existing rules.",
         ],
         command: packageManagerRun(context, "lint"),
+      };
+    case "axe-playwright":
+      return {
+        checks: ["Accessibility rules against rendered application routes using axe-core and Playwright."],
+        scope: "The routes, browser state, and test command selected by the project.",
+        setup: [
+          "Install @playwright/test and @axe-core/playwright.",
+          "Write AxeBuilder tests for representative routes and add a health:a11y test script.",
+        ],
+        command: packageManagerRun(context, "health:a11y"),
+      };
+    case "storybook-a11y":
+      return {
+        checks: ["Accessibility of rendered Storybook component stories."],
+        scope: "The Storybook stories and component test setup already maintained by the project.",
+        setup: [
+          "Install @storybook/addon-a11y and enable it in .storybook/main.",
+          "Configure the Storybook Vitest addon or test-runner, set parameters.a11y.test to 'error', and add a health:storybook-a11y script.",
+        ],
+        command: packageManagerRun(context, "health:storybook-a11y"),
+      };
+    case "lhci-accessibility":
+      return {
+        checks: ["Lighthouse's configured accessibility assertion for the selected pages."],
+        scope: "The existing Lighthouse CI URL or build and its assertions.",
+        setup: ["Add categories:accessibility to the existing Lighthouse CI assertions."],
+        command: "repnix check runtime-accessibility",
+      };
+    case "playwright-visual":
+      return {
+        checks: ["Screenshot comparisons for explicitly selected pages, states, and viewports."],
+        scope: "Reviewed Playwright screenshot baselines committed with the project.",
+        setup: [
+          "Install @playwright/test and add toHaveScreenshot assertions for important UI states.",
+          "Review and commit the initial screenshots, then add a health:visual script.",
+        ],
+        command: packageManagerRun(context, "health:visual"),
+      };
+    case "testing-library-user-event":
+      return {
+        checks: ["Component behavior under keyboard and pointer input simulated with Testing Library."],
+        scope: "The interaction tests and UI flows selected by the project.",
+        setup: [
+          "Install @testing-library/user-event.",
+          "Write interaction tests with userEvent.setup() and add a health:interactions test script.",
+        ],
+        command: packageManagerRun(context, "health:interactions"),
       };
     case "publint":
       return {

@@ -1,6 +1,6 @@
 {
   "name": "repnix",
-  "version": "1.0.3",
+  "version": "1.1.0",
   "description": "Local-first repository health orchestration for JavaScript and TypeScript projects",
   "repository": {
     "type": "git",
@@ -97,6 +97,10 @@
     "workspace",
     "code-coverage",
     "security",
+    "accessibility",
+    "visual-regression",
+    "ui-testing",
+    "stylelint",
     "vulnerability",
     "dead-code",
     "code-review",

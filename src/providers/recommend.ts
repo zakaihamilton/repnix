@@ -1,6 +1,7 @@
 import type { ProviderRecommendation, RepositoryContext } from "../core/types.js";
 import { safeTestScript } from "../repository/script-detection.js";
 import type { RecommendHelpers } from "./sdk.js";
+import { hasStorybook, hasUiStyles, hasWebApp } from "./ui-guardrails.js";
 
 const LOCKFILES = ["package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock", "bun.lockb"];
 
@@ -141,6 +142,12 @@ export function recommendAttw(context: RepositoryContext, helpers?: RecommendHel
 }
 
 export function recommendJsxA11y(context: RepositoryContext): ProviderRecommendation {
+  const hasJsx = context.scopes.some(
+    (scope) =>
+      scope.roles.includes("web-app") &&
+      (scope.productionSourceFiles ?? scope.sourceFiles).some((file) => /\.[jt]sx$/.test(file)),
+  );
+  if (!hasJsx) return { recommended: false, priority: "baseline", actionable: false, reason: "No JSX UI was found." };
   const legacyJsonConfig = context.editableLegacyEslintConfig === true;
   return {
     recommended: true,
@@ -149,6 +156,86 @@ export function recommendJsxA11y(context: RepositoryContext): ProviderRecommenda
     reason: legacyJsonConfig
       ? "This UI repository uses JSX, but no active accessibility rules were detected. RepNix can safely add jsx-a11y’s recommended rules to the root legacy JSON ESLint configuration."
       : "This UI repository uses JSX, but no active accessibility rules were detected. Enable jsx-a11y’s recommended rules in the existing ESLint configuration.",
+  };
+}
+
+export function recommendStylelint(context: RepositoryContext): ProviderRecommendation | null {
+  if (!hasUiStyles(context)) return null;
+  return {
+    recommended: true,
+    priority: "optional",
+    actionable: true,
+    reason:
+      "CSS files are present, but no Stylelint rules are active. A standard CSS ruleset can catch invalid declarations and keep style conventions consistent; configure project-specific token rules separately.",
+  };
+}
+
+export function recommendLhciAccessibility(
+  _context: RepositoryContext,
+  helpers?: RecommendHelpers,
+): ProviderRecommendation | null {
+  if (!helpers?.detections.get("lhci")?.activeCapabilities.performance) return null;
+  return {
+    recommended: true,
+    priority: "optional",
+    actionable: false,
+    reason:
+      "Lighthouse CI already runs for this application. Add its accessibility category assertion to the existing configuration so the same audit also guards accessibility.",
+  };
+}
+
+export function recommendStorybookA11y(
+  context: RepositoryContext,
+  helpers?: RecommendHelpers,
+): ProviderRecommendation | null {
+  if (!hasStorybook(context) || helpers?.detections.get("lhci")?.activeCapabilities.performance) return null;
+  return {
+    recommended: true,
+    priority: "optional",
+    actionable: false,
+    reason:
+      "This repository uses Storybook, so its rendered component stories can be checked with the Storybook accessibility addon and included in the component test workflow.",
+  };
+}
+
+export function recommendAxePlaywright(
+  context: RepositoryContext,
+  helpers?: RecommendHelpers,
+): ProviderRecommendation | null {
+  if (!hasWebApp(context) || hasStorybook(context) || helpers?.detections.get("lhci")?.activeCapabilities.performance)
+    return null;
+  return {
+    recommended: true,
+    priority: "baseline",
+    actionable: false,
+    reason:
+      "This web application has no rendered-page accessibility audit. axe-core with Playwright can scan representative routes after the UI renders; RepNix needs your chosen routes and test setup.",
+  };
+}
+
+export function recommendVisualRegression(context: RepositoryContext): ProviderRecommendation | null {
+  if (!hasWebApp(context)) return null;
+  return {
+    recommended: true,
+    priority: "optional",
+    actionable: false,
+    reason:
+      "This web application has no screenshot regression check. Playwright can compare reviewed screenshots, but the project needs to choose representative pages, viewports, and approve its initial baselines.",
+  };
+}
+
+export function recommendUserEvent(context: RepositoryContext): ProviderRecommendation | null {
+  if (!hasWebApp(context)) return null;
+  const hasComponentTests = ["vitest", "jest", "@testing-library/react", "@testing-library/dom"].some((name) =>
+    context.installedPackages.has(name),
+  );
+  if (!hasComponentTests) return null;
+  return {
+    recommended: true,
+    priority: "optional",
+    actionable: false,
+    reason:
+      "This UI has a component test setup but no dedicated keyboard and pointer interaction checks. Testing Library's user-event can exercise these flows within the existing tests.",
   };
 }
 

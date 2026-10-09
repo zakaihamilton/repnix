@@ -45,11 +45,11 @@ function commandTask(command: RunnableCommand, audit: AuditModel, options: TaskP
     name: command.name,
     category: command.category,
     ...(command.scope ? { scope: command.scope } : {}),
-    run: () => runRunnableCommand(command, audit.context, options.logger),
+    run: () => runRunnableCommand(command, audit.context, options.logger, command.normalize),
   };
 }
 
-function derivedLintTask(
+function derivedProviderTask(
   provider: string,
   name: string,
   category: HealthCategory,
@@ -67,22 +67,17 @@ function derivedLintTask(
         provider,
         name,
         category,
-        status:
-          lint?.status === "pass"
-            ? "pass"
-            : lint?.status === "error"
-              ? "error"
-              : lint?.status === "fail"
-                ? "fail"
-                : "skipped",
+        status: lint && ["pass", "warn", "error", "fail"].includes(lint.status) ? lint.status : "skipped",
         findings: [],
         durationMs: 0,
         ...(lint && lint.status !== "pass"
           ? {
               message:
-                category === "architecture"
-                  ? "Architecture rules ran through the existing lint command; see the lint result."
-                  : "Accessibility rules ran through the existing lint command; see the lint result.",
+                provider === "lhci-accessibility"
+                  ? "Lighthouse accessibility assertions ran with the performance check; see the performance result."
+                  : category === "architecture"
+                    ? "Architecture rules ran through the existing lint command; see the lint result."
+                    : "Accessibility rules ran through the existing lint command; see the lint result.",
             }
           : {}),
       };
@@ -109,9 +104,15 @@ function scheduleProvider(
   )
     return;
   const derivedCategory = descriptor.deriveFromCategory;
-  const parent = derivedCategory ? tasks.find((task) => task.category === derivedCategory) : undefined;
+  const parent = derivedCategory
+    ? tasks.find(
+        (task) =>
+          task.category === derivedCategory &&
+          (descriptor.deriveFromProvider === undefined || task.provider === descriptor.deriveFromProvider),
+      )
+    : undefined;
   if (derivedCategory && parent) {
-    add(derivedLintTask(descriptor.id, descriptor.name, descriptor.category, parent));
+    add(derivedProviderTask(descriptor.id, descriptor.name, descriptor.category, parent));
     return;
   }
   const dependsOn = descriptor.dependsOnCategory
@@ -139,7 +140,7 @@ function scheduleProvider(
     });
     return;
   }
-  if (derivedCategory) add(derivedLintTask(descriptor.id, descriptor.name, descriptor.category, parent));
+  if (derivedCategory) add(derivedProviderTask(descriptor.id, descriptor.name, descriptor.category, parent));
 }
 
 export async function planHealthTasks(

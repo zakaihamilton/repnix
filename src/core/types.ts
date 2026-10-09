@@ -97,6 +97,10 @@ export interface ProviderCapabilities {
   formatting?: boolean;
   testing?: boolean;
   accessibilityRules?: boolean;
+  runtimeAccessibility?: boolean;
+  visualRegression?: boolean;
+  userInteractionTesting?: boolean;
+  cssConsistency?: boolean;
   workspaceConsistency?: boolean;
   testCoverage?: boolean;
   mutationTesting?: boolean;

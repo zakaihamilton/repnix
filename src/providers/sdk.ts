@@ -99,6 +99,8 @@ export interface ProviderModule {
   dependsOnCategory?: HealthCategory;
   /** Reuse an already-scheduled task in this category instead of running a second command. */
   deriveFromCategory?: HealthCategory;
+  /** When deriving from a category, only reuse a task from this provider. */
+  deriveFromProvider?: string;
   detect?: (context: RepositoryContext) => Promise<ProviderDetection>;
   /** Lower values appear first in audit output. Providers without an order follow built-ins. */
   recommendOrder?: number;

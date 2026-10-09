@@ -2,27 +2,31 @@
 
 RepNix separates repository health into categories so each capability has a clear home. The category name is also the value you can pass to `repnix check <category>`.
 
-| Category                                 | What it protects                                                               | Typical tools                                  |
-| ---------------------------------------- | ------------------------------------------------------------------------------ | ---------------------------------------------- |
-| `types` — Type safety                    | Catches mismatched values before runtime.                                      | TypeScript                                     |
-| `lint` — Linting                         | Finds suspicious or inconsistent code patterns.                                | ESLint, Oxlint, Biome                          |
-| `format` — Formatting                    | Keeps code style consistent.                                                   | Prettier, Oxfmt, Biome                         |
-| `tests` — Tests                          | Protects existing behavior from regressions.                                   | Jest, Vitest, safe test scripts                |
-| `coverage` — Test coverage               | Measures test reach and optional coverage thresholds.                          | c8, Stryker                                    |
-| `dead-code` — Dead code                  | Finds unused files, exports, and dependencies.                                 | Knip                                           |
-| `duplication` — Duplication              | Finds repeated code that can drift apart.                                      | jscpd                                          |
-| `security` — Dependency security         | Finds known vulnerabilities in dependencies.                                   | OSV-Scanner                                    |
-| `architecture` — Architecture boundaries | Protects allowed relationships between modules.                                | dependency-cruiser, `eslint-plugin-boundaries` |
-| `bundle` — Bundle regression             | Protects shipped JavaScript size.                                              | Size Limit                                     |
-| `accessibility` — Accessibility          | Checks whether user interfaces can be used by people with different abilities. | eslint-plugin-jsx-a11y                         |
-| `monorepo` — Monorepo consistency        | Checks whether packages in a monorepo follow shared rules.                     | syncpack, workspace scripts                    |
-| `secrets` — Secret scanning              | Finds credentials and sensitive values committed to the repository.            | Gitleaks                                       |
-| `licenses` — License policy              | Checks dependency licenses against an allow/deny policy.                       | license-checker                                |
-| `documentation` — Documentation          | Checks Markdown structure and style.                                           | markdownlint                                   |
-| `performance` — Performance budgets      | Protects configured web or build performance budgets.                          | Lighthouse CI, Size Limit                      |
-| `release` — Release readiness            | Checks release metadata and package change intent.                             | Changesets                                     |
-| `ci` — CI workflow health                | Checks GitHub Actions workflow syntax and common mistakes.                     | actionlint                                     |
-| `package-health` — Package publishing    | Checks what npm consumers receive.                                             | Publint, Are The Types Wrong?                  |
+| Category                                        | What it protects                                                               | Typical tools                                           |
+| ----------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------- |
+| `types` — Type safety                           | Catches mismatched values before runtime.                                      | TypeScript                                              |
+| `lint` — Linting                                | Finds suspicious or inconsistent code patterns.                                | ESLint, Oxlint, Biome                                   |
+| `format` — Formatting                           | Keeps code style consistent.                                                   | Prettier, Oxfmt, Biome                                  |
+| `tests` — Tests                                 | Protects existing behavior from regressions.                                   | Jest, Vitest, safe test scripts                         |
+| `coverage` — Test coverage                      | Measures test reach and optional coverage thresholds.                          | c8, Stryker                                             |
+| `dead-code` — Dead code                         | Finds unused files, exports, and dependencies.                                 | Knip                                                    |
+| `duplication` — Duplication                     | Finds repeated code that can drift apart.                                      | jscpd                                                   |
+| `security` — Dependency security                | Finds known vulnerabilities in dependencies.                                   | OSV-Scanner                                             |
+| `architecture` — Architecture boundaries        | Protects allowed relationships between modules.                                | dependency-cruiser, `eslint-plugin-boundaries`          |
+| `bundle` — Bundle regression                    | Protects shipped JavaScript size.                                              | Size Limit                                              |
+| `accessibility` — Accessibility                 | Checks whether user interfaces can be used by people with different abilities. | eslint-plugin-jsx-a11y                                  |
+| `runtime-accessibility` — Runtime accessibility | Audits rendered pages and components for accessibility issues.                 | axe-core with Playwright, Storybook a11y, Lighthouse CI |
+| `visual-regression` — Visual regression         | Compares reviewed UI screenshots to catch unintended visual changes.           | Playwright Test                                         |
+| `interactions` — UI interaction tests           | Runs tests that exercise UI behavior through keyboard and pointer input.       | `@testing-library/user-event`                           |
+| `styles` — CSS quality                          | Checks CSS syntax and configured style conventions.                            | Stylelint                                               |
+| `monorepo` — Monorepo consistency               | Checks whether packages in a monorepo follow shared rules.                     | syncpack, workspace scripts                             |
+| `secrets` — Secret scanning                     | Finds credentials and sensitive values committed to the repository.            | Gitleaks                                                |
+| `licenses` — License policy                     | Checks dependency licenses against an allow/deny policy.                       | license-checker                                         |
+| `documentation` — Documentation                 | Checks Markdown structure and style.                                           | markdownlint                                            |
+| `performance` — Performance budgets             | Protects configured web or build performance budgets.                          | Lighthouse CI, Size Limit                               |
+| `release` — Release readiness                   | Checks release metadata and package change intent.                             | Changesets                                              |
+| `ci` — CI workflow health                       | Checks GitHub Actions workflow syntax and common mistakes.                     | actionlint                                              |
+| `package-health` — Package publishing           | Checks what npm consumers receive.                                             | Publint, Are The Types Wrong?                           |
 
 ## Existing project checks
 
@@ -34,6 +38,10 @@ RepNix detects and runs the safe commands your repository already uses for:
 - Tests — Jest, Vitest, or a safe existing test script.
 - Test coverage — c8 or Stryker when a coverage or mutation command is configured.
 - Accessibility — active `eslint-plugin-jsx-a11y` rules in an ESLint configuration.
+- Runtime accessibility — active axe-core Playwright tests, Storybook accessibility tests, or a Lighthouse CI accessibility assertion.
+- Visual regression — active Playwright screenshot assertions run through a dedicated visual test script.
+- UI interaction tests — active Testing Library `user-event` tests run through a dedicated interaction test script.
+- CSS quality — Stylelint with a configuration and active CSS check.
 - Monorepo consistency — syncpack or safe workspace scripts.
 - Secret scanning — Gitleaks when its binary or repository script is available.
 - License policy — license-checker with an optional allow/deny policy.
@@ -52,6 +60,9 @@ When the repository needs additional coverage, RepNix can recommend and orchestr
 - **Architecture:** dependency-cruiser or active `eslint-plugin-boundaries` rules.
 - **Bundle size:** Size Limit when an explicit budget already exists.
 - **Accessibility:** eslint-plugin-jsx-a11y through an existing ESLint setup.
+- **Runtime accessibility:** axe-core with Playwright, Storybook's accessibility addon, or an accessibility assertion in an existing Lighthouse CI audit. Route selection and component test setup remain project decisions.
+- **Visual regression:** Playwright Test screenshot comparisons. A project must add assertions and review screenshot baselines before RepNix can run the check.
+- **CSS quality:** Stylelint with a standard starter configuration. Project-specific design token rules require an explicit token policy.
 - **Workspace consistency:** syncpack for dependency and package metadata drift.
 - **Coverage:** c8 for threshold checks and Stryker for mutation testing.
 - **Secret scanning:** Gitleaks, using a local binary or CI-provided binary.
@@ -79,3 +90,5 @@ Package-health checks analyze a local packed artifact with lifecycle scripts dis
 - `repnix audit` is for deciding what to add. `repnix check` is for a quick result, and `repnix check --details` explains what to do about findings.
 
 If `repnix check` says that no applicable health checks ran, RepNix did not find an active provider for that category. That is not the same as being covered; run `repnix audit` to see whether a provider is missing, disabled, or not relevant to the repository.
+
+`@testing-library/user-event` simulates keyboard and pointer input inside component tests. RepNix reports it under `interactions` when a dedicated interaction script runs tests that use the library; the full test suite remains in `tests`.
