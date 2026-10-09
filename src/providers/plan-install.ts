@@ -72,6 +72,32 @@ export async function planJsxA11yInstall(context: RepositoryContext): Promise<In
   return plan;
 }
 
+export async function planStylelintInstall(context: RepositoryContext): Promise<InstallPlan> {
+  const plan = emptyPlan();
+  const configPatterns = [/(^|\/)\.stylelintrc(?:\.[^/]+)?$/, /(^|\/)stylelint\.config\.[cm]?[jt]s$/];
+  const existingConfig = [...context.files].find((file) => configPatterns.some((pattern) => pattern.test(file)));
+  if (existingConfig || context.packageJson.stylelint !== undefined) {
+    plan.warnings.push("An existing Stylelint configuration was preserved and will be used by the health check.");
+    return plan;
+  }
+
+  const configPath = ".stylelintrc.json";
+  const change = fileChange(
+    configPath,
+    null,
+    `${JSON.stringify({ extends: ["stylelint-config-standard"] }, null, 2)}\n`,
+    "Create a standard Stylelint configuration for CSS files",
+  );
+  if (change) plan.files.push(change);
+  if (!installedAtRoot(context, "stylelint-config-standard"))
+    plan.packages.push({
+      name: "stylelint-config-standard",
+      dev: true,
+      reason: "Provide a maintained baseline of CSS style rules for Stylelint",
+    });
+  return plan;
+}
+
 export async function planChangesetsInstall(context: RepositoryContext): Promise<InstallPlan> {
   const plan = emptyPlan();
   const configPath = ".changeset/config.json";

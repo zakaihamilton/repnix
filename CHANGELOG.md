@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.0
+
+### Minor Changes
+
+- Add UI guardrail coverage for rendered accessibility, visual regression, component interactions, and CSS quality.
+
 ## 1.0.4
 
 ### Patch Changes

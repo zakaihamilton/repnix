@@ -10,7 +10,8 @@ import {
 import { executableOnPath } from "../runners/health/task-executor.js";
 import { MARKDOWNLINT_CLI_ARGS, markdownlintScriptCommand } from "./markdownlint/command.js";
 import { normalizeMarkdownlintResult } from "./markdownlint/normalizer.js";
-import { planChangesetsInstall, planJsxA11yInstall } from "./plan-install.js";
+import { normalizeStylelintResult } from "./stylelint/normalizer.js";
+import { planChangesetsInstall, planJsxA11yInstall, planStylelintInstall } from "./plan-install.js";
 import {
   recommendActionlint,
   recommendAttw,
@@ -21,6 +22,8 @@ import {
   recommendGitleaks,
   recommendJscpd,
   recommendJsxA11y,
+  recommendAxePlaywright,
+  recommendLhciAccessibility,
   recommendKnip,
   recommendLhci,
   recommendLicenseChecker,
@@ -28,10 +31,15 @@ import {
   recommendOsv,
   recommendPublint,
   recommendSizeLimit,
+  recommendStorybookA11y,
+  recommendStylelint,
+  recommendVisualRegression,
+  recommendUserEvent,
   recommendStryker,
   recommendSyncpack,
 } from "./recommend.js";
 import type { ProviderModule } from "./sdk.js";
+import { detectAxePlaywright, detectPlaywrightVisual, detectStorybookA11y, detectUserEvent } from "./ui-guardrails.js";
 
 export type ProviderDescriptor = ProviderModule;
 
@@ -338,6 +346,125 @@ export const PROVIDERS: ProviderDescriptor[] = [
     planInstall: planJsxA11yInstall,
   },
   {
+    id: "axe-playwright",
+    name: "axe-core with Playwright",
+    category: "runtime-accessibility",
+    packages: ["@axe-core/playwright"],
+    configPatterns: [],
+    scriptPattern: /(?:playwright\s+test|vitest(?:\s+run)?|jest)/,
+    scriptNames: ["health:a11y", "test:a11y", "a11y:test"],
+    scriptKind: "test",
+    runnable: true,
+    capabilities: { runtimeAccessibility: true },
+    description: "Audits rendered pages for accessibility issues using axe-core.",
+    documentationUrl: "https://github.com/dequelabs/axe-core-npm/tree/develop/packages/playwright",
+    nextStep: "Add axe scans to representative page tests and run them through a dedicated accessibility test script.",
+    recommendOrder: 151,
+    recommend: recommendAxePlaywright,
+    detect: detectAxePlaywright,
+  },
+  {
+    id: "storybook-a11y",
+    name: "Storybook accessibility addon",
+    category: "runtime-accessibility",
+    packages: ["@storybook/addon-a11y"],
+    configPatterns: [],
+    scriptPattern: /(?:vitest|playwright\s+test|storybook\s+test)/,
+    scriptNames: ["health:storybook-a11y", "test:storybook-a11y", "storybook:a11y"],
+    scriptKind: "test",
+    runnable: true,
+    capabilities: { runtimeAccessibility: true },
+    description: "Checks rendered Storybook stories for accessibility violations.",
+    documentationUrl: "https://storybook.js.org/docs/writing-tests/accessibility-testing",
+    nextStep:
+      "Enable the addon, run stories through the Storybook Vitest addon or test-runner, and set parameters.a11y.test to 'error'.",
+    recommendOrder: 150,
+    recommend: recommendStorybookA11y,
+    detect: detectStorybookA11y,
+  },
+  {
+    id: "lhci-accessibility",
+    name: "Lighthouse CI accessibility",
+    category: "runtime-accessibility",
+    packages: ["@lhci/cli"],
+    configPatterns: [/(^|\/)lighthouserc\.[cm]?[jt]s(?:on)?$/],
+    activeConfigPattern: /categories:accessibility/,
+    scriptPattern: /(^|\s|&&|\|)lhci(?:\s|$)/,
+    capabilities: { runtimeAccessibility: true },
+    command: { binary: "lhci", args: ["autorun"] },
+    deriveFromCategory: "performance",
+    deriveFromProvider: "lhci",
+    requiresConfiguration: true,
+    description: "Checks the Lighthouse accessibility assertion in the configured site audit.",
+    documentationUrl: "https://googlechrome.github.io/lighthouse-ci/docs/configuration.html",
+    nextStep: "Add a categories:accessibility assertion to the existing Lighthouse CI configuration.",
+    recommendOrder: 149,
+    recommend: recommendLhciAccessibility,
+  },
+  {
+    id: "playwright-visual",
+    name: "Playwright visual comparisons",
+    category: "visual-regression",
+    packages: ["@playwright/test", "playwright"],
+    configPatterns: [],
+    scriptPattern: /playwright\s+test/,
+    scriptNames: ["health:visual", "test:visual", "visual:test"],
+    scriptKind: "test",
+    runnable: true,
+    capabilities: { visualRegression: true },
+    description: "Compares approved screenshots to catch unintended visual changes.",
+    documentationUrl: "https://playwright.dev/docs/test-snapshots",
+    nextStep:
+      "Add toHaveScreenshot assertions for representative pages and viewports, then review the initial baselines.",
+    recommendOrder: 165,
+    recommend: recommendVisualRegression,
+    detect: detectPlaywrightVisual,
+  },
+  {
+    id: "testing-library-user-event",
+    name: "Testing Library user-event",
+    category: "interactions",
+    packages: ["@testing-library/user-event"],
+    configPatterns: [],
+    scriptPattern: /(?:vitest(?:\s+run)?|jest|playwright\s+test)/,
+    scriptNames: ["health:interactions", "test:interactions", "ui:interactions"],
+    scriptKind: "test",
+    runnable: true,
+    capabilities: { userInteractionTesting: true },
+    description: "Exercises UI behavior through realistic keyboard and pointer interactions.",
+    documentationUrl: "https://testing-library.com/docs/user-event/setup/",
+    nextStep: "Use userEvent.setup() in component tests and run those tests from a dedicated interaction test script.",
+    recommendOrder: 166,
+    recommend: recommendUserEvent,
+    detect: detectUserEvent,
+  },
+  {
+    id: "stylelint",
+    name: "Stylelint",
+    category: "styles",
+    packages: ["stylelint"],
+    configPatterns: [/(^|\/)\.stylelintrc(?:\.[^/]+)?$/, /(^|\/)stylelint\.config\.[cm]?[jt]s$/],
+    packageJsonConfigKey: "stylelint",
+    scriptPattern: /(^|\s|&&|\|)stylelint(?:\s|$)/,
+    scriptNames: ["health:styles", "styles", "stylelint"],
+    scriptKind: "quality",
+    capabilities: { cssConsistency: true },
+    command: { binary: "stylelint", args: ["--formatter", "json", "**/*.{css,pcss,postcss}"] },
+    requiresConfiguration: true,
+    description: "Checks CSS syntax and configured style conventions.",
+    documentationUrl: "https://stylelint.io/user-guide/get-started/",
+    recommendOrder: 155,
+    recommend: recommendStylelint,
+    planInstall: planStylelintInstall,
+    setup: {
+      packageName: "stylelint",
+      scriptName: "health:styles",
+      scriptCommand: () => 'stylelint --formatter json "**/*.{css,pcss,postcss}"',
+      checks: ["CSS syntax and the rules enabled in the project's Stylelint configuration."],
+    },
+    normalize: normalizeStylelintResult,
+  },
+  {
     id: "eslint-boundaries",
     name: "eslint-plugin-boundaries",
     category: "architecture",
@@ -623,7 +750,8 @@ export async function detectProvider(
     // A conventional script name does not always identify its provider. In
     // particular, Vitest's --coverage mode is not c8, and an unrestricted
     // Markdown glob would lint dependency documentation as well as the app.
-    const invokesNamedProvider = descriptor.id !== "c8" || matchesScriptPattern(command, descriptor.scriptPattern);
+    const invokesNamedProvider =
+      !["c8", "lhci"].includes(descriptor.id) || matchesScriptPattern(command, descriptor.scriptPattern);
     const excludesDependencyDocs =
       descriptor.id !== "markdownlint" || /(?:^|\s)["']?#node_modules["']?(?:\s|$)/.test(command);
     return descriptor.scriptNames.includes(name) && safe && invokesNamedProvider && excludesDependencyDocs;

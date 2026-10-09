@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import fg from "fast-glob";
+import { glob as fg } from "tinyglobby";
 import type { RepnixConfig } from "../../config/repo-health-config.js";
 import { createFinding } from "../../core/finding.js";
 import type { HealthFinding, HealthResult, RepositoryContext } from "../../core/types.js";

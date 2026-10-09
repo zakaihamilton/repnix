@@ -106,6 +106,51 @@ const builtinDefinitions: Omit<CategoryDefinition, "label" | "description">[] = 
       ),
   },
   {
+    id: "runtime-accessibility",
+    requiredCapabilities: ["runtimeAccessibility"],
+    applicable: (context) =>
+      matchingScopes(
+        context,
+        (scope) => scope.roles.includes("web-app") && (scope.productionSourceFiles ?? scope.sourceFiles).length > 0,
+        (scope) => `${scope.path} is a web application`,
+      ),
+  },
+  {
+    id: "visual-regression",
+    requiredCapabilities: ["visualRegression"],
+    applicable: (context) =>
+      matchingScopes(
+        context,
+        (scope) => scope.roles.includes("web-app"),
+        (scope) => `${scope.path} is a web application`,
+      ),
+  },
+  {
+    id: "interactions",
+    requiredCapabilities: ["userInteractionTesting"],
+    applicable: (context) =>
+      matchingScopes(
+        context,
+        (scope) => scope.roles.includes("web-app"),
+        (scope) => `${scope.path} is a web application`,
+      ),
+  },
+  {
+    id: "styles",
+    requiredCapabilities: ["cssConsistency"],
+    applicable: (context) =>
+      matchingScopes(
+        context,
+        (scope) =>
+          scope.roles.includes("web-app") &&
+          [...context.files].some(
+            (file) =>
+              /\.(?:css|pcss|postcss)$/i.test(file) && (scope.path === "." || file.startsWith(`${scope.path}/`)),
+          ),
+        (scope) => `${scope.path} contains CSS files`,
+      ),
+  },
+  {
     id: "monorepo",
     requiredCapabilities: ["workspaceConsistency"],
     applicable: (context) => ({

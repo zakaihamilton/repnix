@@ -9,7 +9,7 @@
 
 RepNix is a local-first CLI that inventories the checks already protecting a repository, identifies useful gaps without duplicating your tooling, and helps you safely add a focused set of complementary tools.
 
-It is for maintainers with existing repositories who want consistent guardrails without maintaining a personal checklist of packages, scripts, configuration, and CI changes for every project. RepNix supports JavaScript and TypeScript repositories first, while also covering workspace consistency, documentation, supply-chain policy, CI workflows, release readiness, and frontend performance.
+It is for maintainers with existing repositories who want consistent guardrails without maintaining a personal checklist of packages, scripts, configuration, and CI changes for every project. RepNix supports JavaScript and TypeScript repositories first, while also covering workspace consistency, documentation, supply-chain policy, CI workflows, release readiness, and frontend accessibility, interaction, visual regression, CSS quality, and performance.
 
 RepNix orchestrates the tools you choose. It does not replace your existing TypeScript, ESLint, Biome, Prettier, Vitest, Jest, Knip, OSV-Scanner, dependency-cruiser, or package-quality workflows.
 

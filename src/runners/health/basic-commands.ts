@@ -3,6 +3,7 @@ import type { HealthCategory } from "../../core/health-category.js";
 import type { ProviderDetection, RepositoryContext } from "../../core/types.js";
 import type { ProviderModule } from "../../providers/sdk.js";
 import { QUALITY_SCRIPT_CHECKS, safeScriptFrom, type ScriptKind } from "../../repository/quality-scripts.js";
+import { matchesScriptPattern } from "../../repository/script-detection.js";
 import { expectedLocalBinary, type RunnableCommand } from "./task-executor.js";
 
 export function safeScript(context: RepositoryContext, names: string[], kind: ScriptKind): string | null {
@@ -161,12 +162,21 @@ export async function basicCommands(
       !Object.keys(detections.get(provider.id)?.activeCapabilities ?? {}).length
     )
       continue;
-    const script = safeScript(context, provider.scriptNames, provider.scriptKind === "test" ? "test" : "general");
+    const script =
+      provider.id === "lhci"
+        ? (provider.scriptNames
+            .map((name) => safeScript(context, [name], "general"))
+            .find(
+              (name): name is string =>
+                name !== null && matchesScriptPattern(context.scripts[name]!, provider.scriptPattern),
+            ) ?? null)
+        : safeScript(context, provider.scriptNames, provider.scriptKind === "test" ? "test" : "general");
     if (script && !commands.some((command) => command.provider === `script:${script}`))
       commands.push({
         provider: provider.id,
         name: provider.name,
         category: provider.category,
+        ...(provider.normalize ? { normalize: provider.normalize } : {}),
         ...scriptCommand(context, script),
         ...withTimeout,
       });

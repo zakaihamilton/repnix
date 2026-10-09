@@ -2,7 +2,7 @@ import { access, readFile } from "node:fs/promises";
 import { execFile as execFileCallback } from "node:child_process";
 import path from "node:path";
 import { promisify } from "node:util";
-import fg from "fast-glob";
+import { glob as fg } from "tinyglobby";
 import { parse as parseJsonc, type ParseError } from "jsonc-parser";
 import { parse as parseYaml } from "yaml";
 import type {
