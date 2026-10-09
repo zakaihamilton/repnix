@@ -1,5 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
+import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { lint } from "markdownlint/promise";
 
@@ -55,7 +56,9 @@ for (const [file, issues] of Object.entries(results)) {
   for (const issue of issues) {
     const rule = issue.ruleNames.join(", ");
     const detail = issue.errorDetail ? `: ${issue.errorDetail}` : "";
-    console.error(`${path.relative(root, file)}:${issue.lineNumber} ${rule} ${issue.ruleDescription}${detail}`);
+    process.stderr.write(
+      `${path.relative(root, file)}:${issue.lineNumber} ${rule} ${issue.ruleDescription}${detail}\n`,
+    );
     issueCount += 1;
   }
 }
