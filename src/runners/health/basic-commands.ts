@@ -164,12 +164,12 @@ export async function basicCommands(
       continue;
     const script =
       provider.id === "lhci"
-        ? provider.scriptNames
+        ? (provider.scriptNames
             .map((name) => safeScript(context, [name], "general"))
             .find(
               (name): name is string =>
                 name !== null && matchesScriptPattern(context.scripts[name]!, provider.scriptPattern),
-            ) ?? null
+            ) ?? null)
         : safeScript(context, provider.scriptNames, provider.scriptKind === "test" ? "test" : "general");
     if (script && !commands.some((command) => command.provider === `script:${script}`))
       commands.push({

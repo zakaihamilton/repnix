@@ -109,9 +109,7 @@ export async function detectStorybookA11y(context: RepositoryContext): Promise<P
     }),
   );
   const activeConfigFiles = mainFiles.filter((_, index) => /@storybook\/addon-a11y/.test(mainContents[index]!));
-  const vitestAddonConfigFiles = mainFiles.filter((_, index) =>
-    /@storybook\/addon-vitest/.test(mainContents[index]!),
-  );
+  const vitestAddonConfigFiles = mainFiles.filter((_, index) => /@storybook\/addon-vitest/.test(mainContents[index]!));
   const previewFiles = [...context.files].filter((file) => /(^|\/)\.storybook\/preview\.[cm]?[jt]sx?$/.test(file));
   const previewContents = await Promise.all(
     previewFiles.map(async (file) => {
@@ -173,9 +171,7 @@ export async function detectStorybookA11y(context: RepositoryContext): Promise<P
     ...scripts.map((script) => `script:${script}`),
   ];
   const configured =
-    activeConfigFiles.length > 0 &&
-    errorModeFiles.length > 0 &&
-    (hasVitestIntegration || hasTestRunnerIntegration);
+    activeConfigFiles.length > 0 && errorModeFiles.length > 0 && (hasVitestIntegration || hasTestRunnerIntegration);
   return {
     installed: packageName !== undefined,
     configured,

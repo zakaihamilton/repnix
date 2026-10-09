@@ -2,6 +2,7 @@ dist/
 coverage/
 fixtures/
 .changeset/
+.pnpm-store/
 pnpm-lock.yaml
 *.min.js
 *.svg
