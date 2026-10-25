@@ -17,7 +17,7 @@ RepNix orchestrates the tools you choose. It does not replace your existing Type
 
 ## Get started
 
-Requirements: **Node.js 20+** and one of **npm, pnpm, Yarn, or Bun**.
+Requirements: **Node.js 22.23.4+ on 22.x or 24.22.1+ on 24.x** and one of **npm, pnpm, Yarn, or Bun**.
 
 Install RepNix as a development dependency, then run a read-only inventory:
 
@@ -147,7 +147,7 @@ npx repnix check --write-baseline
 
 ## Development
 
-Use Node.js 24.12+ on the 24.x line (recommended) or Node.js 22.20+ on the 22.x line for the development toolchain. The published CLI supports Node.js 20+; packaged CI tests exercise that runtime separately.
+Use Node.js 24.22.1+ on the 24.x line or Node.js 22.23.4+ on the 22.x line for development and CLI use. CI exercises both supported LTS lines.
 
 ```bash
 pnpm install
