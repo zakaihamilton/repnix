@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Buffer debug provider output until completion to improve credential redaction; omit output that exceeds the limit.
+
 ## 1.1.0
 
 ### Minor Changes

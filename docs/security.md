@@ -9,7 +9,7 @@ RepNix is local-first, but it is not a sandbox. Treat the repository and its ins
 
 RepNix does not promise that a repository's own scripts or third-party provider binaries are network-free or harmless. Run it with the same trust and permissions you would give those tools directly.
 
-Diagnostics redact high-confidence credentials such as private-key blocks, bearer tokens, credential-bearing URLs, and common service-token formats before writing logs or machine-readable health reports. This is a leakage safeguard, not a guarantee that arbitrary provider output is safe; do not place secrets in repository scripts or provider messages.
+Debug provider output is buffered until the command completes and omitted if the output limit is exceeded, so redaction can inspect complete streams. Diagnostics redact high-confidence credentials such as private-key blocks, bearer tokens, credential-bearing URLs, and common service-token formats before writing logs or machine-readable health reports. This is a leakage safeguard, not a guarantee that arbitrary provider output is safe; do not place secrets in repository scripts or provider messages.
 
 ## Network behavior
 
