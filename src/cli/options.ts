@@ -128,7 +128,7 @@ export function resolveDiagnosticLogger(
 
 export function addDiagnosticOptions(command: Command): Command {
   return command
-    .option("--verbose", "enable debug diagnostics and stream provider output to stderr")
+    .option("--verbose", "enable debug diagnostics and show provider output after completion")
     .option("--quiet", "suppress diagnostic output")
     .option("--log-level <level>", `set diagnostic level (${LOG_LEVELS.join(" | ")})`, parseLogLevel)
     .option("--log-format <format>", `set diagnostic format (${LOG_FORMATS.join(" | ")})`, parseLogFormat)

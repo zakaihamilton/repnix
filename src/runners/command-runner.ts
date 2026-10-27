@@ -42,6 +42,17 @@ export async function runCommand(command: string, args: string[], options: RunCo
     let stdout = "";
     let stderr = "";
     let overflow = false;
+    const diagnosticOutput: Record<"stdout" | "stderr", Buffer[]> = { stdout: [], stderr: [] };
+    let diagnosticBytes = 0;
+    const collectDiagnosticOutput = (stream: "stdout" | "stderr", chunk: Buffer) => {
+      if (!logger.isEnabled("debug") || overflow) return;
+      diagnosticBytes += chunk.length;
+      if (diagnosticBytes <= maxOutput) diagnosticOutput[stream].push(chunk);
+      else {
+        diagnosticOutput.stdout = [];
+        diagnosticOutput.stderr = [];
+      }
+    };
     let timedOut = false;
     let closed = false;
     let killTimer: ReturnType<typeof setTimeout> | undefined;
@@ -69,7 +80,7 @@ export async function runCommand(command: string, args: string[], options: RunCo
     };
     child.stdout.on("data", (chunk: Buffer) => {
       options.onOutput?.("stdout", chunk);
-      logger.output("stdout", chunk, { command: displayCommand });
+      collectDiagnosticOutput("stdout", chunk);
       if (!overflow) stdout += chunk.toString();
       if (Buffer.byteLength(stdout) > maxOutput) {
         overflow = true;
@@ -78,7 +89,7 @@ export async function runCommand(command: string, args: string[], options: RunCo
     });
     child.stderr.on("data", (chunk: Buffer) => {
       options.onOutput?.("stderr", chunk);
-      logger.output("stderr", chunk, { command: displayCommand });
+      collectDiagnosticOutput("stderr", chunk);
       if (!overflow) stderr += chunk.toString();
       if (Buffer.byteLength(stderr) > maxOutput) {
         overflow = true;
@@ -108,6 +119,13 @@ export async function runCommand(command: string, args: string[], options: RunCo
     child.on("close", (exitCode, signal) => {
       closed = true;
       clearTimers();
+      // Do not log a truncated stream: a credential may cross the truncation boundary.
+      if (!overflow && diagnosticBytes <= maxOutput) {
+        for (const stream of ["stdout", "stderr"] as const) {
+          if (diagnosticOutput[stream].length)
+            logger.output(stream, Buffer.concat(diagnosticOutput[stream]), { command: displayCommand });
+        }
+      }
       logger.debug("command.finish", `Finished ${displayCommand}`, {
         command: displayCommand,
         exitCode,
