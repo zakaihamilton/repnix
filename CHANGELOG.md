@@ -4,6 +4,13 @@
 
 - Buffer debug provider output until completion to improve credential redaction; omit output that exceeds the limit.
 
+## 1.1.1
+
+### Patch Changes
+
+- 0931c41: Buffer debug provider output until completion so credentials spanning output chunks can be redacted, and omit output that exceeds the limit.
+- f544264: Require patched Node.js releases in the package engine metadata.
+
 ## 1.1.0
 
 ### Minor Changes
