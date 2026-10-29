@@ -1,5 +1,5 @@
-import { createHash } from "node:crypto";
-import { lstat, mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import { lstat, mkdir, open, readFile, rename, rmdir, unlink } from "node:fs/promises";
 import path from "node:path";
 import pc from "picocolors";
 import type { FileChange } from "../core/types.js";
@@ -35,13 +35,14 @@ async function assertNoSymlinkComponents(root: string, target: string): Promise<
   }
 }
 
-async function createSafeParentDirectory(root: string, target: string): Promise<void> {
+async function createSafeParentDirectory(root: string, target: string, created?: string[]): Promise<void> {
   const relative = path.relative(path.resolve(root), path.dirname(target));
   let current = path.resolve(root);
   for (const component of relative.split(path.sep)) {
     current = path.join(current, component);
     try {
       await mkdir(current);
+      created?.push(current);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
     }
@@ -89,56 +90,156 @@ export async function validateChanges(root: string, changes: FileChange[]): Prom
   }
 }
 
-export async function writeChanges(
-  root: string,
-  changes: FileChange[],
-  onWrite?: (change: FileChange, current: number, total: number) => void,
-): Promise<void> {
-  const written: FileChange[] = [];
+export interface FileMetadata {
+  mode: number;
+  uid: number;
+  gid: number;
+}
+
+export async function readFileMetadata(root: string, relativePath: string): Promise<FileMetadata | null> {
+  const target = resolveRepositoryPath(root, relativePath);
+  await assertNoSymlinkComponents(root, target);
   try {
-    for (const [index, change] of changes.entries()) {
-      const target = resolveRepositoryPath(root, change.path);
-      await createSafeParentDirectory(root, target);
-      const temporary = `${target}.repnix-${process.pid}-${Date.now()}.tmp`;
-      await writeFile(temporary, change.after, "utf8");
-      await rename(temporary, target);
-      written.push(change);
-      onWrite?.(change, index + 1, changes.length);
+    const info = await lstat(target);
+    return { mode: info.mode & 0o7777, uid: info.uid, gid: info.gid };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+async function atomicWrite(target: string, content: string | Buffer, metadata?: FileMetadata | null): Promise<void> {
+  const temporary = `${target}.repnix-${randomUUID()}.tmp`;
+  // Restrict access until the original mode has been applied to the completed file.
+  const file = await open(temporary, "wx", metadata == null ? 0o666 : 0o600);
+  try {
+    try {
+      await file.writeFile(content);
+      if (metadata != null) {
+        if (process.platform !== "win32") {
+          const current = await file.stat();
+          if (current.uid !== metadata.uid || current.gid !== metadata.gid) {
+            await file.chown(metadata.uid, metadata.gid);
+          }
+        }
+        await file.chmod(metadata.mode);
+      }
+    } finally {
+      await file.close();
     }
+    await rename(temporary, target);
   } catch (error) {
     try {
-      await restoreChanges(root, written);
-    } catch (rollbackError) {
-      throw new Error(
-        `Could not apply setup changes and rollback also failed: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`,
-        { cause: rollbackError },
-      );
+      await unlink(temporary);
+    } catch (cleanupError) {
+      if ((cleanupError as NodeJS.ErrnoException).code !== "ENOENT") {
+        throw new AggregateError([error, cleanupError], `Could not remove temporary file ${temporary}`, {
+          cause: cleanupError,
+        });
+      }
     }
     throw error;
   }
 }
 
-export async function restoreChanges(root: string, changes: FileChange[]): Promise<void> {
-  for (const change of [...changes].reverse()) {
-    const target = resolveRepositoryPath(root, change.path);
-    await assertNoSymlinkComponents(root, target);
-    if (change.before === null) {
-      try {
-        await unlink(target);
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-      }
-      continue;
+export async function writeChanges(
+  root: string,
+  changes: FileChange[],
+  onWrite?: (change: FileChange, current: number, total: number) => void,
+): Promise<string[]> {
+  const written: FileChange[] = [];
+  const metadata = new Map<string, FileMetadata | null>();
+  const createdDirectories: string[] = [];
+  try {
+    for (const [index, change] of changes.entries()) {
+      const target = resolveRepositoryPath(root, change.path);
+      await createSafeParentDirectory(root, target, createdDirectories);
+      const attributes = await readFileMetadata(root, change.path);
+      metadata.set(change.path, attributes);
+      await atomicWrite(target, change.after, attributes);
+      written.push(change);
+      onWrite?.(change, index + 1, changes.length);
     }
-    await createSafeParentDirectory(root, target);
-    const temporary = `${target}.repnix-rollback-${process.pid}-${Date.now()}.tmp`;
-    await writeFile(temporary, change.before, "utf8");
-    await rename(temporary, target);
+  } catch (error) {
+    const rollbackErrors: unknown[] = [];
+    try {
+      await restoreChanges(root, written, metadata);
+    } catch (rollbackError) {
+      rollbackErrors.push(rollbackError);
+    }
+    try {
+      await removeCreatedDirectories(root, createdDirectories);
+    } catch (cleanupError) {
+      rollbackErrors.push(cleanupError);
+    }
+    if (rollbackErrors.length) {
+      throw new Error(
+        `Could not apply setup changes and rollback also failed: ${rollbackErrors.map((item) => (item instanceof Error ? item.message : String(item))).join("; ")}`,
+        { cause: error },
+      );
+    }
+    throw error;
+  }
+  return createdDirectories;
+}
+
+/** Remove only empty directories made by this write, deepest first. */
+export async function removeCreatedDirectories(root: string, directories: string[]): Promise<void> {
+  const errors: unknown[] = [];
+  for (const directory of [...directories].reverse()) {
+    try {
+      await assertNoSymlinkComponents(root, directory);
+      await rmdir(directory);
+    } catch (error) {
+      if (!["ENOENT", "ENOTEMPTY", "EEXIST"].includes((error as NodeJS.ErrnoException).code ?? "")) {
+        errors.push(error);
+      }
+    }
+  }
+  if (errors.length)
+    throw new AggregateError(errors, `Could not remove created directories: ${errors.map(String).join("; ")}`);
+}
+
+export async function restoreChanges(
+  root: string,
+  changes: FileChange[],
+  metadata?: ReadonlyMap<string, FileMetadata | null>,
+): Promise<void> {
+  const errors: unknown[] = [];
+  for (const change of [...changes].reverse()) {
+    try {
+      await restoreChange(root, change, metadata?.get(change.path));
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+  if (errors.length) {
+    throw new AggregateError(errors, `Could not restore all setup files: ${errors.map(String).join("; ")}`);
   }
 }
 
+async function restoreChange(root: string, change: FileChange, metadata?: FileMetadata | null): Promise<void> {
+  const target = resolveRepositoryPath(root, change.path);
+  await assertNoSymlinkComponents(root, target);
+  if (change.before === null) {
+    try {
+      await unlink(target);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    return;
+  }
+  await createSafeParentDirectory(root, target);
+  await atomicWrite(target, change.before, metadata);
+}
+
 /** Restore a file without decoding its contents, for binary package-manager state. */
-export async function restoreBinaryFile(root: string, relativePath: string, before: Buffer | null): Promise<void> {
+export async function restoreBinaryFile(
+  root: string,
+  relativePath: string,
+  before: Buffer | null,
+  metadata?: FileMetadata | null,
+): Promise<void> {
   const target = resolveRepositoryPath(root, relativePath);
   await assertNoSymlinkComponents(root, target);
   if (before === null) {
@@ -150,9 +251,7 @@ export async function restoreBinaryFile(root: string, relativePath: string, befo
     return;
   }
   await createSafeParentDirectory(root, target);
-  const temporary = `${target}.repnix-rollback-${process.pid}-${Date.now()}.tmp`;
-  await writeFile(temporary, before);
-  await rename(temporary, target);
+  await atomicWrite(target, before, metadata);
 }
 
 type DiffLine = { kind: "context" | "add" | "remove"; text: string };

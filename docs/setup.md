@@ -43,7 +43,9 @@ When you run setup from a local Git checkout of an unreleased RepNix build, it i
 
 The interactive setup flow is: `audit → manual guidance (when needed) → select checks → review changes → apply safely`.
 
-Setup applies planned files atomically and restores planned files plus package-manager lockfiles if dependency installation fails. Package-manager lifecycle scripts can still run during a normal dependency installation.
+Setup applies planned files atomically and restores planned files plus regular package-manager lockfiles if dependency installation fails. A symlinked lockfile for the selected package manager is rejected before installation; unrelated symlinked lockfiles are not snapshotted or restored. Package-manager lifecycle scripts can still run during a normal dependency installation.
+
+On Unix, setup preserves existing files' mode, owner, and group when replacing or restoring them; it fails if it cannot preserve ownership. Atomic replacement does not preserve access control lists (ACLs), extended attributes, or other file metadata. Windows permission handling is limited by Node.js and does not preserve Windows ACLs or ownership. Review and restore any required metadata after setup or a rollback.
 
 ## Check and fix
 

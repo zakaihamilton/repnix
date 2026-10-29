@@ -1,4 +1,5 @@
-import { chmod, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, chown, mkdir, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { stripVTControlCharacters } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
@@ -14,6 +15,7 @@ import {
   fileChange,
   renderFileDiff,
   resolveRepositoryPath,
+  restoreBinaryFile,
   validateChanges,
   writeChanges,
 } from "../src/setup/file-plan.js";
@@ -83,6 +85,88 @@ describe("setup planning", () => {
 
     await expect(validateChanges(root, [change])).rejects.toThrow("symbolic link");
     await expect(writeChanges(root, [change])).rejects.toThrow("symbolic link");
+  });
+
+  it.skipIf(process.platform === "win32")(
+    "preserves the mode of an existing file when a planned write succeeds",
+    async () => {
+      const root = await copyFixture("minimal-js");
+      temporary.push(root);
+      const target = path.join(root, "package.json");
+      const before = await readFile(target, "utf8");
+      await chmod(target, 0o751);
+
+      await writeChanges(root, [fileChange("package.json", before, `${before} `, "test mode")!]);
+
+      expect((await stat(target)).mode & 0o777).toBe(0o751);
+    },
+  );
+
+  it.skipIf(process.platform === "win32")("restores a zero permission mode after a planned write fails", async () => {
+    const root = await copyFixture("minimal-js");
+    temporary.push(root);
+    const target = path.join(root, "restricted.txt");
+    await writeFile(target, "before");
+    await chmod(target, 0);
+
+    await expect(
+      writeChanges(root, [fileChange("restricted.txt", "before", "after", "test mode")!], () => {
+        throw new Error("force rollback");
+      }),
+    ).rejects.toThrow("force rollback");
+
+    expect((await stat(target)).mode & 0o7777).toBe(0);
+    await chmod(target, 0o600);
+    expect(await readFile(target, "utf8")).toBe("before");
+  });
+
+  it("preserves a different group during writes and rollback", async ({ skip }) => {
+    if (process.platform === "win32" || !process.getgroups) return skip();
+    const root = await copyFixture("minimal-js");
+    temporary.push(root);
+    const target = path.join(root, "group.txt");
+    await writeFile(target, "before");
+    const original = await stat(target);
+    const group = process.getgroups().find((gid) => gid !== original.gid);
+    if (group === undefined) return skip();
+    try {
+      await chown(target, original.uid, group);
+    } catch (error) {
+      if (["EPERM", "EACCES"].includes((error as NodeJS.ErrnoException).code ?? "")) return skip();
+      throw error;
+    }
+
+    await writeChanges(root, [fileChange("group.txt", "before", "after", "test ownership")!]);
+    expect((await stat(target)).gid).toBe(group);
+    await expect(
+      writeChanges(root, [fileChange("group.txt", "after", "later", "test ownership")!], () => {
+        throw new Error("force rollback");
+      }),
+    ).rejects.toThrow("force rollback");
+    const restored = await stat(target);
+    expect(restored.uid).toBe(original.uid);
+    expect(restored.gid).toBe(group);
+    expect(await readFile(target, "utf8")).toBe("after");
+  });
+
+  it("does not replace a file if its ownership cannot be restored", async ({ skip }) => {
+    if (process.platform === "win32" || !process.getuid || process.getuid() === 0) return skip();
+    const root = await copyFixture("minimal-js");
+    temporary.push(root);
+    const target = path.join(root, "protected.bin");
+    await writeFile(target, "current");
+    const before = await stat(target);
+
+    await expect(
+      restoreBinaryFile(root, "protected.bin", Buffer.from("previous"), {
+        mode: 0o600,
+        uid: 2147483647,
+        gid: before.gid,
+      }),
+    ).rejects.toThrow();
+    expect(await readFile(target, "utf8")).toBe("current");
+    expect((await stat(target)).uid).toBe(before.uid);
+    expect((await readdir(root)).filter((name) => name.includes(".repnix-"))).toEqual([]);
   });
 
   it("requires saved setup plans to match a regenerated plan exactly", async () => {
@@ -456,6 +540,8 @@ describe("setup planning", () => {
     temporary.push(root);
     const packagePath = path.join(root, "package.json");
     const lockfilePath = path.join(root, "package-lock.json");
+    await chmod(packagePath, 0o750);
+    await chmod(lockfilePath, 0o600);
     const before = await readFile(packagePath, "utf8");
     const lockfileBefore = await readFile(lockfilePath, "utf8");
     const after = `${before.trimEnd()} \n`;
@@ -468,7 +554,10 @@ describe("setup planning", () => {
       commands: [
         {
           command: process.execPath,
-          args: ["-e", "require('node:fs').writeFileSync('package-lock.json', 'changed'); process.exit(1)"],
+          args: [
+            "-e",
+            "const fs = require('node:fs'); fs.writeFileSync('package-lock.json', 'changed'); fs.chmodSync('package-lock.json', 0o644); fs.chmodSync('package.json', 0o644); process.exit(1)",
+          ],
           reason: "test failure",
         },
       ],
@@ -484,6 +573,160 @@ describe("setup planning", () => {
     expect(progress).toEqual(["validating", "snapshotting", "writing-files", "running-command", "rollback"]);
     expect(await readFile(packagePath, "utf8")).toBe(before);
     expect(await readFile(lockfilePath, "utf8")).toBe(lockfileBefore);
+    if (process.platform !== "win32") {
+      expect((await stat(packagePath)).mode & 0o777).toBe(0o750);
+      expect((await stat(lockfilePath)).mode & 0o777).toBe(0o600);
+    }
+  });
+
+  it.skipIf(process.platform === "win32")(
+    "ignores unrelated symlinked lockfiles but still restores regular lockfiles",
+    async () => {
+      const root = await copyFixture("minimal-js");
+      temporary.push(root);
+      const lockfile = path.join(root, "package-lock.json");
+      const before = await readFile(lockfile, "utf8");
+      await symlink("package-lock.json", path.join(root, "yarn.lock"));
+      const context = { ...(await detectRepository(root)), packageManager: "npm" as const };
+      const plan = {
+        schemaVersion: 1 as const,
+        packages: [],
+        files: [],
+        warnings: [],
+        conflicts: [],
+        commands: [
+          {
+            command: process.execPath,
+            args: ["-e", "require('node:fs').writeFileSync('package-lock.json', 'changed'); process.exit(1)"],
+            reason: "test",
+          },
+        ],
+      };
+
+      await expect(applyInstallPlan(context, { ...plan, commands: [] })).resolves.toBeUndefined();
+      await expect(applyInstallPlan(context, plan)).rejects.toThrow("rolled back");
+      expect(await readFile(lockfile, "utf8")).toBe(before);
+      expect(await readFile(path.join(root, "yarn.lock"), "utf8")).toBe(before);
+    },
+  );
+
+  it.skipIf(process.platform === "win32")("rejects a symlinked selected lockfile before writing", async () => {
+    const root = await copyFixture("minimal-js");
+    temporary.push(root);
+    const lockfile = path.join(root, "package-lock.json");
+    const before = await readFile(path.join(root, "package.json"), "utf8");
+    await rm(lockfile);
+    await symlink("package.json", lockfile);
+    const context = { ...(await detectRepository(root)), packageManager: "npm" as const };
+    const plan = {
+      schemaVersion: 1 as const,
+      packages: [],
+      files: [fileChange("package.json", before, `${before} `, "test")!],
+      warnings: [],
+      conflicts: [],
+      commands: [{ command: process.execPath, args: ["-e", "process.exit(0)"], reason: "test" }],
+    };
+
+    await expect(applyInstallPlan(context, plan)).rejects.toThrow("symbolic link");
+    expect(await readFile(path.join(root, "package.json"), "utf8")).toBe(before);
+  });
+
+  it("removes only empty directories created by planned writes when installation fails", async () => {
+    const root = await copyFixture("minimal-js");
+    temporary.push(root);
+    await mkdir(path.join(root, "existing"));
+    const context = await detectRepository(root);
+    const plan = {
+      schemaVersion: 1 as const,
+      packages: [],
+      files: [
+        fileChange("new/child/file.txt", null, "planned", "test")!,
+        fileChange("existing/child/file.txt", null, "planned", "test")!,
+        fileChange("retained/file.txt", null, "planned", "test")!,
+      ],
+      commands: [
+        {
+          command: process.execPath,
+          args: ["-e", "require('node:fs').writeFileSync('retained/other.txt', 'keep'); process.exit(1)"],
+          reason: "test failure",
+        },
+      ],
+      warnings: [],
+      conflicts: [],
+    };
+
+    await expect(applyInstallPlan(context, plan, false, 1000)).rejects.toThrow("rolled back");
+    expect(await readdir(root)).not.toContain("new");
+    expect(await readdir(path.join(root, "existing"))).toEqual([]);
+    expect(await readdir(path.join(root, "retained"))).toEqual(["other.txt"]);
+    expect(await readFile(path.join(root, "retained/other.txt"), "utf8")).toBe("keep");
+  });
+
+  it("cleans up when a planned write fails after earlier files were written", async () => {
+    const root = await copyFixture("minimal-js");
+    temporary.push(root);
+    const packagePath = path.join(root, "package.json");
+    await chmod(packagePath, 0o600);
+    const before = await readFile(packagePath, "utf8");
+    const context = await detectRepository(root);
+    const plan = {
+      schemaVersion: 1 as const,
+      packages: [],
+      files: [
+        fileChange("package.json", before, `${before} `, "modify existing file")!,
+        fileChange("new-directory/created.txt", null, "created", "create file")!,
+        fileChange("blocked", null, "cannot rename over a directory", "force failure")!,
+      ],
+      commands: [{ command: process.execPath, args: ["-e", "process.exit(99)"], reason: "must not run" }],
+      warnings: [],
+      conflicts: [],
+    };
+
+    await expect(
+      applyInstallPlan(context, plan, false, 1000, (event) => {
+        if (event.phase === "writing-files" && event.current === 2) mkdirSync(path.join(root, "blocked"));
+      }),
+    ).rejects.toThrow();
+
+    expect(await readFile(packagePath, "utf8")).toBe(before);
+    if (process.platform !== "win32") expect((await stat(packagePath)).mode & 0o777).toBe(0o600);
+    expect(await readdir(root)).not.toContain("new-directory");
+    expect((await readdir(root)).filter((name) => name.includes(".repnix-"))).toEqual([]);
+  });
+
+  it("continues restoring other files and binary lockfiles after a restore fails", async () => {
+    const root = await copyFixture("minimal-js");
+    temporary.push(root);
+    await writeFile(path.join(root, "first.txt"), "first before");
+    await writeFile(path.join(root, "second.txt"), "second before");
+    const binaryBefore = Buffer.from([0, 255, 42]);
+    await writeFile(path.join(root, "bun.lockb"), binaryBefore);
+    const context = await detectRepository(root);
+    const plan = {
+      schemaVersion: 1 as const,
+      packages: [],
+      files: [
+        fileChange("first.txt", "first before", "first after", "test")!,
+        fileChange("second.txt", "second before", "second after", "test")!,
+      ],
+      commands: [
+        {
+          command: process.execPath,
+          args: [
+            "-e",
+            "const fs = require('node:fs'); fs.unlinkSync('second.txt'); fs.mkdirSync('second.txt'); fs.writeFileSync('bun.lockb', 'changed'); process.exit(1)",
+          ],
+          reason: "force rollback failure",
+        },
+      ],
+      warnings: [],
+      conflicts: [],
+    };
+
+    await expect(applyInstallPlan(context, plan, false, 1000)).rejects.toThrow("rollback also failed");
+    expect(await readFile(path.join(root, "first.txt"), "utf8")).toBe("first before");
+    expect(await readFile(path.join(root, "bun.lockb"))).toEqual(binaryBefore);
+    expect((await readdir(root)).filter((name) => name.includes(".repnix-"))).toEqual([]);
   });
 
   it("restores a binary Bun lockfile byte-for-byte when installation fails", async () => {
@@ -492,6 +735,7 @@ describe("setup planning", () => {
     const lockfilePath = path.join(root, "bun.lockb");
     const before = Buffer.from([0, 255, 128, 65, 10]);
     await writeFile(lockfilePath, before);
+    await chmod(lockfilePath, 0o600);
     const context = await detectRepository(root);
     const plan = {
       schemaVersion: 1 as const,
@@ -500,7 +744,10 @@ describe("setup planning", () => {
       commands: [
         {
           command: process.execPath,
-          args: ["-e", "require('node:fs').writeFileSync('bun.lockb', 'changed'); process.exit(1)"],
+          args: [
+            "-e",
+            "const fs = require('node:fs'); fs.writeFileSync('bun.lockb', 'changed'); fs.chmodSync('bun.lockb', 0o644); process.exit(1)",
+          ],
           reason: "test failure",
         },
       ],
@@ -512,6 +759,7 @@ describe("setup planning", () => {
       "rolled back",
     );
     expect(await readFile(lockfilePath)).toEqual(before);
+    if (process.platform !== "win32") expect((await stat(lockfilePath)).mode & 0o777).toBe(0o600);
   });
 
   it("plans Prettier configuration and health script when selected", async () => {
