@@ -219,9 +219,18 @@ export async function restoreChanges(
 }
 
 async function restoreChange(root: string, change: FileChange, metadata?: FileMetadata | null): Promise<void> {
-  const target = resolveRepositoryPath(root, change.path);
+  await restoreFile(root, change.path, change.before, metadata);
+}
+
+async function restoreFile(
+  root: string,
+  relativePath: string,
+  content: string | Buffer | null,
+  metadata?: FileMetadata | null,
+): Promise<void> {
+  const target = resolveRepositoryPath(root, relativePath);
   await assertNoSymlinkComponents(root, target);
-  if (change.before === null) {
+  if (content === null) {
     try {
       await unlink(target);
     } catch (error) {
@@ -230,7 +239,7 @@ async function restoreChange(root: string, change: FileChange, metadata?: FileMe
     return;
   }
   await createSafeParentDirectory(root, target);
-  await atomicWrite(target, change.before, metadata);
+  await atomicWrite(target, content, metadata);
 }
 
 /** Restore a file without decoding its contents, for binary package-manager state. */
@@ -240,18 +249,7 @@ export async function restoreBinaryFile(
   before: Buffer | null,
   metadata?: FileMetadata | null,
 ): Promise<void> {
-  const target = resolveRepositoryPath(root, relativePath);
-  await assertNoSymlinkComponents(root, target);
-  if (before === null) {
-    try {
-      await unlink(target);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    }
-    return;
-  }
-  await createSafeParentDirectory(root, target);
-  await atomicWrite(target, before, metadata);
+  await restoreFile(root, relativePath, before, metadata);
 }
 
 type DiffLine = { kind: "context" | "add" | "remove"; text: string };
