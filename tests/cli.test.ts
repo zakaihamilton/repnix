@@ -467,7 +467,7 @@ for (const file of ["repnix.config.json", ".repnix-baseline.json"]) {
     await fakeBinary(
       root,
       "tsc",
-      "process.stdout.write(process.cwd() + '/packages/a/src/index.ts(3,7): error TS2322: bad\n'); process.exitCode = 2;",
+      "process.stdout.write(process.cwd() + '/packages/a/src/index.ts(3,7): error TS2322: bad\\n'); process.exitCode = 2;",
     );
 
     const result = await runCli(path.join(root, "packages", "a"), ["check", "types", "--format", "json"]);
