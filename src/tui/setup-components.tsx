@@ -1,4 +1,4 @@
-import React from "react";
+import type React from "react";
 import { Box, Newline, Text } from "ink";
 import { CATEGORY_DESCRIPTIONS, CATEGORY_LABELS } from "../core/health-category.js";
 import { builtinProvider } from "../providers/registry.js";

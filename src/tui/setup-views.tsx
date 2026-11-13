@@ -1,4 +1,4 @@
-import React from "react";
+import type React from "react";
 import { Box, Newline, Text } from "ink";
 import { CATEGORY_LABELS, categoryLabel } from "../core/health-category.js";
 import type { HealthResult, HealthRun, InstallPlan } from "../core/types.js";
@@ -760,13 +760,15 @@ export function setupCheckDetailItems(
   }
   if (extras.summaryPath) items.push({ kind: "text", text: `Runbook saved: ${extras.summaryPath}`, style: "muted" });
   if (extras.reportPath) {
-    wrapTerminalText(`AI-ready report saved: ${extras.reportPath}`, contentWidth).forEach((line) =>
-      items.push({ kind: "text", text: line, style: "muted" }),
-    );
+    wrapTerminalText(`AI-ready report saved: ${extras.reportPath}`, contentWidth).forEach((line) => {
+      items.push({ kind: "text", text: line, style: "muted" });
+    });
     wrapTerminalText(
       "Next: attach or drop this file into your AI coding assistant, then run `repnix check` after reviewing its changes.",
       contentWidth,
-    ).forEach((line) => items.push({ kind: "text", text: line, style: "primary" }));
+    ).forEach((line) => {
+      items.push({ kind: "text", text: line, style: "primary" });
+    });
   }
   return items;
 }
