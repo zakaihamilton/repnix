@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import type React from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import path from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
 import { Box, Newline, Text, render, useApp, useInput, useStdout } from "ink";
@@ -353,8 +354,9 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
   const startedApply = useRef(false);
   const startedCheck = useRef(false);
   const theme = useMemo(() => createSetupTuiTheme(stdout), [stdout]);
-  const dispatch = (action: Parameters<typeof setupTuiReducer>[1]) =>
+  const dispatch = useCallback((action: Parameters<typeof setupTuiReducer>[1]) => {
     setModel((current) => setupTuiReducer(current, action));
+  }, []);
   const items = useMemo(() => (audit ? selectionItems(audit.recommendations, audit.context.hasCI) : []), [audit]);
 
   useEffect(() => {
@@ -380,7 +382,8 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
       .catch((error: unknown) =>
         dispatch({ type: "fail", message: error instanceof Error ? error.message : String(error) }),
       );
-  }, []);
+  }, [dispatch, options, logger, deps
+      .audit]);
 
   useEffect(() => {
     if (model.screen !== "planning" || !audit) return;
@@ -393,7 +396,8 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
       .catch((error: unknown) =>
         dispatch({ type: "fail", message: error instanceof Error ? error.message : String(error) }),
       );
-  }, [model.screen]);
+  }, [model.screen, model.selectedProviders, audit.context, deps
+      .buildPlan, dispatch, audit, model.includeCi]);
 
   useEffect(() => {
     if (model.screen !== "checking" || !audit || startedCheck.current) return;
@@ -418,7 +422,8 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
           exitCode: null,
         }),
       );
-  }, [model.screen]);
+  }, [model.screen, dispatch, deps
+      .runCheck, logger, audit.context.root, options.timeout, audit]);
 
   useEffect(() => {
     if (model.screen === "success") startedCheck.current = false;
@@ -450,7 +455,8 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
       .catch((error: unknown) =>
         dispatch({ type: "fail", message: error instanceof Error ? error.message : String(error) }),
       );
-  }, [model.screen]);
+  }, [model.screen, plan, dispatch, deps
+      .applyPlan, options.timeout, audit, options, logger, deps.audit]);
 
   const { width, height } = dimensions;
   const paneLayout = setupPaneLayout(width, height);

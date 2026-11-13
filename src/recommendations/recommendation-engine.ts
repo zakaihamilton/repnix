@@ -107,7 +107,9 @@ function coverageFor(
     const matching = required.filter((capability) => detection.activeCapabilities[capability]);
     if (matching.length > 0) {
       providers.push(descriptor.name);
-      matching.forEach((capability) => active.add(capability));
+      matching.forEach((capability) => {
+        active.add(capability);
+      });
     }
   }
   const missingCapabilities = required.filter((capability) => !active.has(capability));

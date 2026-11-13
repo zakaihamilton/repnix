@@ -1,6 +1,5 @@
 import { stripVTControlCharacters } from "node:util";
 import { describe, expect, it } from "vitest";
-import React from "react";
 import { Box, renderToString } from "ink";
 import { CheckDetailsView } from "../src/tui/setup-views.js";
 import { Footer, Header } from "../src/tui/setup-components.js";
