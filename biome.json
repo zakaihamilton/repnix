@@ -7,13 +7,7 @@
   },
   "files": {
     "ignoreUnknown": true,
-    "includes": [
-      "**",
-      "!node_modules",
-      "!dist",
-      "!coverage",
-      "!fixtures"
-    ]
+    "includes": ["**", "!node_modules", "!dist", "!coverage", "!fixtures"]
   },
   "formatter": {
     "enabled": true,
@@ -23,16 +17,7 @@
   },
   "linter": {
     "enabled": true,
-    "includes": [
-      "**/*.js",
-      "**/*.jsx",
-      "**/*.mjs",
-      "**/*.cjs",
-      "**/*.ts",
-      "**/*.tsx",
-      "**/*.mts",
-      "**/*.cts"
-    ],
+    "includes": ["**/*.js", "**/*.jsx", "**/*.mjs", "**/*.cjs", "**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts"],
     "rules": {
       "preset": "recommended",
       "correctness": {

@@ -382,8 +382,7 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
       .catch((error: unknown) =>
         dispatch({ type: "fail", message: error instanceof Error ? error.message : String(error) }),
       );
-  }, [dispatch, options, logger, deps
-      .audit]);
+  }, [dispatch, options, logger, deps.audit]);
 
   useEffect(() => {
     if (model.screen !== "planning" || !audit) return;
@@ -396,8 +395,7 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
       .catch((error: unknown) =>
         dispatch({ type: "fail", message: error instanceof Error ? error.message : String(error) }),
       );
-  }, [model.screen, model.selectedProviders, audit?.context, deps
-      .buildPlan, dispatch, audit, model.includeCi]);
+  }, [model.screen, model.selectedProviders, audit?.context, deps.buildPlan, dispatch, audit, model.includeCi]);
 
   useEffect(() => {
     if (model.screen !== "checking" || !audit || startedCheck.current) return;
@@ -422,8 +420,7 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
           exitCode: null,
         }),
       );
-  }, [model.screen, dispatch, deps
-      .runCheck, logger, audit?.context.root, options.timeout, audit]);
+  }, [model.screen, dispatch, deps.runCheck, logger, audit?.context.root, options.timeout, audit]);
 
   useEffect(() => {
     if (model.screen === "success") startedCheck.current = false;
@@ -455,8 +452,7 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
       .catch((error: unknown) =>
         dispatch({ type: "fail", message: error instanceof Error ? error.message : String(error) }),
       );
-  }, [model.screen, plan, dispatch, deps
-      .applyPlan, options.timeout, audit, options, logger, deps.audit]);
+  }, [model.screen, plan, dispatch, deps.applyPlan, options.timeout, audit, options, logger, deps.audit]);
 
   const { width, height } = dimensions;
   const paneLayout = setupPaneLayout(width, height);
