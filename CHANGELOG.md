@@ -4,6 +4,12 @@
 
 - Buffer debug provider output until completion to improve credential redaction; omit output that exceeds the limit.
 
+## 1.1.2
+
+### Patch Changes
+
+- a27977e: Refresh development dependencies and fix the transitive dependency advisories.
+
 ## 1.1.1
 
 ### Patch Changes
