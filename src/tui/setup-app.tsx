@@ -396,7 +396,7 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
       .catch((error: unknown) =>
         dispatch({ type: "fail", message: error instanceof Error ? error.message : String(error) }),
       );
-  }, [model.screen, model.selectedProviders, audit.context, deps
+  }, [model.screen, model.selectedProviders, audit?.context, deps
       .buildPlan, dispatch, audit, model.includeCi]);
 
   useEffect(() => {
@@ -423,7 +423,7 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
         }),
       );
   }, [model.screen, dispatch, deps
-      .runCheck, logger, audit.context.root, options.timeout, audit]);
+      .runCheck, logger, audit?.context.root, options.timeout, audit]);
 
   useEffect(() => {
     if (model.screen === "success") startedCheck.current = false;
