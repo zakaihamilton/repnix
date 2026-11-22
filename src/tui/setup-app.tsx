@@ -1,18 +1,22 @@
+import { Box, Newline, render, Text, useApp, useStdout } from "ink";
 import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import path from "node:path";
-import { mkdir, writeFile } from "node:fs/promises";
-import { Box, Newline, Text, render, useApp, useInput, useStdout } from "ink";
+import { auditRepository } from "../cli/audit.js";
 import type { DiagnosticLogger, DiagnosticOptions } from "../cli/options.js";
 import { resolveDiagnosticLogger } from "../cli/options.js";
-import { auditRepository } from "../cli/audit.js";
+import type { InstallPlan, RepositoryDiagnostic } from "../core/types.js";
 import type { AuditModel } from "../recommendations/recommendation-engine.js";
-import type { HealthFinding, InstallPlan, RepositoryDiagnostic } from "../core/types.js";
-import { runCommand, type CommandResult } from "../runners/command-runner.js";
+import {
+  renderSetupCheckSummary,
+  renderSetupHealthReport,
+  saveSetupCheckReports,
+} from "../reporting/setup-check-report.js";
+import type { CommandResult } from "../runners/command-runner.js";
 import { applyInstallPlan } from "../setup/apply-plan.js";
-import { buildInstallPlan } from "../setup/install-plan.js";
 import { renderFileDiff } from "../setup/file-plan.js";
-import { createSetupTuiModel, selectionItems, setupTuiReducer, type SetupTuiModel } from "./setup-state.js";
+import { buildInstallPlan } from "../setup/install-plan.js";
+import { runSetupCheck, setupCheckResultOutput } from "./run-setup-check.js";
+import { Footer, Header, Panel, progressMessage } from "./setup-components.js";
 import {
   auditContentLineCount,
   auditPageSummary,
@@ -26,37 +30,37 @@ import {
   selectedSetupOptions,
   setupCheckDetails,
 } from "./setup-helpers.js";
+import { createSetupTuiModel, type SetupTuiModel, selectionItems, setupTuiReducer } from "./setup-state.js";
 import {
+  COMPACT_LAYOUT_HEIGHT,
+  COMPACT_LAYOUT_WIDTH,
+  clampTuiScroll,
   createSetupTuiTheme,
   diffLineColor,
+  HORIZONTAL_PANE_MIN_WIDTH,
   normalizeTuiDiffLine,
   selectionIndicator,
   selectionRowPresentation,
   setupPaneLayout,
   setupStepIndex,
   tuiLayoutMetrics,
-  clampTuiScroll,
 } from "./setup-theme.js";
-import { Footer, Header, Panel, progressMessage } from "./setup-components.js";
 import {
   ApplyView,
+  AUDIT_LABEL_COLUMN_WIDTH,
+  AUDIT_TWO_COLUMN_MIN_WIDTH,
   AuditView,
+  auditUsesSingleColumn,
   CheckDetailsView,
   ConfirmView,
+  checkDetailViewport,
   DetailsView,
   ManualRecommendationsView,
   ReviewView,
   SelectView,
-  auditUsesSingleColumn,
-  AUDIT_LABEL_COLUMN_WIDTH,
-  AUDIT_TWO_COLUMN_MIN_WIDTH,
-  checkDetailViewport,
-  parseHealthRun,
-  setupCheckActions,
-  setupCheckCommand,
   setupCheckDetailItems,
-  setupCheckRows,
 } from "./setup-views.js";
+import { useSetupInput } from "./useSetupInput.js";
 
 export interface SetupTuiDependencies {
   audit: typeof auditRepository;
@@ -95,236 +99,6 @@ export function setupDetectionErrorMessage(diagnostics: RepositoryDiagnostic[]):
   return [...errors.map((diagnostic) => diagnostic.message), "", ...new Set(instructions)].join("\n");
 }
 
-async function runSetupCheck(
-  root: string,
-  logger: DiagnosticLogger,
-  timeoutMs?: number,
-  onProgress?: (message: string) => void,
-): Promise<CommandResult> {
-  let pendingDiagnostics = "";
-  const onOutput = (stream: "stdout" | "stderr", chunk: Buffer) => {
-    if (stream !== "stderr") return;
-    pendingDiagnostics += chunk.toString();
-    const lines = pendingDiagnostics.split("\n");
-    pendingDiagnostics = lines.pop() ?? "";
-    for (const line of lines) {
-      try {
-        const event = JSON.parse(line) as { event?: string; message?: string };
-        if (event.event === "health.provider.start" || event.event === "health.provider.finish")
-          onProgress?.(event.message ?? "Check progress updated");
-      } catch {
-        // Diagnostics are optional; the final JSON report remains authoritative.
-      }
-    }
-  };
-  const commandOptions = { cwd: root, logger, onOutput, ...(timeoutMs === undefined ? {} : { timeoutMs }) };
-  const localCommand = path.join(root, "node_modules", ".bin", process.platform === "win32" ? "repnix.cmd" : "repnix");
-  const args = ["check", "--format", "json", "--log-format", "json", "--log-level", "info"];
-  const localResult = await runCommand(localCommand, args, commandOptions);
-  return localResult.spawnError ? runCommand("repnix", args, commandOptions) : localResult;
-}
-
-export function setupCheckResultOutput(
-  check: Pick<CommandResult, "command" | "args" | "exitCode" | "signal" | "stdout" | "stderr" | "spawnError">,
-): string {
-  const stdout = check.stdout.trimEnd();
-  // Keep structured stdout parseable: the check details view uses it to render
-  // status rows. Stderr is a fallback for commands that fail before producing
-  // the JSON report.
-  if (stdout) return stdout;
-  const diagnostics = [check.stderr, check.spawnError ? `Error: ${check.spawnError}` : ""]
-    .map((value) => value.trimEnd())
-    .filter(Boolean)
-    .join("\n");
-  if (diagnostics) return diagnostics;
-  if (check.exitCode === 0) return "";
-
-  const command = [check.command, ...check.args].map((part) => JSON.stringify(part)).join(" ");
-  const reason = check.spawnError
-    ? `could not start: ${check.spawnError}`
-    : check.signal
-      ? `was terminated by ${check.signal}`
-      : `exited with code ${check.exitCode ?? "unknown"}`;
-  return [
-    "The check failed without producing output.",
-    `Command: ${command}`,
-    `Reason: ${reason}.`,
-    "Run the command above directly for more diagnostics.",
-  ].join("\n");
-}
-
-export interface SavedSetupCheckReports {
-  reportPath: string;
-  summaryPath: string;
-}
-
-function markdownCell(value: string): string {
-  return value.replaceAll("|", "\\|").replaceAll("\n", " ");
-}
-
-function markdownCode(value: string): string {
-  return value.replaceAll("`", "\\`").replaceAll("\n", " ");
-}
-
-function findingLocation(finding: HealthFinding): string | undefined {
-  return finding.file
-    ? `${finding.file}${finding.line ? `:${finding.line}${finding.column ? `:${finding.column}` : ""}` : ""}`
-    : undefined;
-}
-
-function findingMetadata(finding: HealthFinding): string | undefined {
-  if (!finding.metadata || Object.keys(finding.metadata).length === 0) return undefined;
-  return JSON.stringify(finding.metadata, null, 2).replaceAll("```", "``\\`");
-}
-
-function appendCheckResultsTable(lines: string[], rows: ReturnType<typeof setupCheckRows>): void {
-  lines.push("| Status | Check | Result | Provider |", "| --- | --- | --- | --- |");
-  for (const row of rows)
-    lines.push(
-      `| ${checkStatusLabelForFile(row.status)} | ${markdownCell(row.category)} | ${markdownCell(row.result)} | ${markdownCell(row.providers)} |`,
-    );
-}
-
-export function renderSetupHealthReport(output: string): string {
-  const run = parseHealthRun(output);
-  if (!run)
-    return [
-      "# RepNix health report",
-      "",
-      "The health check did not produce structured results, so RepNix could not create an AI-ready report.",
-      "",
-      "Run `repnix check` again and include its output when asking for help.",
-      "",
-    ].join("\n");
-  const rows = setupCheckRows(output);
-  const actions = setupCheckActions(output);
-  const lines = [
-    "# RepNix health report",
-    "",
-    "This report is designed to be attached to an AI coding assistant so it can investigate and fix the reported repository-health issues.",
-    "",
-    "## How to use this report",
-    "",
-    "From the repository root, attach or drop this file into your AI coding assistant and send the following request:",
-    "",
-    "> Read `.repnix/health-report.md`, inspect the referenced files, and fix the reported repository-health issues. Make the smallest safe changes, preserve intended behavior, and do not suppress or baseline findings. Run the verification commands in the report, then summarize the changes and any remaining issues.",
-    "",
-    "Keep the assistant working in this repository so it can inspect the referenced files and run the verification commands. Review its changes, then run `repnix check` yourself to confirm the result.",
-    "",
-    "## Instructions for an AI assistant",
-    "",
-    "1. Work only on the issues in this report, starting with setup errors and failed checks.",
-    "2. Inspect the referenced files and make the smallest safe changes that resolve the findings.",
-    "3. Preserve intended behaviour and do not suppress, baseline, or disable a check merely to make it pass unless explicitly asked.",
-    "4. Run the listed verification commands after making changes and report anything that remains.",
-    "",
-    "## Repository context",
-    "",
-    `- Package manager: ${run.repository.packageManager ?? "unknown"}`,
-    `- Repository root: ${run.repository.root ?? "unknown"}`,
-    `- Generated: ${run.generatedAt ?? "unknown"}`,
-    "",
-    "## Check results",
-    "",
-  ];
-  appendCheckResultsTable(lines, rows);
-  lines.push("", "## Recommended fix order", "");
-  if (actions.length) {
-    actions.forEach((action, index) => {
-      lines.push(`${index + 1}. ${action.title}`);
-      if (action.detail) lines.push(`   - Why: ${markdownCell(action.detail)}`);
-      lines.push(`   - Run: \`${markdownCode(action.command)}\``);
-    });
-  } else {
-    lines.push("All configured checks passed.");
-  }
-  lines.push("", "## Complete finding details");
-  run.results.forEach((result, resultIndex) => {
-    const category = run.repository.categories?.find((item) => item.id === result.category)?.label ?? result.category;
-    const command = setupCheckCommand(run, result);
-    lines.push(
-      "",
-      `### ${resultIndex + 1}. ${markdownCell(category)} — ${markdownCell(result.name)}`,
-      "",
-      `- Status: ${checkStatusLabelForFile(result.status)}`,
-      `- Run: \`${markdownCode(command)}\``,
-      `- Findings: ${result.findings.length}`,
-    );
-    if (result.message) lines.push(`- Check message: ${markdownCell(result.message)}`);
-    if (result.scope) lines.push(`- Scope: ${markdownCode(result.scope)}`);
-    result.findings.forEach((finding, findingIndex) => {
-      lines.push(
-        "",
-        `#### Finding ${findingIndex + 1}: ${markdownCell(finding.title ?? finding.ruleId ?? finding.type)}`,
-        "",
-        `- Severity: ${finding.severity}`,
-        `- Message: ${markdownCell(finding.message)}`,
-      );
-      const location = findingLocation(finding);
-      if (location) lines.push(`- Location: \`${markdownCode(location)}\``);
-      if (finding.ruleId) lines.push(`- Rule: \`${markdownCode(finding.ruleId)}\``);
-      if (finding.remediation) lines.push(`- Suggested remediation: ${markdownCell(finding.remediation)}`);
-      if (finding.documentationUrl) lines.push(`- Documentation: ${finding.documentationUrl}`);
-      if (finding.baselineState) lines.push(`- Baseline: ${finding.baselineState}`);
-      const metadata = findingMetadata(finding);
-      if (metadata)
-        lines.push(
-          "",
-          "<details>",
-          "<summary>Tool context</summary>",
-          "",
-          "```json",
-          metadata,
-          "```",
-          "",
-          "</details>",
-        );
-    });
-  });
-  lines.push("", "## Verify", "", "```sh", "repnix check", "```", "");
-  return lines.join("\n");
-}
-
-export function renderSetupCheckSummary(output: string): string {
-  const rows = setupCheckRows(output);
-  const actions = setupCheckActions(output);
-  const lines = ["# Check results", "", "## Summary", ""];
-  appendCheckResultsTable(lines, rows);
-  lines.push("", "## Next steps", "", "Run these commands from the repository root, in order.", "");
-  if (actions.length) {
-    actions.forEach((action, index) => {
-      lines.push(`${index + 1}. ${action.title}`);
-      if (action.detail) lines.push(`   ${action.detail}`);
-      lines.push("", "   ```sh", `   ${action.command}`, "   ```", "");
-    });
-  } else {
-    lines.push("All configured checks passed.", "");
-  }
-  lines.push("", "## Verify", "", "```sh", "repnix check", "```", "");
-  return lines.join("\n");
-}
-
-function checkStatusLabelForFile(status: "pass" | "warn" | "fail" | "error" | "skipped"): string {
-  return status === "pass" ? "PASS" : status === "error" ? "ERROR" : status === "skipped" ? "SKIP" : "WARN";
-}
-
-export async function saveSetupCheckReports(root: string, output: string): Promise<SavedSetupCheckReports | undefined> {
-  try {
-    JSON.parse(output);
-    const directory = path.join(root, ".repnix");
-    const reportPath = ".repnix/health-report.md";
-    const summaryPath = ".repnix/check-results.md";
-    await mkdir(directory, { recursive: true });
-    await writeFile(path.join(root, reportPath), renderSetupHealthReport(output), "utf8");
-    await writeFile(path.join(root, summaryPath), renderSetupCheckSummary(output), "utf8");
-    return { reportPath, summaryPath };
-  } catch {
-    // A failed command may not produce JSON; preserve its visible error without
-    // replacing a prior usable report with malformed output.
-    return undefined;
-  }
-}
-
 const defaultDependencies: SetupTuiDependencies = {
   audit: auditRepository,
   buildPlan: buildInstallPlan,
@@ -350,7 +124,10 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
     includeCi: false,
     sidebarCollapsed: false,
   });
-  const [dimensions, setDimensions] = useState({ width: stdout.columns ?? 100, height: stdout.rows ?? 24 });
+  const [dimensions, setDimensions] = useState({
+    width: stdout.columns ?? 100,
+    height: stdout.rows ?? 24,
+  });
   const startedApply = useRef(false);
   const startedCheck = useRef(false);
   const theme = useMemo(() => createSetupTuiTheme(stdout), [stdout]);
@@ -374,7 +151,10 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
       .then((nextAudit) => {
         setAudit(nextAudit);
         if (nextAudit.context.diagnostics.some((diagnostic) => diagnostic.severity === "error")) {
-          dispatch({ type: "fail", message: setupDetectionErrorMessage(nextAudit.context.diagnostics) });
+          dispatch({
+            type: "fail",
+            message: setupDetectionErrorMessage(nextAudit.context.diagnostics),
+          });
           return;
         }
         setModel(createSetupTuiModel(nextAudit.recommendations));
@@ -410,7 +190,12 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
       .then((check) => {
         const output = setupCheckResultOutput(check);
         return saveSetupCheckReports(audit.context.root, check.stdout).then((saved) =>
-          dispatch({ type: "check-complete", output, exitCode: check.exitCode, ...(saved ? saved : {}) }),
+          dispatch({
+            type: "check-complete",
+            output,
+            exitCode: check.exitCode,
+            ...(saved ? saved : {}),
+          }),
         );
       })
       .catch((error: unknown) =>
@@ -480,129 +265,21 @@ export function SetupApp({ options, logger, dependencies = {}, result }: SetupTu
     exit();
   };
 
-  useInput((input, key) => {
-    if (input === "\u0003" || (key.ctrl && input === "c")) {
-      if (!busy) leave();
-      return;
-    }
-    if (input === "q") {
-      if (!busy) leave();
-      return;
-    }
-    if (key.escape || key.backspace || key.delete) {
-      if (busy) return;
-      if (model.screen === "details") dispatch({ type: "close-details" });
-      else if (model.screen === "check-details") dispatch({ type: "back-to-success" });
-      else if (model.screen === "manual") dispatch({ type: "back-to-audit" });
-      else if (model.screen === "confirm") dispatch({ type: "cancel-confirm" });
-      else if (model.screen === "review") dispatch({ type: "back-to-select" });
-      else if (model.screen === "select") dispatch({ type: "back-to-audit" });
-      else leave();
-      return;
-    }
-    if (
-      model.screen === "loading" ||
-      model.screen === "planning" ||
-      model.screen === "applying" ||
-      model.screen === "checking"
-    )
-      return;
-    if (key.tab) {
-      if (sidebarMode && (model.screen === "select" || model.screen === "review")) dispatch({ type: "toggle-sidebar" });
-      return;
-    }
-    if (model.screen === "audit") {
-      if (key.upArrow || input === "k")
-        dispatch({ type: "move-audit", direction: "up", lineCount: auditLineCount, viewport: layout.detailViewport });
-      else if (key.downArrow || input === "j")
-        dispatch({ type: "move-audit", direction: "down", lineCount: auditLineCount, viewport: layout.detailViewport });
-      else if (key.return)
-        dispatch({
-          type: audit?.recommendations.some((recommendation) => !recommendation.actionable)
-            ? "begin-manual"
-            : audit?.recommendations.some((recommendation) => recommendation.actionable)
-              ? "begin-selection"
-              : "show-empty",
-        });
-      return;
-    }
-    if (model.screen === "manual") {
-      if (key.upArrow || input === "k")
-        dispatch({
-          type: "move-manual",
-          direction: "up",
-          lineCount: manualLineCount,
-          viewport: manualRecommendationViewport(layout.detailViewport),
-        });
-      else if (key.downArrow || input === "j")
-        dispatch({
-          type: "move-manual",
-          direction: "down",
-          lineCount: manualLineCount,
-          viewport: manualRecommendationViewport(layout.detailViewport),
-        });
-      else if (key.return)
-        dispatch({
-          type: audit?.recommendations.some((recommendation) => recommendation.actionable)
-            ? "begin-selection"
-            : "show-empty",
-        });
-      return;
-    }
-    if (model.screen === "success") {
-      dispatch({ type: "begin-check" });
-      return;
-    }
-    if (model.screen === "empty" || model.screen === "error") {
-      result.code = model.screen === "error" ? 2 : 0;
-      exit();
-      return;
-    }
-    if (model.screen === "select") {
-      const sidebarFocused = sidebarMode ? !model.sidebarCollapsed : true;
-      if (sidebarFocused && (key.upArrow || input === "k"))
-        dispatch({ type: "move", direction: "up", itemCount: items.length });
-      else if (sidebarFocused && (key.downArrow || input === "j"))
-        dispatch({ type: "move", direction: "down", itemCount: items.length });
-      else if (sidebarFocused && input === " ") {
-        const item = items[model.cursor];
-        if (item) dispatch({ type: "toggle", item });
-      } else if (key.return) dispatch({ type: "begin-planning" });
-      return;
-    }
-    if (model.screen === "review") {
-      const sidebarFocused = sidebarMode ? !model.sidebarCollapsed : true;
-      if (sidebarFocused && (key.upArrow || input === "k"))
-        dispatch({ type: "move-review", direction: "up", fileCount: plan?.files.length ?? 0 });
-      else if (sidebarFocused && (key.downArrow || input === "j"))
-        dispatch({ type: "move-review", direction: "down", fileCount: plan?.files.length ?? 0 });
-      else if (sidebarFocused && input === " " && plan?.files.length) dispatch({ type: "open-details" });
-      else if (key.return) dispatch({ type: "begin-confirm" });
-      return;
-    }
-    if (model.screen === "confirm") {
-      if (key.rightArrow) dispatch({ type: "move-confirm", direction: "right" });
-      else if (key.leftArrow) dispatch({ type: "move-confirm", direction: "left" });
-      else if (key.return) dispatch({ type: model.confirmFocus === "apply" ? "begin-applying" : "cancel-confirm" });
-      return;
-    }
-    if (model.screen === "details") {
-      if (key.upArrow || input === "k")
-        dispatch({ type: "move-detail", direction: "up", lineCount: detailLineCount, viewport: layout.detailViewport });
-      else if (key.downArrow || input === "j")
-        dispatch({
-          type: "move-detail",
-          direction: "down",
-          lineCount: detailLineCount,
-          viewport: layout.detailViewport,
-        });
-    }
-    if (model.screen === "check-details") {
-      if (key.upArrow || input === "k")
-        dispatch({ type: "move-check", direction: "up", lineCount: checkLineCount, viewport: checkViewport });
-      else if (key.downArrow || input === "j")
-        dispatch({ type: "move-check", direction: "down", lineCount: checkLineCount, viewport: checkViewport });
-    }
+  useSetupInput({
+    model,
+    audit,
+    plan,
+    items,
+    dispatch,
+    sidebarMode,
+    busy,
+    auditLineCount,
+    manualLineCount,
+    detailLineCount,
+    checkLineCount,
+    detailViewport: layout.detailViewport,
+    checkViewport,
+    leave,
   });
 
   return (
@@ -728,7 +405,9 @@ export async function runSetupTui(options: DiagnosticOptions = {}): Promise<numb
   const result = { code: 0 };
   process.stdout.write("\u001b[?1049h\u001b[2J\u001b[H\u001b[?25l");
   try {
-    const app = render(<SetupApp options={options} logger={logger} result={result} />, { exitOnCtrlC: false });
+    const app = render(<SetupApp options={options} logger={logger} result={result} />, {
+      exitOnCtrlC: false,
+    });
     await app.waitUntilExit();
     return result.code;
   } finally {
@@ -736,30 +415,6 @@ export async function runSetupTui(options: DiagnosticOptions = {}): Promise<numb
   }
 }
 
-export {
-  supportsTui,
-  createSetupTuiTheme,
-  diffLineColor,
-  normalizeTuiDiffLine,
-  selectionIndicator,
-  selectionRowPresentation,
-  setupPaneLayout,
-  setupStepIndex,
-  tuiLayoutMetrics,
-  clampTuiScroll,
-  auditContentLineCount,
-  auditPageSummary,
-  auditRecommendationSummary,
-  auditSetupOptions,
-  auditStatusPresentation,
-  manualContentLineCount,
-  manualRecommendationLines,
-  manualRecommendationSteps,
-  manualRecommendationViewport,
-  selectedSetupOptions,
-  setupCheckDetails,
-};
-export { AUDIT_LABEL_COLUMN_WIDTH, AUDIT_TWO_COLUMN_MIN_WIDTH, auditUsesSingleColumn };
 export {
   checkDetailViewport,
   checkTableColumns,
@@ -770,4 +425,36 @@ export {
   setupCheckRows,
   tuiPanelContentWidth,
 } from "./setup-views.js";
-export { COMPACT_LAYOUT_HEIGHT, COMPACT_LAYOUT_WIDTH, HORIZONTAL_PANE_MIN_WIDTH } from "./setup-theme.js";
+export {
+  AUDIT_LABEL_COLUMN_WIDTH,
+  AUDIT_TWO_COLUMN_MIN_WIDTH,
+  auditContentLineCount,
+  auditPageSummary,
+  auditRecommendationSummary,
+  auditSetupOptions,
+  auditStatusPresentation,
+  auditUsesSingleColumn,
+  COMPACT_LAYOUT_HEIGHT,
+  COMPACT_LAYOUT_WIDTH,
+  clampTuiScroll,
+  createSetupTuiTheme,
+  diffLineColor,
+  HORIZONTAL_PANE_MIN_WIDTH,
+  manualContentLineCount,
+  manualRecommendationLines,
+  manualRecommendationSteps,
+  manualRecommendationViewport,
+  normalizeTuiDiffLine,
+  renderSetupCheckSummary,
+  renderSetupHealthReport,
+  saveSetupCheckReports,
+  selectedSetupOptions,
+  selectionIndicator,
+  selectionRowPresentation,
+  setupCheckDetails,
+  setupCheckResultOutput,
+  setupPaneLayout,
+  setupStepIndex,
+  supportsTui,
+  tuiLayoutMetrics,
+};
