@@ -1,20 +1,13 @@
-import { access, readFile } from "node:fs/promises";
 import { execFile as execFileCallback } from "node:child_process";
+import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
+import { type ParseError, parse as parseJsonc } from "jsonc-parser";
 import { glob as fg } from "tinyglobby";
-import { parse as parseJsonc, type ParseError } from "jsonc-parser";
 import { parse as parseYaml } from "yaml";
-import type {
-  PackageJson,
-  RepositoryContext,
-  RepositoryKind,
-  RepositoryRole,
-  RepositoryScope,
-  RoleEvidence,
-  WorkspaceManifest,
-} from "../core/types.js";
+import type { PackageJson, RepositoryContext, RepositoryKind, WorkspaceManifest } from "../core/types.js";
 import { detectPackageManager } from "./detect-package-manager.js";
+import { allDependencies, classifySourceFiles, detectSourceRoots, inferScope } from "./scope-inference.js";
 
 const IGNORES = [
   "**/.git/**",
@@ -42,7 +35,10 @@ async function exists(file: string): Promise<boolean> {
 
 async function gitDefaultBranch(root: string): Promise<string | undefined> {
   try {
-    const { stdout: worktree } = await execFile("git", ["rev-parse", "--show-toplevel"], { cwd: root, timeout: 1_000 });
+    const { stdout: worktree } = await execFile("git", ["rev-parse", "--show-toplevel"], {
+      cwd: root,
+      timeout: 1_000,
+    });
     if (path.resolve(worktree.trim()) !== path.resolve(root)) return undefined;
     const { stdout } = await execFile("git", ["symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"], {
       cwd: root,
@@ -146,28 +142,6 @@ async function findRoot(start: string): Promise<string> {
   return root;
 }
 
-function allDependencies(manifest: PackageJson): Record<string, string> {
-  return {
-    ...manifest.dependencies,
-    ...manifest.devDependencies,
-    ...manifest.peerDependencies,
-    ...manifest.optionalDependencies,
-  };
-}
-
-function detectSourceRoots(sourceFiles: string[]): string[] {
-  const roots = new Set<string>();
-  for (const file of sourceFiles) {
-    const parts = file.split("/");
-    const sourceIndex = parts.findIndex((part) => ["src", "app", "pages"].includes(part));
-    if (sourceIndex >= 0) roots.add(parts.slice(0, sourceIndex + 1).join("/"));
-  }
-  if (!roots.size) return ["."];
-  const sorted = [...roots].sort();
-  const primary = sorted.filter((root) => !/^(?:fixtures?|examples?|tests?)(?:\/|$)/.test(root));
-  return primary.length > 0 ? primary : sorted;
-}
-
 function workspaceRoots(manifests: WorkspaceManifest[]): string[] {
   return [
     ...new Set(
@@ -183,117 +157,6 @@ function sourceFilesByWorkspace(sourceFiles: string[], roots: string[]): Record<
   return Object.fromEntries(
     roots.map((root) => [root, sourceFiles.filter((file) => root === "." || file.startsWith(`${root}/`))]),
   );
-}
-
-function scopeFiles(files: string[], scope: string): string[] {
-  return scope === "." ? files : files.filter((file) => file.startsWith(`${scope}/`));
-}
-
-const TEST_FILE_PATTERN = /(^|\/)(?:test|tests|__tests__)(\/|$)|\.(?:spec|test)\.[cm]?[jt]sx?$/i;
-const FIXTURE_FILE_PATTERN = /(^|\/)(?:fixture|fixtures|example|examples)(\/|$)/i;
-const GENERATED_FILE_PATTERN = /(^|\/)(?:generated|gen|coverage|storybook-static)(\/|$)|\.generated\.[cm]?[jt]sx?$/i;
-
-function classifySourceFiles(sourceFiles: string[]): {
-  production: string[];
-  tests: string[];
-  fixtures: string[];
-  generated: string[];
-} {
-  const production: string[] = [];
-  const tests: string[] = [];
-  const fixtures: string[] = [];
-  const generated: string[] = [];
-  for (const file of sourceFiles) {
-    if (GENERATED_FILE_PATTERN.test(file)) generated.push(file);
-    else if (FIXTURE_FILE_PATTERN.test(file)) fixtures.push(file);
-    else if (TEST_FILE_PATTERN.test(file)) tests.push(file);
-    else production.push(file);
-  }
-  return { production, tests, fixtures, generated };
-}
-
-function inferScope(
-  manifest: WorkspaceManifest,
-  allFiles: string[],
-  allSourceFiles: string[],
-  isMonorepo: boolean,
-): RepositoryScope {
-  const scope = path.posix.dirname(manifest.path.replaceAll(path.sep, "/"));
-  const scopePath = scope === "." ? "." : scope;
-  const files = scopeFiles(allFiles, scopePath);
-  const sourceFiles = scopeFiles(allSourceFiles, scopePath);
-  const classified = classifySourceFiles(sourceFiles);
-  const dependencies = allDependencies(manifest.packageJson);
-  const scripts = manifest.packageJson.scripts ?? {};
-  const scriptText = Object.values(scripts).join(" ");
-  const evidence: RoleEvidence[] = [];
-  const addRole = (role: RepositoryRole, confidence: RoleEvidence["confidence"], signals: string[]) => {
-    if (!evidence.some((entry) => entry.role === role)) evidence.push({ role, confidence, signals });
-  };
-
-  if (manifest.packageJson.bin) addRole("cli", "high", ["package.json#bin"]);
-
-  const publishSignals = [
-    manifest.packageJson.main,
-    manifest.packageJson.module,
-    manifest.packageJson.types,
-    manifest.packageJson.typings,
-    manifest.packageJson.exports,
-    manifest.packageJson.files,
-    manifest.packageJson.publishConfig,
-  ].some(Boolean);
-  if (manifest.packageJson.private !== true && publishSignals) {
-    addRole("library", "high", ["publishable package entry points"]);
-  }
-
-  const next = dependencies.next !== undefined;
-  const browserBuild = /(?:^|\s|&&|\|)(?:next|vite|react-scripts|astro|remix)(?:\s|$)/.test(scriptText);
-  const browserEntry = files.some((file) => /(^|\/)(?:index\.html|pages\/|app\/).+/.test(file));
-  const jsx = classified.production.some((file) => /\.[jt]sx$/.test(file));
-  if (next) {
-    addRole("web-app", "high", ["Next.js dependency"]);
-  } else if (!manifest.packageJson.bin && jsx && (browserBuild || browserEntry)) {
-    addRole("web-app", "medium", [
-      browserBuild ? "browser build script" : "browser application entry",
-      "JSX/TSX source",
-    ]);
-  }
-
-  const serverScript = Object.entries(scripts).some(
-    ([name, command]) =>
-      /^(?:start|serve|dev)$/.test(name) && /(?:node|tsx|ts-node|express|fastify|nest)(?:\s|$)/.test(command),
-  );
-  if (serverScript) addRole("node-app", "medium", ["Node server script"]);
-
-  if (!evidence.length) {
-    if (isMonorepo && scopePath === "." && classified.production.length === 0)
-      addRole("tooling", "high", ["workspace root without application source"]);
-    else addRole("node-app", "medium", ["JavaScript/TypeScript executable project"]);
-  }
-
-  const frameworks = [next ? "Next.js" : null, dependencies.react !== undefined ? "React" : null].filter(
-    (item): item is string => Boolean(item),
-  );
-  const hasTypeScript =
-    dependencies.typescript !== undefined || classified.production.some((file) => /\.[cm]?tsx?$/.test(file));
-  const hasJavaScript = classified.production.some((file) => /\.[cm]?jsx?$/.test(file));
-  return {
-    path: scopePath,
-    manifestPath: manifest.path,
-    packageJson: manifest.packageJson,
-    roles: evidence.map((entry) => entry.role),
-    roleEvidence: evidence,
-    frameworks,
-    languages: [hasTypeScript ? "TypeScript" : null, hasJavaScript ? "JavaScript" : null].filter(
-      (item): item is string => Boolean(item),
-    ),
-    sourceFiles,
-    productionSourceFiles: classified.production,
-    testFiles: classified.tests,
-    fixtureFiles: classified.fixtures,
-    generatedFiles: classified.generated,
-    sourceRoots: detectSourceRoots(classified.production),
-  };
 }
 
 export async function detectRepository(start = process.cwd()): Promise<RepositoryContext> {
@@ -401,12 +264,7 @@ export async function detectRepository(start = process.cwd()): Promise<Repositor
     files,
     sourceFiles,
     productionSourceFiles: classifiedSourceFiles.production,
-    sourceRoots: detectSourceRoots(
-      sourceFiles.filter(
-        (file) =>
-          !TEST_FILE_PATTERN.test(file) && !FIXTURE_FILE_PATTERN.test(file) && !GENERATED_FILE_PATTERN.test(file),
-      ),
-    ),
+    sourceRoots: detectSourceRoots(classifiedSourceFiles.production),
     workspaceRoots: detectedWorkspaceRoots,
     workspaceSourceFiles: sourceFilesByWorkspace(sourceFiles, detectedWorkspaceRoots),
     scopes,
